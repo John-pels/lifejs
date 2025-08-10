@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { DeepgramSTT, deepgramSTTConfigSchema } from "./providers/deepgram";
+import { OpenAISTT, openaiSTTConfigSchema } from "./providers/openai";
 
 // Providers
 export const sttProviders = {
   deepgram: { class: DeepgramSTT, configSchema: deepgramSTTConfigSchema },
+  openai: { class: OpenAISTT, configSchema: openaiSTTConfigSchema },
 } as const;
 
 export type STTProvider = (typeof sttProviders)[keyof typeof sttProviders]["class"];

@@ -1,0 +1,130 @@
+---
+title: OpenAI STT
+description: Configure OpenAI Speech-to-Text models for high-quality transcription
+---
+
+## OpenAI STT Provider
+
+The OpenAI STT provider enables you to use OpenAI's speech models for high-quality speech-to-text transcription in your Life.js agent, with support for multiple models and advanced configuration options.
+
+### Configuration
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  stt: {
+    provider: "openai",
+    apiKey: "sk-...", // Or set OPENAI_API_KEY environment variable
+    model: "whisper-1", // Default model
+    language: "en", // Optional: specify language code (default: "en")
+    // Advanced options
+    prompt: "Technical conversation about programming", // Optional: guide the model
+    temperature: 0.3, // Optional: control randomness (0-1)
+    responseFormat: "text", // Optional: output format
+  },
+  // ... other config
+});
+```
+
+### Environment Variables
+
+Set your OpenAI API key as an environment variable:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+### Available Models
+
+| Model | Description |
+|-------|-------------|
+| `whisper-1` | OpenAI's Whisper model optimized for transcription |
+| `tts-1` | Standard speech-to-text model with good quality |
+| `tts-1-hd` | High-definition model for superior audio quality |
+
+### Configuration Schema
+
+```typescript
+{
+  // Required fields
+  apiKey: string;     // OpenAI API key (required)
+  model: string;      // Model name ("whisper-1", "tts-1", "tts-1-hd")
+  language: string;   // Language code (e.g. "en", "fr", "es")
+
+  // Optional fields
+  prompt?: string;    // Guide model's style or provide context
+  temperature?: number; // Control randomness (0.0 to 1.0)
+  responseFormat?: "json" | "text" | "srt" | "verbose_json" | "vtt"; // Output format
+}
+```
+
+### Response Formats
+
+The provider supports multiple output formats through the `responseFormat` option:
+
+- `text` (default): Plain text transcription
+- `json`: JSON object with transcription metadata
+- `srt`: SubRip subtitle format
+- `vtt`: WebVTT subtitle format
+- `verbose_json`: Detailed JSON with timing and confidence scores
+
+### Advanced Features
+
+1. **Guided Transcription**
+   ```typescript
+   {
+     prompt: "Medical terminology discussion",
+     temperature: 0.2
+   }
+   ```
+   Use prompts to guide the model's understanding of context and temperature to control variation.
+
+2. **Subtitle Generation**
+   ```typescript
+   {
+     responseFormat: "srt",
+     language: "en"
+   }
+   ```
+   Generate subtitles directly in SRT or VTT format.
+
+3. **Detailed Analysis**
+   ```typescript
+   {
+     responseFormat: "verbose_json",
+     temperature: 0
+   }
+   ```
+   Get detailed transcription metadata including confidence scores and timing.
+```
+
+### Features
+
+- ✅ High accuracy transcription
+- ✅ Multilingual support
+- ✅ Streaming transcription
+- ✅ Automatic language detection
+
+### Getting Started
+
+1. **Get your API key**: Visit [platform.openai.com](https://platform.openai.com) to obtain your OpenAI API key
+2. **Set environment variable**: `export OPENAI_API_KEY="your-key-here"`
+3. **Configure your agent**: Use the configuration example above
+4. **Start transcribing**: Your agent is now ready to use OpenAI's Whisper model!
+
+### Example Usage
+
+```typescript
+import { Agent } from "life/agent";
+
+const agent = new Agent({
+  stt: {
+    provider: "openai",
+    model: "whisper-1",
+    language: "en", // Optional: specify language
+  },
+});
+
+// The agent will now use OpenAI's whisper-1, tts-1, and tts-1-hd  models for speech-to-text
+```

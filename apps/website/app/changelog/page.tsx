@@ -128,6 +128,11 @@ function ChangeItem({ change }: { change: Change }) {
               className="h-5 w-5 rounded-full border border-white/80"
               key={author}
               src={`https://github.com/${author}.png?size=24`}
+                sizes="24"
+                width="24"
+                height="24"
+                priority
+                aria-hidden="true"
             />
           ))}
         </div>
