@@ -16,7 +16,7 @@ const AgentInterface = () => {
   // const test = agent1.definition.$serverDef.plugins.generation.methods;
   // agent1.test.
   agent1.test.getItem("item1");
-  agent1.stores.methods;
+  // agent1.generation.
   // @ts-expect-error
   agent1.generation.methods.continuenot({});
   agent1.generation.events.on(

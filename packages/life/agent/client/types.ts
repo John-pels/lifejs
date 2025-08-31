@@ -63,15 +63,15 @@ export type AgentClientWithPlugins<
     string,
     { definition: PluginClientDefinition; class?: ReturnType<PluginClientClassDefinition> }
   >,
-> = Omit<
-  Client & {
-    [K in keyof Plugins]: PluginClientBase<Plugins[K]["definition"]> &
+> = Client & {
+  [K in keyof Plugins]: Omit<
+    PluginClientBase<Plugins[K]["definition"]> &
       (Plugins[K]["class"] extends undefined
         ? never
-        : Omit<InstanceType<Plugins[K]["class"]>, "methods">);
-  },
-  "agent" | "telemetry" | "dependencies"
->;
+        : Omit<InstanceType<Plugins[K]["class"]>, "methods">),
+    "agent" | "telemetry" | "dependencies"
+  >;
+};
 
 export type GeneratedAgentClient<Name extends keyof typeof clients> = AgentClientWithPlugins<
   AgentClient<(typeof clients)[Name]["definition"]>,
