@@ -1,5 +1,15 @@
 # life
 
+## 0.12.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [975731f](https://github.com/lifejs/lifejs/commit/975731f7eaf3eaa9bc137fc63e62a6a45165826c) — Initial release of Life.js React! 🎉 Thanks to `nanostores`, each plugin can now expose reactive states to be consumed in the UI. This release introduces a native support for React via the `life/react` export, offering `<AgentProvider/>`, `useAgent()` and `useAgentStatus()` hooks and components.
+- [@LilaRest](https://github.com/LilaRest) in [975731f](https://github.com/lifejs/lifejs/commit/975731f7eaf3eaa9bc137fc63e62a6a45165826c) — Initial release of the Life.js Compiler! 🎉 All the complex typesafety wiring is now automatically handled by the compiler at build-time, and the framework exposes simple `useAgent()` and `createAgentClient()` helpers. The compiler supports incremental rebuild and watch mode (10-200ms for a hot rebuild on average).
+- [@LilaRest](https://github.com/LilaRest) in [975731f](https://github.com/lifejs/lifejs/commit/975731f7eaf3eaa9bc137fc63e62a6a45165826c) — Initial release of Plugin Clients! 🎉 Plugins can now expose both server **and** client-side code while retaining full end-to-end typesafety. This makes plugins almost limitless in terms of what they can achieve.
+- [@LilaRest](https://github.com/LilaRest) in [975731f](https://github.com/lifejs/lifejs/commit/975731f7eaf3eaa9bc137fc63e62a6a45165826c) — Initial release of server-side Telemetry! 🎉 Life.js logging, metrics, and tracing is now under a unified telemetry interface. While offering a much simpler and intuitive DX, this interface is mainly OpenTelemetry compliant and compatible with any consumer (e.g., Sentry). Users can register their own consumers in the `life.config.ts` file or in their agents definitions.
+- [@LilaRest](https://github.com/LilaRest) in [975731f](https://github.com/lifejs/lifejs/commit/975731f7eaf3eaa9bc137fc63e62a6a45165826c) — Initial release of the Life.js CLI! 🎉 You can now run `life build` to compile a Life.js project. `life dev`, `life init` and `life start` are available but will be fully implemented in the next release.
+
 ## 0.11.1
 
 ### Patch Changes
