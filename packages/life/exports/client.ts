@@ -3,17 +3,17 @@ export { createAgentClient } from "@/agent/client/create";
 export { defineAgentClient } from "@/agent/client/define";
 export { definePluginClient } from "@/plugins/client/define";
 
-import { corePluginClient } from "@/plugins/defaults/core/client";
+import { generationPluginClient } from "@/plugins/defaults/generation/client";
 import { memoriesPluginClient } from "@/plugins/defaults/memories/client";
 import { storesPluginClient } from "@/plugins/defaults/stores/client";
 
 // Explicit typing is required to avoid type size explosion with the iterator
 type ClientDefaults = {
-  readonly core: typeof corePluginClient;
+  readonly generation: typeof generationPluginClient;
   readonly memories: typeof memoriesPluginClient;
   readonly stores: typeof storesPluginClient;
   readonly [Symbol.iterator]: () => Generator<
-    typeof corePluginClient | typeof memoriesPluginClient | typeof storesPluginClient,
+    typeof generationPluginClient | typeof memoriesPluginClient | typeof storesPluginClient,
     void,
     unknown
   >;
@@ -21,7 +21,7 @@ type ClientDefaults = {
 
 export const defaults: { readonly plugins: ClientDefaults } = {
   plugins: {
-    core: corePluginClient,
+    generation: generationPluginClient,
     memories: memoriesPluginClient,
     stores: storesPluginClient,
     *[Symbol.iterator]() {

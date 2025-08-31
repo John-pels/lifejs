@@ -1,2 +1,2 @@
 export { AgentProvider, useAgent } from "../react/agent";
-export { useAgentStatus } from "../react/core";
+export { useAgentGenerationStatus as useAgentStatus } from "../react/generation";

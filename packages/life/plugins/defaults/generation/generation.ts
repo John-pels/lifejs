@@ -4,7 +4,7 @@ import type { TTSGenerateJob } from "@/models/tts/base";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import type { Resources, ToolRequests } from "@/shared/resources";
-import type { CoreEvent } from "./orchestrator";
+import type { GenerationPluginEvent } from "./orchestrator";
 
 export type GenerationChunk =
   | { type: "content"; textChunk: string; voiceChunk?: Int16Array }
@@ -52,7 +52,7 @@ export class Generation {
     return this.status === "idle" && (this.params.prefix || this.params.needContinue);
   }
 
-  addInsertEvent(event: Extract<CoreEvent, { type: "agent.continue" | "agent.say" }>) {
+  addInsertEvent(event: Extract<GenerationPluginEvent, { type: "agent.continue" | "agent.say" }>) {
     // Error if not idle, the orchestrator should not append insert events to a non-idle generation
     if (this.status !== "idle")
       throw new Error("Cannot add continue/say operation when not idle or waiting.");

@@ -2,7 +2,7 @@
 import * as Y from "yjs";
 import { z } from "zod";
 import { definePlugin } from "../../server/define";
-import { corePlugin } from "../core/server";
+import { generationPlugin } from "../generation/server";
 import type { StoreDefinition } from "./define";
 
 // Helper: Convert plain JS values to Yjs structures recursively
@@ -22,7 +22,7 @@ function plainToYjs(value: unknown): unknown {
 
 export const storesPlugin = definePlugin("stores")
   .dependencies([
-    corePlugin.pick({
+    generationPlugin.pick({
       events: ["agent.continue"],
       context: ["messages"],
       config: ["voiceDetection"],

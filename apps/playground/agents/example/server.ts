@@ -7,7 +7,7 @@ export default defineAgent("example")
   .test({
     items: ["item1", "item2"] as const,
   })
-  .core({
+  .generation({
     collections: ["collection1", "collection2"],
     tools: [
       {

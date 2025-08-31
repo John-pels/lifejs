@@ -13,10 +13,9 @@ import {
 } from "@/shared/resources";
 import { RollingBuffer } from "@/shared/rolling-buffer";
 import { definePlugin } from "../../server/define";
-import { GenerationOrchestrator } from "./generation/orchestrator";
+import { GenerationOrchestrator } from "./orchestrator";
 
-// Core plugin
-export const corePlugin = definePlugin("core")
+export const generationPlugin = definePlugin("generation")
   .config(
     z.object({
       collections: z.array(z.string()),

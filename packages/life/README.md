@@ -5,7 +5,7 @@ This is the main package of the monorepo, containing the entire Life.js framewor
 - `transport/` — Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
 - `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
 - `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))
-- `plugins/` — In Life.js everything is a plugin, even the core. This contains all native plugins.
+- `plugins/` — In Life.js everything is a plugin, even the generation. This contains all native plugins.
 - `client/` — Provide a client to connect and interact with a Life.js agent.
 - `react/` — Exposes React hooks and components built on top of `life/client`.
 - `shared/` — Shared utilities and helpers.

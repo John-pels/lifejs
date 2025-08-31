@@ -3,7 +3,7 @@ import z from "zod";
 import type { testPlugin } from "./server";
 
 export const testPluginClient = definePluginClient<typeof testPlugin>("test")
-  .dependencies([defaults.plugins.core])
+  .dependencies([defaults.plugins.generation])
   .config(
     z.object({
       refreshRate: z.number().default(1000),
@@ -26,8 +26,6 @@ export const testPluginClient = definePluginClient<typeof testPlugin>("test")
             return name;
           }
           test() {
-            // this.dependencies.core.methods.continue({});
-            // this.dependencies.core.methods.doesntexist();
             this.events.on("event1", (event) => {
               event.type === "event1";
               // @ts-expect-error

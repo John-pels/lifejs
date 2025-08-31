@@ -2,7 +2,7 @@ import { z } from "zod";
 import { definePlugin } from "@/plugins/server/define";
 import { canon } from "@/shared/canon";
 import { type Message, messageSchema } from "@/shared/resources";
-import { corePlugin } from "../core/server";
+import { generationPlugin } from "../generation/server";
 import type { MemoryDefinition } from "./define";
 
 // Helper function to build a memory and get its output messages
@@ -16,7 +16,7 @@ async function buildMemory(
 }
 
 export const memoriesPlugin = definePlugin("memories")
-  .dependencies([corePlugin])
+  .dependencies([generationPlugin])
   .config(
     z.object({
       items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
@@ -27,10 +27,10 @@ export const memoriesPlugin = definePlugin("memories")
       dataSchema: z.array(messageSchema),
     },
     "build-request": {
-      dataSchema: corePlugin._definition.events["agent.resources-response"].dataSchema,
+      dataSchema: generationPlugin._definition.events["agent.resources-response"].dataSchema,
     },
     "build-response": {
-      dataSchema: corePlugin._definition.events["agent.resources-response"].dataSchema,
+      dataSchema: generationPlugin._definition.events["agent.resources-response"].dataSchema,
     },
     "cache-build": {
       dataSchema: z.object({
@@ -56,23 +56,26 @@ export const memoriesPlugin = definePlugin("memories")
         .default(new Map()),
     }),
   )
-  // Intercept the 'agent.resources-response' from core plugin to emit blocking build-request
-  .addInterceptor("intercept-core-resources-response", ({ event, drop, dependency, current }) => {
-    if (dependency.name !== "core" || event.type !== "agent.resources-response") return;
+  // Intercept the 'agent.resources-response' from generation plugin to emit blocking build-request
+  .addInterceptor(
+    "intercept-generation-resources-response",
+    ({ event, drop, dependency, current }) => {
+      if (dependency.name !== "generation" || event.type !== "agent.resources-response") return;
 
-    // Ignore already processed requests
-    if (current.context.get().processedRequestsIds.has(event.data.requestId)) return;
+      // Ignore already processed requests
+      if (current.context.get().processedRequestsIds.has(event.data.requestId)) return;
 
-    // Drop the agent.resources-response event
-    drop("Will be re-emitted by memories later.");
+      // Drop the agent.resources-response event
+      drop("Will be re-emitted by memories later.");
 
-    // Emit a build-request event
-    current.events.emit({ type: "build-request", data: event.data });
-  })
+      // Emit a build-request event
+      current.events.emit({ type: "build-request", data: event.data });
+    },
+  )
 
-  // Intercept changes in core messages to emit non-blocking build-request
-  .addInterceptor("intercept-core-messages-change", ({ event, dependency, current }) => {
-    if (dependency.name !== "core" || event.type !== "messages.changed") return;
+  // Intercept changes in generation messages to emit non-blocking build-request
+  .addInterceptor("intercept-generation-messages-change", ({ event, dependency, current }) => {
+    if (dependency.name !== "generation" || event.type !== "messages.changed") return;
     current.events.emit({ type: "history-changed", data: event.data });
   })
 
@@ -213,7 +216,7 @@ export const memoriesPlugin = definePlugin("memories")
       return newSet;
     });
     // Re-emit the resources response event
-    dependencies.core.events.emit({
+    dependencies.generation.events.emit({
       type: "agent.resources-response",
       data: event.data,
     });

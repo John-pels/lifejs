@@ -1,14 +1,14 @@
 import { useStore } from "@nanostores/react";
 import type { AgentClientDefinition, AgentClientWithPlugins } from "@/agent/client/types";
 import type { AgentClient } from "@/exports/client";
-import type { corePluginClient } from "../plugins/defaults/core/client";
+import type { generationPluginClient } from "../plugins/defaults/generation/client";
 
-export const useAgentStatus = <
+export const useAgentGenerationStatus = <
   Client extends AgentClientWithPlugins<
     AgentClient<AgentClientDefinition>,
     {
-      core: {
-        definition: typeof corePluginClient._definition;
+      generation: {
+        definition: typeof generationPluginClient._definition;
       };
     }
   >,
@@ -17,6 +17,6 @@ export const useAgentStatus = <
 ) => {
   if (!("core" in client))
     throw new Error("useAgentStatus() must be used with agents having the 'core' plugin.");
-  const data = useStore(client.core.atoms.status);
+  const data = useStore(client.generation.atoms.status);
   return { data };
 };

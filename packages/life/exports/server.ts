@@ -4,17 +4,17 @@ export { defineMemory } from "@/plugins/defaults/memories/define";
 export { defineStore } from "@/plugins/defaults/stores/define";
 export { definePlugin } from "@/plugins/server/define";
 
-import { corePlugin } from "@/plugins/defaults/core/server";
+import { generationPlugin } from "@/plugins/defaults/generation/server";
 import { memoriesPlugin } from "@/plugins/defaults/memories/server";
 import { storesPlugin } from "@/plugins/defaults/stores/server";
 
 // Explicit typing is required to avoid type size explosion with the iterator
 type ServerDefaults = {
-  readonly core: typeof corePlugin;
+  readonly generation: typeof generationPlugin;
   readonly memories: typeof memoriesPlugin;
   readonly stores: typeof storesPlugin;
   readonly [Symbol.iterator]: () => Generator<
-    typeof corePlugin | typeof memoriesPlugin | typeof storesPlugin,
+    typeof generationPlugin | typeof memoriesPlugin | typeof storesPlugin,
     void,
     unknown
   >;
@@ -22,7 +22,7 @@ type ServerDefaults = {
 
 export const defaults: { readonly plugins: ServerDefaults } = {
   plugins: {
-    core: corePlugin,
+    generation: generationPlugin,
     memories: memoriesPlugin,
     stores: storesPlugin,
     // Allows defaults to be used as an iterable, e.g., [...defaults.plugins]

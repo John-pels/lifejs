@@ -85,7 +85,7 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.serverSchema> 
       numerals: true,
       punctuate: true,
       smart_format: true,
-      endpointing: 0, // VAD is managed by the core plugin
+      endpointing: 0, // VAD is managed by the generation plugin
       no_delay: true,
 
       // Dynamic config

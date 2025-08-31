@@ -8,22 +8,25 @@ import type {
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/prefixed-id";
 import type { Resources } from "@/shared/resources";
-import type { corePlugin } from "../server";
 import { Generation, type GenerationChunk } from "./generation";
+import type { generationPlugin } from "./server";
 
-export type CoreEvent = PluginEvent<typeof corePlugin._definition.events, "output">;
-type CoreContext = z.output<typeof corePlugin._definition.context>;
+export type GenerationPluginEvent = PluginEvent<
+  typeof generationPlugin._definition.events,
+  "output"
+>;
+type GenerationPluginContext = z.output<typeof generationPlugin._definition.context>;
 
-export type CoreParams = {
+export type GenerationPluginParams = {
   agent: AgentServer;
-  events: PluginEventsHandler<typeof corePlugin._definition.events>;
-  queue: AsyncQueue<CoreEvent>;
-  context: PluginContextHandler<CoreContext, "read">;
+  events: PluginEventsHandler<typeof generationPlugin._definition.events>;
+  queue: AsyncQueue<GenerationPluginEvent>;
+  context: PluginContextHandler<GenerationPluginContext, "read">;
 };
 
 // Orchestrator
 export class GenerationOrchestrator {
-  readonly #core: CoreParams;
+  readonly #generationPlugin: GenerationPluginParams;
   readonly #generationsQueue: AsyncQueue<Generation> = new AsyncQueue();
   // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #generations: Generation[] = [];
@@ -31,15 +34,15 @@ export class GenerationOrchestrator {
   // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #decidePromises: {
     id: string;
-    event: Extract<CoreEvent, { type: "agent.decide" }>;
+    event: Extract<GenerationPluginEvent, { type: "agent.decide" }>;
     promise: Promise<void>;
-    cancel: () => Extract<CoreEvent, { type: "agent.decide" }>;
+    cancel: () => Extract<GenerationPluginEvent, { type: "agent.decide" }>;
   }[] = [];
   readonly #generationsResourcesRequestsIds: Record<string, string> = {};
   readonly #resourcesResponses: Record<string, Resources> = {};
 
-  constructor(params: CoreParams) {
-    this.#core = params;
+  constructor(params: GenerationPluginParams) {
+    this.#generationPlugin = params;
   }
 
   async start() {
@@ -47,7 +50,7 @@ export class GenerationOrchestrator {
     this.#consumeGenerations();
 
     // Start processing events
-    for await (const event of this.#core.queue) {
+    for await (const event of this.#generationPlugin.queue) {
       // If this is a generation event, process it
       if (this.#isGenerationEvent(event)) await this.#processGenerationEvent(event);
     }
@@ -56,8 +59,8 @@ export class GenerationOrchestrator {
   #createGeneration() {
     // Create the generation
     const generation = new Generation({
-      agent: this.#core.agent,
-      voiceEnabled: this.#core.context.get().voiceEnabled,
+      agent: this.#generationPlugin.agent,
+      voiceEnabled: this.#generationPlugin.context.get().voiceEnabled,
     });
     this.#generations.push(generation);
 
@@ -65,19 +68,19 @@ export class GenerationOrchestrator {
     generation.onStatusChange(() => {
       const runningCount = this.#generations.filter((g) => g.status === "started").length;
       // - If the agent is thinking, but no generation is running, emit thinking end
-      if (this.#core.context.get().status.thinking) {
+      if (this.#generationPlugin.context.get().status.thinking) {
         if (runningCount === 0)
-          this.#core.events.emit({ type: "agent.thinking-end", urgent: true });
+          this.#generationPlugin.events.emit({ type: "agent.thinking-end", urgent: true });
       }
       // - Or if the agent is not thinking, but a generation is running, emit thinking start
       else if (runningCount > 0)
-        this.#core.events.emit({ type: "agent.thinking-start", urgent: true });
+        this.#generationPlugin.events.emit({ type: "agent.thinking-start", urgent: true });
     });
 
     return generation;
   }
 
-  async #processGenerationEvent(event: CoreEvent) {
+  async #processGenerationEvent(event: GenerationPluginEvent) {
     // Retrieve or create the first idle generation
     let generation = this.#generations.find((g) => g.status === "idle");
     if (!generation) generation = await this.#createGeneration();
@@ -97,7 +100,7 @@ export class GenerationOrchestrator {
 
     // If that was a continue operation, request resources
     if (event.type === "agent.continue") {
-      const requestId = this.#core.events.emit({ type: "agent.resources-request" });
+      const requestId = this.#generationPlugin.events.emit({ type: "agent.resources-request" });
       this.#generationsResourcesRequestsIds[generation.id] = requestId;
     }
 
@@ -127,7 +130,7 @@ export class GenerationOrchestrator {
     }
   }
 
-  #processInterruptEvent(event: Extract<CoreEvent, { type: "agent.interrupt" }>) {
+  #processInterruptEvent(event: Extract<GenerationPluginEvent, { type: "agent.interrupt" }>) {
     let interrupted = false;
     // Try interrupting all generations
     for (const generation of this.#generations) {
@@ -143,7 +146,7 @@ export class GenerationOrchestrator {
 
     // If at least one generation was interrupted, notify the interruption
     if (interrupted) {
-      this.#core.events.emit({
+      this.#generationPlugin.events.emit({
         type: "agent.interrupted",
         data: {
           reason: event.data.reason,
@@ -154,17 +157,22 @@ export class GenerationOrchestrator {
     }
   }
 
-  #processResourcesResponseEvent(event: Extract<CoreEvent, { type: "agent.resources-response" }>) {
+  #processResourcesResponseEvent(
+    event: Extract<GenerationPluginEvent, { type: "agent.resources-response" }>,
+  ) {
     this.#resourcesResponses[event.data.requestId] = event.data;
   }
 
-  #processDecideEvent(generation: Generation, event: Extract<CoreEvent, { type: "agent.decide" }>) {
+  #processDecideEvent(
+    generation: Generation,
+    event: Extract<GenerationPluginEvent, { type: "agent.decide" }>,
+  ) {
     const id = newId("decide");
     this.#decidePromises.push({
       id,
       event,
       promise: (async () => {
-        const result = await this.#core.agent.models.llm.generateObject({
+        const result = await this.#generationPlugin.agent.models.llm.generateObject({
           messages: [
             {
               id: newId("message"),
@@ -206,7 +214,11 @@ export class GenerationOrchestrator {
           }),
         });
         if (result.success && result.data.shouldContinue && generation.status === "idle") {
-          this.#core.events.emit({ type: "agent.continue", data: event.data, urgent: true });
+          this.#generationPlugin.events.emit({
+            type: "agent.continue",
+            data: event.data,
+            urgent: true,
+          });
         }
 
         // Remove the promise from the list
@@ -221,7 +233,7 @@ export class GenerationOrchestrator {
 
   #processInsertEvent(
     generation: Generation,
-    event: Extract<CoreEvent, { type: "agent.continue" | "agent.say" }>,
+    event: Extract<GenerationPluginEvent, { type: "agent.continue" | "agent.say" }>,
   ) {
     // In case an abrupt intrerupt insert is requested, try first interrupting the current generation
     if (event.data.interrupt === "abrupt")
@@ -251,7 +263,7 @@ export class GenerationOrchestrator {
     return event.data.interrupt === "smooth";
   }
 
-  #isGenerationEvent(event: CoreEvent) {
+  #isGenerationEvent(event: GenerationPluginEvent) {
     return (
       event.type === "agent.continue" ||
       event.type === "agent.say" ||
@@ -263,7 +275,7 @@ export class GenerationOrchestrator {
   }
 
   #isQueueBusy() {
-    return this.#core.queue.some((event) => this.#isGenerationEvent(event));
+    return this.#generationPlugin.queue.some((event) => this.#isGenerationEvent(event));
   }
 
   async #consumeGenerations() {
@@ -275,19 +287,19 @@ export class GenerationOrchestrator {
     for await (const generation of this.#generationsQueue) {
       for await (const chunk of limiter(generation.queue)) {
         // Set speaking status on first content chunk
-        if (!this.#core.context.get().status.speaking && chunk.type === "content") {
-          this.#core.events.emit({ type: "agent.speaking-start", urgent: true });
+        if (!this.#generationPlugin.context.get().status.speaking && chunk.type === "content") {
+          this.#generationPlugin.events.emit({ type: "agent.speaking-start", urgent: true });
         }
 
         // Forward content chunks to core
         if (chunk.type === "content") {
           if (chunk.textChunk.length)
-            this.#core.events.emit({
+            this.#generationPlugin.events.emit({
               type: "agent.text-chunk",
               data: { textChunk: chunk.textChunk },
             });
-          if (this.#core.context.get().voiceEnabled && chunk.voiceChunk?.length)
-            this.#core.events.emit({
+          if (this.#generationPlugin.context.get().voiceEnabled && chunk.voiceChunk?.length)
+            this.#generationPlugin.events.emit({
               type: "agent.voice-chunk",
               data: { voiceChunk: chunk.voiceChunk },
             });
@@ -296,7 +308,10 @@ export class GenerationOrchestrator {
         // Forward tool requests to core
         else if (chunk.type === "tool-requests") {
           if (chunk.requests.length)
-            this.#core.events.emit({ type: "agent.tool-requests", data: chunk.requests });
+            this.#generationPlugin.events.emit({
+              type: "agent.tool-requests",
+              data: chunk.requests,
+            });
         }
 
         // Or if this is the end of the generation
@@ -305,8 +320,11 @@ export class GenerationOrchestrator {
           this.#generations = this.#generations.filter((g) => g.id !== generation.id);
 
           // If this is the last generation, notify the end of speaking
-          if (this.#core.context.get().status.speaking && this.#generationsQueue.length() === 0) {
-            this.#core.events.emit({ type: "agent.speaking-end", urgent: true });
+          if (
+            this.#generationPlugin.context.get().status.speaking &&
+            this.#generationsQueue.length() === 0
+          ) {
+            this.#generationPlugin.events.emit({ type: "agent.speaking-end", urgent: true });
           }
 
           // Move to the next generation (if any)

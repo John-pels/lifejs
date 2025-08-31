@@ -12,7 +12,7 @@ That's it. Then, in `packages/life` you'll find sub-folders for each of the main
 - `life/agent`: Runs and manages agents compiled in the `.life/` folder.
 - `life/transport`: Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
 - `life/models`: Offers a unified API for interacting with LLM, TTS, STT, and other AI models.
-- `life/plugins`: In Life.js everything is a plugin, even the core. This contains all native plugins.
+- `life/plugins`: In Life.js everything is a plugin, even the generation. This contains all native plugins.
 - `life/client`: Allows interacting with a Life.js client from browser.
 - `life/react`: Exposes React hooks and components built on top of `life/client`.
 - `life/compiler`: Compiles a Life.js project into a ready-to-run `.life/` folder.
