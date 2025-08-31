@@ -169,6 +169,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
 
       const audioFrame = new AudioFrame(frameData, 16_000, 1, this.SAMPLES_PER_FRAME);
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
         await this.source.captureFrame(audioFrame);
       } catch (error) {
         console.error("Error capturing audio frame:", error);

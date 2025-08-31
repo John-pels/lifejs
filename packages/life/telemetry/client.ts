@@ -412,6 +412,7 @@ export class Telemetry implements TelemetryClient {
       if (allDone) return;
 
       // Wait a bit before checking again
+      // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }

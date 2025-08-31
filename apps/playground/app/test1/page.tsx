@@ -2,8 +2,8 @@
 // import { clients } from "life/client";
 import Image from "next/image";
 import { useState } from "react";
-import { FancyButton } from "@/components/ui/fancy-button";
-import { fetchToken } from "./actions";
+import { FancyButton } from "../../components/ui/fancy-button";
+// import { fetchToken } from "./actions";
 
 // const client = new AgentClient({
 //   transport: {
@@ -15,9 +15,9 @@ import { fetchToken } from "./actions";
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
 
-  const startDiscussion = async () => {
-    const newToken = await fetchToken();
-    setToken(newToken);
+  const startDiscussion = () => {
+    // const newToken = await fetchToken();
+    setToken("newToken");
     // await clients.example.say("Hello, world!");
   };
 

@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { LivekitEOU } from "../../../../packages/life/models/eou/providers/livekit";
 import { TurnSenseEOU } from "../../../../packages/life/models/eou/providers/turnsense";
 import { TEST_CASES } from "./dataset";

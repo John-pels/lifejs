@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import type { Message } from "../../../../packages/life/agent/resources";
 
 // Test case structure

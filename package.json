@@ -4,7 +4,7 @@
   "scripts": {
     "bump": "ncu -i --workspaces --configFilePath /bin/null",
     "clear": "find . -type d \\( -name 'node_modules' -o -name '.turbo' -o -name '.next' -o -name 'dist' -o -name 'tsconfig.tsbuildinfo' \\) -prune -exec rm -rf {} +",
-    "lint": "ultracite lint",
+    "lint": "bunx biome lint",
     "lint:full": "biome lint --max-diagnostics 1000",
     "format": "ultracite format",
     "types": "turbo types --concurrency=100% --log-order=stream",
@@ -22,7 +22,7 @@
     "npm-check-updates": "^18.0.3",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",
-    "ultracite": "^5.2.10"
+    "ultracite": "^5.2.14"
   },
   "engines": {
     "node": ">=20"
@@ -34,10 +34,6 @@
   ],
   "patchedDependencies": {
     "tailwindcss-capsize@4.0.0": "patches/tailwindcss-capsize@4.0.0.patch",
-    "ink@6.0.1": "patches/ink@6.0.1.patch"
-  },
-  "dependencies": {
-    "@nanostores/react": "^1.0.0",
-    "nanostores": "^1.0.1"
+    "ink@6.2.3": "patches/ink@6.2.3.patch"
   }
 }

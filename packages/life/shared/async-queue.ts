@@ -38,11 +38,11 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   }
 
   async next(): Promise<IteratorResult<T>> {
-    // biome-ignore lint/nursery/noUnnecessaryConditions: expected here
     while (true) {
       const value = this.#buf.shift();
       if (value !== undefined) return { value, done: false };
       if (this.#closed) return { value: undefined, done: true };
+      // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
       await new Promise<void>((res) => (this.#wakeUp = res)); // sleep until push/stop
       this.#wakeUp = undefined;
     }
