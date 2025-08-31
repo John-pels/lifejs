@@ -21,7 +21,7 @@ export type SimplifiedGenerationPluginServer = {
 
 export const generationPluginClient = definePluginClient<SimplifiedGenerationPluginServer>(
   "generation",
-).atoms(({ client }) => {
+).atoms(({ server }) => {
   // Create a status atom that observes context status changes
   const status = atom<{
     listening: boolean;
@@ -32,10 +32,10 @@ export const generationPluginClient = definePluginClient<SimplifiedGenerationPlu
   // Subscribe to context changes when the atom is mounted
   onMount(status, () => {
     // Fetch initial status from context
-    status.set(client.context.get().status);
+    status.set(server.context.get().status);
 
     // Subscribe to status changes from the context
-    const unsubscribe = client.context.onChange(
+    const unsubscribe = server.context.onChange(
       (ctx) => ctx.status,
       (newStatus) => status.set(newStatus),
     );

@@ -8,23 +8,28 @@ import type { PluginContext } from "../server/types";
 import type {
   PluginClientAtoms,
   PluginClientConfig,
-  PluginClientContextHandler,
   PluginClientDefinition,
   PluginClientDependencies,
-  PluginClientEventsHandler,
-  PluginClientMethods,
+  PluginClientServer,
 } from "./types";
 
 export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
+  readonly _isPluginClient = true;
   readonly _definition: ClientDefinition;
   readonly config: PluginClientConfig<ClientDefinition["config"], "output">;
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
-  readonly agent: AgentClient<AgentClientDefinition>;
-  readonly methods = {} as PluginClientMethods<ClientDefinition["$serverDef"]["methods"]>;
-  readonly context = {} as PluginClientContextHandler<
-    PluginContext<ClientDefinition["$serverDef"]["context"], "output">
-  >;
-  readonly events = {} as PluginClientEventsHandler<ClientDefinition["$serverDef"]["events"]>;
+  readonly server = {} as PluginClientServer<ClientDefinition["$serverDef"]>;
+  readonly #agent: AgentClient<AgentClientDefinition>;
+  get #dependencies() {
+    const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
+    for (const [depName] of Object.entries(this._definition.dependencies ?? {})) {
+      // @ts-expect-error - this.agent is an agent client and has a plugins properties
+      dependencies[depName as keyof typeof dependencies] = this.#agent[depName];
+    }
+    return dependencies;
+  }
+  // #telemetry: TelemetryClient;
+
   readonly #eventsListeners = new Map<
     string,
     // biome-ignore lint/suspicious/noExplicitAny: further type precision is not needed here and would just make code more complex
@@ -42,7 +47,6 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       callback: (newValue: SerializableValue, oldValue: SerializableValue) => void | Promise<void>;
     }
   >();
-  // telemetry: TelemetryClient;
 
   constructor(
     definition: ClientDefinition,
@@ -50,16 +54,20 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     agent: AgentClient<AgentClientDefinition>,
   ) {
     this._definition = definition;
-    this.agent = agent;
+    this.#agent = agent;
     this.config = definition.config.parse(config) as PluginClientConfig<
       ClientDefinition["config"],
       "output"
     >;
-    this.atoms = definition.atoms({ client: this }) as PluginClientAtoms<ClientDefinition["atoms"]>;
+    this.atoms = definition.atoms({
+      config: this.config,
+      server: this.server,
+      dependencies: this.#dependencies,
+    }) as PluginClientAtoms<ClientDefinition["atoms"]>;
 
     // Wire methods
     for (const name of Object.keys(definition.$serverDef.methods)) {
-      this.methods[name as keyof typeof this.methods] = (...args: unknown[]) =>
+      this.server.methods[name as keyof typeof this.server.methods] = (...args: unknown[]) =>
         agent.transport.call({
           name: `plugin.${this._definition.name}.methods.${name}`,
           args,
@@ -67,7 +75,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     }
 
     // Wire events
-    this.events.emit = (...args: unknown[]) =>
+    this.server.events.emit = (...args: unknown[]) =>
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.emit`,
         args,
@@ -87,8 +95,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         await this.#eventsListeners.get(listenerId)?.callback(event);
       },
     });
-    this.events.on = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.events.on>;
+    this.server.events.on = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof this.server.events.on>;
 
       // Generate new listener id
       const id = newId("listener");
@@ -114,9 +122,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#eventsListeners.delete(id);
       };
     };
-    this.events.once = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.events.once>;
-      const unsubscribe = this.events.on(selector, async (event) => {
+    this.server.events.once = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof this.server.events.once>;
+      const unsubscribe = this.server.events.on(selector, async (event) => {
         unsubscribe();
         await callback(event);
       });
@@ -124,8 +132,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     };
 
     // Wire context
-    this.context.onChange = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.context.onChange>;
+    this.server.context.onChange = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof this.server.context.onChange>;
 
       // Generate new listener id
       const listenerId = newId("listener");
@@ -142,8 +150,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#contextListeners.delete(listenerId);
       };
     };
-    this.context.get = () => klona(this.#contextValue);
-    this.agent.transport
+    this.server.context.get = () => klona(this.#contextValue);
+    this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
       })
@@ -160,7 +168,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#contextValue = response.data.value;
         this.#notifyContextListeners({});
       });
-    this.agent.transport.register({
+    this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.changed`,
       schema: z
         .function()
@@ -190,14 +198,5 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         }
       }),
     );
-  }
-
-  get dependencies() {
-    const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
-    for (const [depName] of Object.entries(this._definition.dependencies ?? {})) {
-      // @ts-expect-error - this.agent is an agent client and has a plugins properties
-      dependencies[depName as keyof typeof dependencies] = this.agent[depName];
-    }
-    return dependencies;
   }
 }

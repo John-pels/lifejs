@@ -3,9 +3,10 @@ import { TransportClient } from "@/transport/client";
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "./types";
 
 export class AgentClient<const Definition extends AgentClientDefinition> {
-  id: string;
-  definition: Definition;
-  transport: TransportClient;
+  readonly _definition: Definition;
+  readonly _isAgentClient = true;
+  readonly id: string;
+  readonly transport: TransportClient;
 
   constructor(params: {
     definition: Definition;
@@ -13,7 +14,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     id?: string;
   }) {
     this.id = params.id ?? newId("agent");
-    this.definition = params.definition;
+    this._definition = params.definition;
 
     // Initialize transport
     this.transport = new TransportClient(params.definition.config.transport);
@@ -27,23 +28,23 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
 
   #validatePlugins() {
     // Validate plugins have unique names
-    const pluginNames = Object.values(this.definition.plugins).map((plugin) => plugin.name);
+    const pluginNames = Object.values(this._definition.plugins).map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
     if (duplicates.length > 0) {
       const uniqueDuplicates = [...new Set(duplicates)];
       throw new Error(
-        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this.definition.name}')`,
+        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this._definition.name}')`,
       );
     }
 
     // Validate plugin dependencies
-    for (const plugin of Object.values(this.definition.plugins)) {
+    for (const plugin of Object.values(this._definition.plugins)) {
       for (const [depName] of Object.entries(plugin.dependencies || {})) {
         // - Ensure the plugin is provided
-        const depPlugin = Object.values(this.definition.plugins).find((p) => p.name === depName);
+        const depPlugin = Object.values(this._definition.plugins).find((p) => p.name === depName);
         if (!depPlugin) {
           throw new Error(
-            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
+            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this._definition.name}')`,
           );
         }
       }
@@ -51,9 +52,9 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   }
 
   #initializePlugins(plugins: AgentClientPluginsMapping) {
-    for (const [name, pluginDef] of Object.entries(this.definition.plugins)) {
+    for (const [name, pluginDef] of Object.entries(this._definition.plugins)) {
       // @ts-expect-error
-      this[name] = new plugins[name](pluginDef, this.definition.pluginConfigs[name], this);
+      this[name] = new plugins[name](pluginDef, this._definition.pluginConfigs[name], this);
     }
   }
 
@@ -61,13 +62,13 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     // Connect to the agent via transport
     // TODO: Implement transport connection
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log(`Inviting agent: ${this.definition.name}`);
+    console.log(`Inviting agent: ${this._definition.name}`);
   }
 
   async leave() {
     // Disconnect from the agent
     // TODO: Implement transport disconnection
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    console.log(`Leaving agent: ${this.definition.name}`);
+    console.log(`Leaving agent: ${this._definition.name}`);
   }
 }

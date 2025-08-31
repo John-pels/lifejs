@@ -26,7 +26,7 @@ export const testPluginClient = definePluginClient<typeof testPlugin>("test")
             return name;
           }
           test() {
-            this.events.on("event1", (event) => {
+            this.server.events.on("event1", (event) => {
               event.type === "event1";
               // @ts-expect-error
               event.type === "event2";
@@ -34,8 +34,8 @@ export const testPluginClient = definePluginClient<typeof testPlugin>("test")
           }
         },
   )
-  .atoms(({ client }) => {
-    client.methods.test();
+  .atoms(({ server }) => {
+    server.methods.test();
     return {};
   });
 

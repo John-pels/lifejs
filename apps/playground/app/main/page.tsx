@@ -14,12 +14,12 @@ const AgentInterface = () => {
   const agent1 = createAgentClient("example");
   const { data: status } = useAgentStatus(agent1);
   // const test = agent1.definition.$serverDef.plugins.generation.methods;
-  // agent1.test.
   agent1.test.getItem("item1");
-  // agent1.generation.
+  agent1.test.getConnector("connector1");
   // @ts-expect-error
-  agent1.generation.methods.continuenot({});
-  agent1.generation.events.on(
+  agent1.generation.server.methods.continuenot({});
+  agent1.generation.server.methods.continue({});
+  agent1.generation.server.events.on(
     {
       include: ["messages.create", "messages.update", "agent.decide"],
       exclude: ["messages.create", "messages.update"],
@@ -28,13 +28,13 @@ const AgentInterface = () => {
       event.type;
     },
   );
-  agent1.generation.events.on("*", (event) => {
+  agent1.generation.server.events.on("*", (event) => {
     event.type;
   });
-  agent1.generation.events.on("messages.create", (event) => {
+  agent1.generation.server.events.on("messages.create", (event) => {
     event.type;
   });
-  agent1.generation.events.on(["messages.create", "messages.delete"], (event) => {
+  agent1.generation.server.events.on(["messages.create", "messages.delete"], (event) => {
     event.type;
   });
 

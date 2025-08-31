@@ -60,7 +60,9 @@ export type PluginClientInstance<Definition extends PluginClientDefinition> =
 export type PluginClientAtomsDefinition<
   ClientDefinition extends PluginClientDefinition = PluginClientDefinition,
 > = (params: {
-  client: PluginClientInstance<ClientDefinition>;
+  config: PluginClientConfig<ClientDefinition["config"], "output">;
+  dependencies: PluginClientDependencies<ClientDefinition["dependencies"]>;
+  server: PluginClientServer<ClientDefinition["$serverDef"]>;
 }) => Record<string, WritableAtom | unknown>;
 
 export type PluginClientAtoms<Definition extends PluginClientAtomsDefinition> =
@@ -84,6 +86,13 @@ export type PluginClientMethods<MethodsDefinition extends PluginMethodsDefinitio
   [K in keyof MethodsDefinition]: (
     ...args: z.infer<MethodsDefinition[K]["schema"]["_def"]["args"]>
   ) => Promise<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["_def"]["returns"]>>>;
+};
+
+// - Server
+export type PluginClientServer<ServerDefinition extends PluginDefinition> = {
+  methods: PluginClientMethods<ServerDefinition["methods"]>;
+  context: PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>;
+  events: PluginClientEventsHandler<ServerDefinition["events"]>;
 };
 
 // - Definition
