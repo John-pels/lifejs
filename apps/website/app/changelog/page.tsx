@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Metadata } from "next";
 import Image from "next/image";
+import Markdown from "react-markdown";
 
 export const metadata: Metadata = {
   title: "Changelog",
@@ -126,14 +127,18 @@ function ChangeItem({ change }: { change: Change }) {
             <Image
               alt={`${author}'s avatar`}
               className="h-5 w-5 rounded-full border border-white/80"
+              height={24}
               key={author}
               src={`https://github.com/${author}.png?size=24`}
+              width={24}
             />
           ))}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-black/80 text-sm leading-relaxed">{change.content}</p>
+          <div className="prose-sm mb-1 prose-code:rounded prose-code:bg-black/5 prose-code:px-1 prose-code:py-0.5 prose-code:font-mono prose-code:text-xs text-black/80 text-sm leading-relaxed prose-code:before:content-[''] prose-code:after:content-['']">
+            <Markdown>{change.content}</Markdown>
+          </div>
           <div className="flex items-center gap-2 text-black/40 text-xs">
             <span>
               {change.authors.map((author, idx) => (
@@ -173,8 +178,8 @@ function VersionSection({ title, changes }: { title: string; changes: Change[] }
     <div className="mb-6">
       <h4 className="mb-3 font-medium text-black/60 text-sm">{title}</h4>
       <div className="space-y-0">
-        {changes.map((change) => (
-          <ChangeItem change={change} key={change.link} />
+        {changes.map((change, i) => (
+          <ChangeItem change={change} key={change.link + i.toString()} />
         ))}
       </div>
     </div>

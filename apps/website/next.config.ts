@@ -5,6 +5,9 @@ const withMDX = createMDX();
 
 const config: NextConfig = {
   reactStrictMode: true,
+  images: {
+    remotePatterns: [{ hostname: "github.com" }],
+  },
 };
 
 export default withMDX(config);
