@@ -1,5 +1,11 @@
 # life
 
+## 0.11.1
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [05bf447](https://github.com/lifejs/lifejs/commit/05bf4479da105d919c73014aa248469eaeb2adf2) — Typescript Intellisense was becoming quite slow when defining agents, plugins, etc. p90 latency is back to <150 ms.
+
 ## 0.11.0
 
 ### Minor Changes
