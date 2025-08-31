@@ -4,6 +4,7 @@ import { AgentProvider, useAgentStatus } from "life/react";
 export default function Page() {
   return (
     <AgentProvider id="1" name="example">
+      {/* serverUrl="ws://localhost:3003" */}
       <AgentInterface />
     </AgentProvider>
   );

@@ -855,36 +855,44 @@ export default {
     // Find node_modules and set up dist directory
     const nodeModulesPath = await this.findNodeModules(this.options.projectRoot);
     const distDir = join(nodeModulesPath, "life/dist");
-    const exportDir = join(distDir, "exports");
     const relativeGeneratedClientPath = relative(distDir, generatedClientPath);
     const relativeGeneratedServerPath = relative(distDir, generatedServerPath);
 
     // Find the client-build and server-build files
     const { readdirSync } = await import("node:fs");
-    const rootFiles = readdirSync(distDir);
-    const exportsFiles = readdirSync(exportDir);
-    const clientRootDtsFiles = rootFiles.filter(
+    const distFiles = readdirSync(distDir);
+    const clientRootDtsFiles = distFiles.filter(
       (f) => f.startsWith("build-client") && (f.endsWith(".d.ts") || f.endsWith(".d.mts")),
     );
-    const serverRootDtsFiles = rootFiles.filter(
+    const serverRootDtsFiles = distFiles.filter(
       (f) => f.startsWith("build-server") && (f.endsWith(".d.ts") || f.endsWith(".d.mts")),
     );
-    const clientExportsJsFiles = exportsFiles.filter(
-      (f) => f.startsWith("build-client") && f.endsWith(".js"),
+    const chunkFiles = distFiles.filter(
+      (f) => f.startsWith("chunk-") && (f.endsWith(".js") || f.endsWith(".mjs")),
     );
-    const serverExportsJsFiles = exportsFiles.filter(
-      (f) => f.startsWith("build-server") && f.endsWith(".js"),
-    );
-    const clientExportsMjsFiles = exportsFiles.filter(
-      (f) => f.startsWith("build-client") && f.endsWith(".mjs"),
-    );
-    const serverExportsMjsFiles = exportsFiles.filter(
-      (f) => f.startsWith("build-server") && f.endsWith(".mjs"),
+    let serverBuildChunkMjsFile: string | null = null;
+    let clientBuildChunkMjsFile: string | null = null;
+    let serverBuildChunkJsFile: string | null = null;
+    let clientBuildChunkJsFile: string | null = null;
+    await Promise.all(
+      chunkFiles.map(async (file) => {
+        const filePath = join(distDir, file);
+        const content = await readFile(filePath, "utf-8");
+        if (content.includes("export { build_server_default };")) {
+          serverBuildChunkMjsFile = file;
+        } else if (content.includes("export { build_client_default };")) {
+          clientBuildChunkMjsFile = file;
+        } else if (content.includes("exports.build_server_default = build_server_default;")) {
+          serverBuildChunkJsFile = file;
+        } else if (content.includes("exports.build_client_default = build_client_default;")) {
+          clientBuildChunkJsFile = file;
+        }
+      }),
     );
 
-    // Rewrite the root client DTS files
-    await Promise.all(
-      clientRootDtsFiles.map(async (file) => {
+    // Rewrite the rootDTS files and chunks
+    await Promise.all([
+      ...clientRootDtsFiles.map(async (file) => {
         const filePath = join(distDir, file);
         const content = await readFile(filePath, "utf-8");
         const ast = await parseAsync(Lang.TypeScript, content);
@@ -900,11 +908,7 @@ export default {
           await writeFile(filePath, root.commitEdits([edit]), "utf-8");
         }
       }),
-    );
-
-    // Rewrite the root server DTS files
-    await Promise.all(
-      serverRootDtsFiles.map(async (file) => {
+      ...serverRootDtsFiles.map(async (file) => {
         const filePath = join(distDir, file);
         const content = await readFile(filePath, "utf-8");
         const ast = await parseAsync(Lang.TypeScript, content);
@@ -919,99 +923,31 @@ export default {
           await writeFile(filePath, root.commitEdits([edit]), "utf-8");
         }
       }),
-    );
-
-    // Rewrite client MJS files
-    await Promise.all(
-      clientExportsMjsFiles.map(async (file) => {
-        const filePath = join(exportDir, file);
-        const newContent = `import  _default from "../${relativeGeneratedClientPath}";\nexport { _default as default };`;
+      (async () => {
+        if (!serverBuildChunkMjsFile) return;
+        const filePath = join(distDir, serverBuildChunkMjsFile);
+        const newContent = `import build_server_default from "${relativeGeneratedServerPath}";\nexport { build_server_default };`;
         await writeFile(filePath, newContent, "utf-8");
-      }),
-    );
-
-    // Rewrite server MJS files
-    await Promise.all(
-      serverExportsMjsFiles.map(async (file) => {
-        const filePath = join(exportDir, file);
-        const newContent = `import  _default from "../${relativeGeneratedServerPath}";\nexport { _default as default };`;
+      })(),
+      (async () => {
+        if (!clientBuildChunkMjsFile) return;
+        const filePath = join(distDir, clientBuildChunkMjsFile);
+        const newContent = `import build_client_default from "${relativeGeneratedClientPath}";\nexport { build_client_default };`;
         await writeFile(filePath, newContent, "utf-8");
-      }),
-    );
-
-    // Rewrite client JS files
-    await Promise.all(
-      clientExportsJsFiles.map(async (file) => {
-        const filePath = join(exportDir, file);
-        const newContent = `const _default = require("../${relativeGeneratedClientPath}");\nmodule.exports = _default;`;
+      })(),
+      (async () => {
+        if (!serverBuildChunkJsFile) return;
+        const filePath = join(distDir, serverBuildChunkJsFile);
+        const newContent = `const build_server_default = require("${relativeGeneratedServerPath}");\nexports.build_server_default = build_server_default;`;
         await writeFile(filePath, newContent, "utf-8");
-      }),
-    );
-
-    // Rewrite server JS files
-    await Promise.all(
-      serverExportsJsFiles.map(async (file) => {
-        const filePath = join(exportDir, file);
-        const newContent = `const _default = require("../${relativeGeneratedServerPath}");\nmodule.exports = _default;`;
+      })(),
+      (async () => {
+        if (!clientBuildChunkJsFile) return;
+        const filePath = join(distDir, clientBuildChunkJsFile);
+        const newContent = `const build_client_default = require("${relativeGeneratedClientPath}");\nexports.build_client_default = build_client_default;`;
         await writeFile(filePath, newContent, "utf-8");
-      }),
-    );
-
-    //     // Rewrite the client JS files
-    //     await Promise.all(
-    //       clientJsFiles.map(async (file) => {
-    //         const filePath = join(distDir, file);
-    //         const newContent = `const build_client_default = require('${relativeGeneratedClientPath}');
-    // exports.build_client_default = build_client_default.default;
-    //         `;
-    //         await writeFile(filePath, newContent, "utf-8");
-    //       }),
-    //     );
-
-    //     // Rewrite the client DTS files
-    //     await Promise.all(
-    //       clientDtsFiles.map(async (file) => {
-    //         const filePath = join(distDir, file);
-    //         const newContent = `import _default from "${relativeGeneratedClientPath}";
-    // export { _default };
-    //         `;
-    //         await writeFile(filePath, newContent, "utf-8");
-    //       }),
-    //     );
-
-    //     // Rewrite the server MJS files
-    //     await Promise.all(
-    //       serverMjsFiles.map(async (file) => {
-    //         const filePath = join(distDir, file);
-    //         const content = await readFile(filePath, "utf-8");
-    //         const newContent = content.replace(
-    //           "var build_server_default = {};",
-    //           `import build_server_default from "${relativeGeneratedServerPath}";`,
-    //         );
-    //         await writeFile(filePath, newContent, "utf-8");
-    //       }),
-    //     );
-
-    //     // Rewrite the server JS files
-    //     await Promise.all(
-    //       serverJsFiles.map(async (file) => {
-    //         const filePath = join(distDir, file);
-    //         const newContent = `const build_server_default = require('${relativeGeneratedServerPath}');
-    // exports.build_server_default = build_server_default.default;`;
-    //         await writeFile(filePath, newContent, "utf-8");
-    //       }),
-    //     );
-
-    //     // Rewrite the server DTS files
-    //     await Promise.all(
-    //       serverDtsFiles.map(async (file) => {
-    //         const filePath = join(distDir, file);
-    //         const newContent = `import _default from "${relativeGeneratedServerPath}";
-    // export { _default };
-    //         `;
-    //         await writeFile(filePath, newContent, "utf-8");
-    //       }),
-    //     );
+      })(),
+    ]);
   }
 
   // @dev This is the old tsdown-compatible code. Unfortunately tsdown is still not fully stable and

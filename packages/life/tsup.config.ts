@@ -10,5 +10,6 @@ export default defineConfig({
   sourcemap: true,
   minify: false,
   external: ["typescript"],
-  splitting: false,
+  splitting: true,
+  keepNames: true,
 });
