@@ -53,4 +53,30 @@ Here is an overview of its sub-folders:
 - **Testing**: For now we simply using `bun test` (bundled with Bun) which is automatically picking and running `*.test.ts` files in the project.
 
 ## Development Guidelines
-- Use thinking at every step, reason about your changes and ideas ( think ).
+
+### Thinking
+- Use thinking at every step, whenever possible reason about your changes and ideas ( ultrathink ).
+
+### Code Style
+- TypeScript for all code, avoid @ts-ignore and `any` whenever possible
+- Make sure changes / additions are consistent with the existing code around it
+- Be surgical, minimal and precise in your changes
+- Never drop any existing feature or behavior because it is incompatible with some changes you performed. If adapting that part is heavy and you're unsure, ask the user, else adapt the now incompatible part.
+- Do not workaround or implement a solution partially meeting requirements without asking the user first
+- Use interfaces over types whenever possible
+- Avoid enums, use const maps
+- Prefer functional and declarative patterns
+- Use early returns for readability
+- Named exports for components
+- Descriptive naming with auxiliary verbs (isLoading, hasError)
+- Event handlers prefixed with "handle" or "process"
+
+### Test your changes
+Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.
+
+### Answers Tips
+- Keep your answer minimal and dense, still easy to read quickly
+- Be as transparent as possible with the user, always explain shortly your reasoning
+- If unsure, or facing a complex dilemma, stop the conversation and ask the user
+- Consider introducing a TL;DR at the top or bottom of complex explanations
+- Never compliment me or be affirming excessively (like saying "You're absolutely right!" etc). Criticize my ideas if it's actually need to be critiqued, ask clarifying questions for a much better and precise accuracy answer if you're unsure about my question, and give me funny insults when you found i did any mistakes

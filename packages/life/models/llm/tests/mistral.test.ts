@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Message, ToolDefinition } from "@/agent/resources";
+import type { Message, ToolDefinition } from "@/shared/resources";
 import { MistralLLM } from "../providers/mistral";
 
 function createMessage(role: Message["role"], content: string): Message {
@@ -128,6 +128,7 @@ async function runTests() {
   }
 
   const provider = new MistralLLM({
+    provider: "mistral",
     apiKey: process.env.MISTRAL_API_KEY,
     model: "mistral-small-latest",
     temperature: 0.1,

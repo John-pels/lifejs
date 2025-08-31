@@ -2,31 +2,36 @@ import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Message, ToolDefinition } from "@/agent/resources";
+import { createConfig } from "@/shared/config";
+import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
-export const xaiLLMConfigSchema = z.object({
-  apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
-  model: z
-    .enum([
-      "grok-3",
-      "grok-3-fast",
-      "grok-3-mini",
-      "grok-3-mini-fast",
-      "grok-2-1212",
-      "grok-2-vision-1212",
-      "grok-beta",
-      "grok-vision-beta",
-    ])
-    .default("grok-3-mini"),
-  temperature: z.number().min(0).max(2).default(0.5),
+export const xaiLLMConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("xai"),
+    apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
+    model: z
+      .enum([
+        "grok-3",
+        "grok-3-fast",
+        "grok-3-mini",
+        "grok-3-mini-fast",
+        "grok-2-1212",
+        "grok-2-vision-1212",
+        "grok-beta",
+        "grok-vision-beta",
+      ])
+      .default("grok-3-mini"),
+    temperature: z.number().min(0).max(2).default(0.5),
+  }),
+  clientSchema: z.object({}),
 });
 
-export class XaiLLM extends LLMBase<typeof xaiLLMConfigSchema> {
-  #client: OpenAI;
+export class XaiLLM extends LLMBase<typeof xaiLLMConfig.serverSchema> {
+  readonly #client: OpenAI;
 
-  constructor(config: z.input<typeof xaiLLMConfigSchema>) {
-    super(xaiLLMConfigSchema, config);
+  constructor(config: z.input<typeof xaiLLMConfig.serverSchema>) {
+    super(xaiLLMConfig.serverSchema, config);
     if (!config.apiKey)
       throw new Error(
         "XAI_API_KEY environment variable or config.apiKey must be provided to use this model.",

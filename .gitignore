@@ -17,7 +17,6 @@ web_modules/
 # 2. Build & distro artefacts
 ###############################################################################
 # General
-build/
 dist/
 # Next.js / Vercel
 .next/
@@ -97,3 +96,7 @@ lib-cov/
 .node_repl_history
 .vscode-test/
 .tern-port
+
+
+# Life.js
+**/.life/

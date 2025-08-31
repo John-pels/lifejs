@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Message } from "@/agent/resources";
+import type { Message } from "@/shared/resources";
 
 export abstract class EOUBase<ConfigSchema extends z.AnyZodObject> {
   protected config: z.infer<ConfigSchema>;

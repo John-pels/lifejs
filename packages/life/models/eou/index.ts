@@ -1,28 +1,21 @@
 import { z } from "zod";
-import { LivekitEOU, livekitEOUConfigSchema } from "./providers/livekit";
-import { TurnSenseEOU, turnSenseEOUConfigSchema } from "./providers/turnsense";
+import { createConfig } from "@/shared/config";
+import { LivekitEOU, livekitEOUConfig } from "./providers/livekit";
+import { TurnSenseEOU, turnSenseEOUConfig } from "./providers/turnsense";
 
 // Providers
 export const eouProviders = {
-  turnsense: { class: TurnSenseEOU, configSchema: turnSenseEOUConfigSchema },
-  livekit: { class: LivekitEOU, configSchema: livekitEOUConfigSchema },
+  turnsense: { class: TurnSenseEOU, configSchema: turnSenseEOUConfig.serverSchema },
+  livekit: { class: LivekitEOU, configSchema: livekitEOUConfig.serverSchema },
 } as const;
 
 export type EOUProvider = (typeof eouProviders)[keyof typeof eouProviders]["class"];
 
 // Config
-export type EOUProviderConfig<T extends "input" | "output"> = {
-  [K in keyof typeof eouProviders]: { provider: K } & (T extends "input"
-    ? z.input<(typeof eouProviders)[K]["configSchema"]>
-    : z.output<(typeof eouProviders)[K]["configSchema"]>);
-}[keyof typeof eouProviders];
-
-export const eouProviderConfigSchema = z.discriminatedUnion(
-  "provider",
-  Object.entries(eouProviders).map(([key, { configSchema }]) =>
-    configSchema.extend({ provider: z.literal(key) }),
-  ) as unknown as [
-    z.ZodObject<{ provider: z.ZodString }>,
-    ...z.ZodObject<{ provider: z.ZodString }>[],
-  ],
-);
+export const eouProviderConfig = createConfig({
+  serverSchema: z.discriminatedUnion("provider", [
+    livekitEOUConfig.serverSchema,
+    turnSenseEOUConfig.serverSchema,
+  ]),
+  clientSchema: z.object({}),
+});

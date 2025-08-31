@@ -1,16 +1,16 @@
 "use client";
-import { AgentClient } from "life/client";
+// import { clients } from "life/client";
 import Image from "next/image";
 import { useState } from "react";
 import { FancyButton } from "@/components/ui/fancy-button";
 import { fetchToken } from "./actions";
 
-const client = new AgentClient({
-  transport: {
-    provider: "livekit",
-    serverUrl: "ws://127.0.0.1:7880",
-  },
-});
+// const client = new AgentClient({
+//   transport: {
+//     provider: "livekit",
+//     serverUrl: "ws://127.0.0.1:7880",
+//   },
+// });
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
@@ -18,8 +18,10 @@ export default function Home() {
   const startDiscussion = async () => {
     const newToken = await fetchToken();
     setToken(newToken);
-    await client.inviteAgent("room-1", newToken);
+    // await clients.example.say("Hello, world!");
   };
+
+  // console.log(clients);
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center bg-gray-50 p-8">
@@ -35,7 +37,8 @@ export default function Home() {
         <FancyButton className="text-white" onClick={() => startDiscussion()} size="md">
           Start Discussion
         </FancyButton>
-
+      </div>
+      {/* 
         <div className="mx-auto grid w-fit grid-cols-2 gap-8">
           <button
             className="h-32 w-32 cursor-pointer rounded-xl bg-red-500 shadow-lg transition-transform hover:scale-105"
@@ -59,6 +62,7 @@ export default function Home() {
           ></button>
         </div>
       </div>
+      */}
 
       <div className="absolute right-4 bottom-4 left-4 flex items-center justify-center text-center">
         <p className="max-w-[710px] text-pretty break-all text-gray-400 text-xs">Token: {token}</p>

@@ -1,20 +1,18 @@
 import { Room, RoomEvent } from "livekit-client";
-import { z } from "zod";
+import type { z } from "zod";
 import { BaseClientTransportProvider, type ClientTransportEvent } from "../base/client";
+import { livekitConfig } from "./config";
 
 // - Config
-export const livekitClientConfigSchema = z.object({
-  serverUrl: z
-    .string()
-    .url()
-    .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
-});
+export const livekitClientConfigSchema = livekitConfig.clientSchema;
 export type LiveKitClientConfig<T extends "input" | "output"> = T extends "input"
   ? z.input<typeof livekitClientConfigSchema>
   : z.output<typeof livekitClientConfigSchema>;
 
 // - Transport
-export class LiveKitClientTransportProvider extends BaseClientTransportProvider<z.AnyZodObject> {
+export class LiveKitClientTransportProvider extends BaseClientTransportProvider<
+  typeof livekitClientConfigSchema
+> {
   isConnected = false;
   room: Room | null = null;
   listeners: Partial<

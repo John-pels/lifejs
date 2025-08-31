@@ -1,4 +1,4 @@
-import { deserialize, type SerializableValue, serialize } from "@/shared/stable-serialize";
+import { canon, type SerializableValue } from "@/shared/canon";
 import { TransportRPC } from "./rpc";
 
 // Agnostic logioc between client and server transport classes
@@ -23,13 +23,13 @@ export abstract class TransportCommon extends TransportRPC {
   }
 
   sendObject(topic: string, obj: SerializableValue) {
-    const serialized = serialize(obj);
+    const serialized = canon.stringify(obj);
     return this.sendText(topic, serialized);
   }
 
   receiveObject(topic: string, callback: (obj: unknown, participantId: string) => void) {
     this.receiveText(topic, (text, participantId) => {
-      const deserialized = deserialize(text);
+      const deserialized = canon.parse(text);
       callback(deserialized, participantId);
     });
   }

@@ -5,24 +5,20 @@ import { newId } from "@/shared/prefixed-id";
 // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function type matching
 type AnyZodFunction = z.ZodFunction<any, any>;
 
-// Helper types to extract input/output from ZodFunction using _def
-type ZodFunctionInput<T extends AnyZodFunction> = z.infer<T["_def"]["args"]>;
-type ZodFunctionOutput<T extends AnyZodFunction> = z.infer<T["_def"]["returns"]>;
-
 // RPC messages
-export const rpcRequestMessageSchema = z.object({
+export const rpcRequestSchema = z.object({
   type: z.literal("request"),
   id: z.string(),
   name: z.string(),
-  params: z.unknown().optional(),
+  args: z.unknown().optional(),
 });
 
-export const rpcResponseMessageSchema = z.object({
+export const rpcResponseSchema = z.object({
   type: z.literal("response"),
   id: z.string(),
   name: z.string(),
   status: z.enum(["success", "error"]),
-  result: z.unknown().optional(),
+  data: z.unknown().optional(),
   error: z
     .object({
       code: z.enum(["NOT_FOUND", "INVALID_INPUT", "INVALID_OUTPUT", "UNKNOWN", "TIMEOUT"]),
@@ -32,17 +28,14 @@ export const rpcResponseMessageSchema = z.object({
     .optional(),
 });
 
-export const rpcMessageSchema = z.discriminatedUnion("type", [
-  rpcRequestMessageSchema,
-  rpcResponseMessageSchema,
-]);
+export const rpcMessageSchema = z.discriminatedUnion("type", [rpcRequestSchema, rpcResponseSchema]);
 
-type RPCRequestMessage<Params = unknown> = z.infer<typeof rpcRequestMessageSchema> & {
-  params?: Params;
+export type RPCRequest<Args = unknown> = z.infer<typeof rpcRequestSchema> & {
+  args?: Args;
 };
 
-type RPCResponseMessage<Result = unknown> = z.infer<typeof rpcResponseMessageSchema> & {
-  result?: Result;
+export type RPCResponse<Data = unknown> = z.infer<typeof rpcResponseSchema> & {
+  data?: Data;
 };
 
 // RPC procedure
@@ -50,14 +43,14 @@ type RPCProcedure<Schema extends AnyZodFunction = AnyZodFunction> = {
   name: string;
   schema: Schema;
   execute: (
-    ...args: ZodFunctionInput<Schema>
-  ) => ZodFunctionOutput<Schema> | Promise<ZodFunctionOutput<Schema>>;
+    ...args: z.infer<Schema["_def"]["args"]>
+  ) => z.infer<Schema["_def"]["returns"]> | Promise<z.infer<Schema["_def"]["returns"]>>;
 };
 
 // RPC transport
 export abstract class TransportRPC {
-  #procedures = new Map<string, RPCProcedure<AnyZodFunction>>();
-  #pendingResponses = new Map<string, (value: RPCResponseMessage) => Promise<void>>();
+  readonly #procedures = new Map<string, RPCProcedure<AnyZodFunction>>();
+  readonly #pendingResponses = new Map<string, (value: RPCResponse) => Promise<void>>();
 
   /**
    * Register a remote procedure.
@@ -70,23 +63,23 @@ export abstract class TransportRPC {
   /**
    * Call a remote procedure.
    * @param name - The name of the procedure to call
-   * @param params - The parameters to pass to the procedure
+   * @param args - The parameters to pass to the procedure
    * @returns A promise that resolves to the response from the procedure
    */
   async call<Schema extends AnyZodFunction = AnyZodFunction>({
     name,
-    params,
+    args,
     schema,
   }: {
     name: string;
-    params?: ZodFunctionInput<Schema>;
+    args?: z.infer<Schema["_def"]["args"]>;
     schema?: Schema;
-  }): Promise<RPCResponseMessage<ZodFunctionOutput<Schema>>> {
+  }): Promise<RPCResponse<z.infer<Schema["_def"]["returns"]>>> {
     // - Generate a new procedure ID
     const id = newId("rpc");
 
     // - Prepare the response promise
-    const responsePromise = new Promise<RPCResponseMessage>((resolve) => {
+    const responsePromise = new Promise<RPCResponse>((resolve) => {
       // Return a timeout error after 30s
       const timeout = setTimeout(() => {
         this.#pendingResponses.delete(id);
@@ -103,13 +96,13 @@ export abstract class TransportRPC {
       }, 30_000);
 
       // Add the call to the pending responses map
-      this.#pendingResponses.set(id, async (response: RPCResponseMessage) => {
+      this.#pendingResponses.set(id, async (response: RPCResponse) => {
         clearTimeout(timeout);
         this.#pendingResponses.delete(id);
 
         // Validate the response output if schema is provided and response was successful
         if (schema && response.status === "success") {
-          const outputResult = await schema._def.returns.safeParseAsync(response.result);
+          const outputResult = await schema._def.returns.safeParseAsync(response.data);
           if (!outputResult.success) {
             return resolve({
               id: response.id,
@@ -131,7 +124,7 @@ export abstract class TransportRPC {
     });
 
     // - Send the request
-    const request: RPCRequestMessage = { type: "request", id, name, params };
+    const request: RPCRequest = { type: "request", id, name, args };
     await this.sendObject("rpc", request);
 
     // - Return the response promise
@@ -157,7 +150,7 @@ export abstract class TransportRPC {
       try {
         const procedure = this.#procedures.get(message.name);
         if (!procedure) {
-          const response: RPCResponseMessage = {
+          const response: RPCResponse = {
             type: "response",
             id: message.id,
             name: message.name,
@@ -171,11 +164,11 @@ export abstract class TransportRPC {
           return;
         }
 
-        // - Parse the procedure's params, or error if invalid
-        // Default to empty array if params not provided (for procedures with no arguments)
-        const inputResult = procedure.schema._def.args.safeParse(message.params ?? []);
+        // - Parse the procedure's args, or error if invalid
+        // Default to empty array if args not provided (for procedures with no arguments)
+        const inputResult = procedure.schema._def.args.safeParse(message.args ?? []);
         if (!inputResult.success) {
-          const response: RPCResponseMessage = {
+          const response: RPCResponse = {
             type: "response",
             id: message.id,
             name: message.name,
@@ -196,7 +189,7 @@ export abstract class TransportRPC {
         // - Validate the output
         const outputResult = await procedure.schema._def.returns.safeParseAsync(output);
         if (!outputResult.success) {
-          const response: RPCResponseMessage = {
+          const response: RPCResponse = {
             type: "response",
             id: message.id,
             name: message.name,
@@ -212,16 +205,16 @@ export abstract class TransportRPC {
         }
 
         // - Send the response
-        const response: RPCResponseMessage = {
+        const response: RPCResponse = {
           name: message.name,
           type: "response",
           id: message.id,
           status: "success",
-          result: outputResult.data,
+          data: outputResult.data,
         };
         await this.sendObject("rpc", response);
       } catch (err) {
-        const response: RPCResponseMessage = {
+        const response: RPCResponse = {
           type: "response",
           id: message.id,
           name: message.name,

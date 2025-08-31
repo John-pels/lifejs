@@ -2,7 +2,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
-import type { Message } from "@/agent/resources";
+import { createConfig } from "@/shared/config";
+import type { Message } from "@/shared/resources";
 import { EOUBase } from "../../base";
 
 const transformers = import("@huggingface/transformers");
@@ -10,25 +11,29 @@ const transformers = import("@huggingface/transformers");
 const MAX_TOKENS = 256; // Hardcoded in the model
 
 // Config
-export const turnSenseEOUConfigSchema = z.object({
-  quantized: z.boolean().default(true),
-  /**
-   * Quick benchmark have shown that Turnsense models are very optimized for single
-   * message inferences, and their documentation shows single message inferences as
-   * well. Hence why this value defaults to 1. Carefully benchmark the change if you
-   * consider increasing this value.
-   */
-  maxMessages: z.number().default(1),
+export const turnSenseEOUConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("turnsense"),
+    quantized: z.boolean().default(true),
+    /**
+     * Quick benchmark have shown that Turnsense models are very optimized for single
+     * message inferences, and their documentation shows single message inferences as
+     * well. Hence why this value defaults to 1. Carefully benchmark the change if you
+     * consider increasing this value.
+     */
+    maxMessages: z.number().default(1),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
 type PreTrainedTokenizer = InstanceType<Awaited<typeof transformers>["PreTrainedTokenizer"]>;
-export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfigSchema> {
+export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.serverSchema> {
   #_tokenizer?: PreTrainedTokenizer;
   #_session?: InferenceSession;
 
-  constructor(config: z.input<typeof turnSenseEOUConfigSchema>) {
-    super(turnSenseEOUConfigSchema, config);
+  constructor(config: z.input<typeof turnSenseEOUConfig.serverSchema>) {
+    super(turnSenseEOUConfig.serverSchema, config);
   }
 
   // Get or create the ONNX inference session

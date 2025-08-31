@@ -8,7 +8,8 @@ import type {
 } from "@mistralai/mistralai/models/components";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Message, ToolDefinition } from "@/agent/resources";
+import { createConfig } from "@/shared/config";
+import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 // Define Mistral-specific message types with required role properties
@@ -23,39 +24,43 @@ type MistralMessage =
   | MistralToolMessage;
 
 // Config
-export const mistralLLMConfigSchema = z.object({
-  apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
-  model: z
-    .enum([
-      "mistral-large-latest",
-      "mistral-large-2411",
-      "mistral-large-2407",
-      "mistral-small-latest",
-      "mistral-small-2501",
-      "mistral-small-2503",
-      "mistral-medium-latest",
-      "mistral-medium-2505",
-      "pixtral-large-latest",
-      "pixtral-large-2411",
-      "codestral-latest",
-      "codestral-2501",
-      "codestral-2405",
-      "ministral-3b-latest",
-      "ministral-8b-latest",
-      "open-mistral-7b",
-      "open-mixtral-8x7b",
-      "open-mixtral-8x22b",
-    ])
-    .default("mistral-small-latest"),
-  temperature: z.number().min(0).max(1).default(0.5),
+export const mistralLLMConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("mistral"),
+    apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
+    model: z
+      .enum([
+        "mistral-large-latest",
+        "mistral-large-2411",
+        "mistral-large-2407",
+        "mistral-small-latest",
+        "mistral-small-2501",
+        "mistral-small-2503",
+        "mistral-medium-latest",
+        "mistral-medium-2505",
+        "pixtral-large-latest",
+        "pixtral-large-2411",
+        "codestral-latest",
+        "codestral-2501",
+        "codestral-2405",
+        "ministral-3b-latest",
+        "ministral-8b-latest",
+        "open-mistral-7b",
+        "open-mixtral-8x7b",
+        "open-mixtral-8x22b",
+      ])
+      .default("mistral-small-latest"),
+    temperature: z.number().min(0).max(1).default(0.5),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
-export class MistralLLM extends LLMBase<typeof mistralLLMConfigSchema> {
-  #client: Mistral;
+export class MistralLLM extends LLMBase<typeof mistralLLMConfig.serverSchema> {
+  readonly #client: Mistral;
 
-  constructor(config: z.input<typeof mistralLLMConfigSchema>) {
-    super(mistralLLMConfigSchema, config);
+  constructor(config: z.input<typeof mistralLLMConfig.serverSchema>) {
+    super(mistralLLMConfig.serverSchema, config);
     if (!config.apiKey)
       throw new Error(
         "MISTRAL_API_KEY environment variable or config.apiKey must be provided to use this model.",

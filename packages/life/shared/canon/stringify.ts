@@ -1,0 +1,125 @@
+/**
+ * This function stringifies a given object into a JSON string, producing an
+ * output with a stable keys order compared to JSON.stringify().
+ *
+ * Source: fast-json-stable-stringify (https://github.com/epoberezkin/fast-json-stable-stringify/blob/master/index.js)
+ */
+
+import { deserialize, serialize } from "superjson";
+import type { SerializableValue } from "./serialize";
+
+// biome-ignore-start lint/style: reason
+// biome-ignore-start lint/suspicious: reason
+// biome-ignore-start lint/complexity: reason
+// biome-ignore-start lint/correctness: reason
+
+export function stableDeepStringify(data: any, opts?: any): string {
+  if (!opts) opts = {};
+  if (typeof opts === "function") opts = { cmp: opts };
+  var cycles = typeof opts.cycles === "boolean" ? opts.cycles : false;
+
+  var cmp =
+    opts.cmp &&
+    ((f) => (node: any) => (a: any, b: any) => {
+      var aobj = { key: a, value: node[a] };
+      var bobj = { key: b, value: node[b] };
+      return f(aobj, bobj);
+    })(opts.cmp);
+
+  var seen: any[] = [];
+  return (function stringify_(node: any) {
+    if (node && node.toJSON && typeof node.toJSON === "function") {
+      node = node.toJSON();
+    }
+
+    if (node === undefined) return "";
+    if (typeof node == "number") return isFinite(node) ? "" + node : "null";
+    if (typeof node !== "object") return JSON.stringify(node);
+
+    var i, out;
+    if (Array.isArray(node)) {
+      out = "[";
+      for (i = 0; i < node.length; i++) {
+        if (i) out += ",";
+        out += stringify_(node[i]) || "null";
+      }
+      return out + "]";
+    }
+
+    if (node === null) return "null";
+
+    if (seen.indexOf(node) !== -1) {
+      if (cycles) return JSON.stringify("__cycle__");
+      throw new TypeError("Converting circular structure to JSON");
+    }
+
+    var seenIndex = seen.push(node) - 1;
+    var keys = Object.keys(node).sort(cmp && cmp(node));
+    out = "";
+    for (i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var value = stringify_(node[key!]);
+
+      if (!value) continue;
+      if (out) out += ",";
+      out += JSON.stringify(key) + ":" + value;
+    }
+    seen.splice(seenIndex, 1);
+    return "{" + out + "}";
+  })(data);
+}
+
+// biome-ignore-end lint/style: reason
+// biome-ignore-end lint/suspicious: reason
+// biome-ignore-end lint/complexity: reason
+// biome-ignore-end lint/correctness: reason
+
+/**
+ * canon.stringify
+ *
+ * Converts any value supported by `canon.serialize` into a **canonical, deterministic,
+ * order‑insensitive string**. Objects have their keys sorted, collection types
+ * (Arrays, Maps, Sets) are normalized, and special primitives are preserved during
+ * serialization so that structurally equivalent values always stringify to the same
+ * output.
+ *
+ * @param {SerializableValue} value - The value to canonicalize and stringify.
+ * @returns {string} A canonical JSON string representing the value.
+ *
+ * @example
+ * ```ts
+ * import { stringify } from "@shared/canon";
+ *
+ * // Key / element order does not change the result:
+ * stringify({ b: 1, a: 2 }) === stringify({ a: 2, b: 1 }); // → true
+ *
+ * // Collections are normalized:
+ * stringify(new Set([3, 1, 2])) === stringify(new Set([1, 2, 3])); // → true
+ * ```
+ */
+export const stringify = (value: SerializableValue): string => {
+  return stableDeepStringify(serialize(value));
+};
+
+/**
+ * canon.parse
+ *
+ * Reconstructs a value previously produced by `canon.stringify` by first parsing
+ * the JSON string and then running it through `canon.deserialize`, restoring
+ * special types supported by the canon layer.
+ *
+ * @param {string} value - A canonical string produced by `canon.stringify`.
+ * @returns {SerializableValue} The deserialized value.
+ *
+ * @throws {SyntaxError} If `value` is not valid JSON.
+ * @example
+ * ```ts
+ * import { stringify, parse } from "@shared/canon";
+ *
+ * const s = stringify(new Map([["a", 1], ["b", 2]]));
+ * const v = parse(s); // → Map { "a" => 1, "b" => 2 }
+ * ```
+ */
+export const parse = (value: string): SerializableValue => {
+  return deserialize(JSON.parse(value));
+};

@@ -1,26 +1,16 @@
 import { z } from "zod";
-import { DeepgramSTT, deepgramSTTConfigSchema } from "./providers/deepgram";
+import { createConfig } from "@/shared/config";
+import { DeepgramSTT, deepgramSTTConfig } from "./providers/deepgram";
 
 // Providers
 export const sttProviders = {
-  deepgram: { class: DeepgramSTT, configSchema: deepgramSTTConfigSchema },
+  deepgram: { class: DeepgramSTT, configSchema: deepgramSTTConfig.serverSchema },
 } as const;
 
 export type STTProvider = (typeof sttProviders)[keyof typeof sttProviders]["class"];
 
 // Config
-export type STTProviderConfig<T extends "input" | "output"> = {
-  [K in keyof typeof sttProviders]: { provider: K } & (T extends "input"
-    ? z.input<(typeof sttProviders)[K]["configSchema"]>
-    : z.output<(typeof sttProviders)[K]["configSchema"]>);
-}[keyof typeof sttProviders];
-
-export const sttProviderConfigSchema = z.discriminatedUnion(
-  "provider",
-  Object.entries(sttProviders).map(([key, { configSchema }]) =>
-    configSchema.extend({ provider: z.literal(key) }),
-  ) as unknown as [
-    z.ZodObject<{ provider: z.ZodString }>,
-    ...z.ZodObject<{ provider: z.ZodString }>[],
-  ],
-);
+export const sttProviderConfig = createConfig({
+  serverSchema: z.discriminatedUnion("provider", [deepgramSTTConfig.serverSchema]),
+  clientSchema: z.object({}),
+});

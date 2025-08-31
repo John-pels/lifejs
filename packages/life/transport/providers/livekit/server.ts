@@ -10,25 +10,18 @@ import {
   TrackPublishOptions,
   TrackSource,
 } from "@livekit/rtc-node";
-import { z } from "zod";
+import type { z } from "zod";
 import { BaseServerTransportProvider, type ServerTransportEvent } from "../base/server";
+import { livekitConfig } from "./config";
 
 // - Config
-export const livekitServerConfigSchema = z.object({
-  serverUrl: z
-    .string()
-    .url()
-    .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
-  apiKey: z.string().default(process.env.LIVEKIT_API_KEY ?? "devkey"),
-  apiSecret: z.string().default(process.env.LIVEKIT_API_SECRET ?? "secret"),
-});
 export type LiveKitServerConfig<T extends "input" | "output"> = T extends "input"
-  ? z.input<typeof livekitServerConfigSchema>
-  : z.output<typeof livekitServerConfigSchema>;
+  ? z.input<typeof livekitConfig.serverSchema>
+  : z.output<typeof livekitConfig.serverSchema>;
 
 // - Transport
 export class LiveKitServerTransport extends BaseServerTransportProvider<
-  typeof livekitServerConfigSchema
+  typeof livekitConfig.serverSchema
 > {
   isConnected = false;
   room: Room | null = null;
@@ -44,7 +37,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
   #flushTimeout: NodeJS.Timeout | null = null;
 
   constructor(config: LiveKitServerConfig<"input">) {
-    super(livekitServerConfigSchema, config);
+    super(livekitConfig.serverSchema, config);
   }
 
   ensureConnected(
@@ -176,7 +169,6 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
 
       const audioFrame = new AudioFrame(frameData, 16_000, 1, this.SAMPLES_PER_FRAME);
       try {
-        // biome-ignore lint/nursery/noAwaitInLoop: need sequential in this case
         await this.source.captureFrame(audioFrame);
       } catch (error) {
         console.error("Error capturing audio frame:", error);

@@ -2,22 +2,27 @@ import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import type { Message, ToolDefinition } from "@/agent/resources";
+import { createConfig } from "@/shared/config";
+import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 // Config
-export const openAILLMConfigSchema = z.object({
-  apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
-  model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
-  temperature: z.number().min(0).max(2).default(0.5),
+export const openAILLMConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("openai"),
+    apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
+    model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
+    temperature: z.number().min(0).max(2).default(0.5),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
-export class OpenAILLM extends LLMBase<typeof openAILLMConfigSchema> {
-  #client: OpenAI;
+export class OpenAILLM extends LLMBase<typeof openAILLMConfig.serverSchema> {
+  readonly #client: OpenAI;
 
-  constructor(config: z.input<typeof openAILLMConfigSchema>) {
-    super(openAILLMConfigSchema, config);
+  constructor(config: z.input<typeof openAILLMConfig.serverSchema>) {
+    super(openAILLMConfig.serverSchema, config);
     if (!config.apiKey)
       throw new Error(
         "OPENAI_API_KEY environment variable or config.apiKey must be provided to use this model.",

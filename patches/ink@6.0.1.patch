@@ -1,0 +1,53 @@
+diff --git a/build/components/Box.d.ts b/build/components/Box.d.ts
+index 3320cf5042678a1b27889a2a1afd53e093e28cc6..fa1550f4447f41769b5fa1f033b11a3479357933 100644
+--- a/build/components/Box.d.ts
++++ b/build/components/Box.d.ts
+@@ -8,6 +8,10 @@ export type Props = Except<Styles, 'textWrap'>;
+  */
+ declare const Box: React.ForwardRefExoticComponent<{
+     readonly position?: "absolute" | "relative" | undefined;
++    readonly top?: number | string | undefined;
++    readonly left?: number | string | undefined;
++    readonly right?: number | string | undefined;
++    readonly bottom?: number | string | undefined;
+     readonly columnGap?: number | undefined;
+     readonly rowGap?: number | undefined;
+     readonly gap?: number | undefined;
+diff --git a/build/styles.d.ts b/build/styles.d.ts
+index e4e04eac53ce56655c0ac984bd843da440662f34..351d50932fe1329b2ccd25a720a701c1b8e92d71 100644
+--- a/build/styles.d.ts
++++ b/build/styles.d.ts
+@@ -5,6 +5,10 @@ import { type Node as YogaNode } from 'yoga-layout';
+ export type Styles = {
+     readonly textWrap?: 'wrap' | 'end' | 'middle' | 'truncate-end' | 'truncate' | 'truncate-middle' | 'truncate-start';
+     readonly position?: 'absolute' | 'relative';
++    readonly top?: number | string;
++    readonly left?: number | string;
++    readonly bottom?: number | string;
++    readonly right?: number | string;
+     /**
+      * Size of the gap between an element's columns.
+      */
+diff --git a/build/styles.js b/build/styles.js
+index 12cdd64f8c88e583a77f9e902d226103e5d70203..bd271fc1bca0adb530be431c20e2853523476ec0 100644
+--- a/build/styles.js
++++ b/build/styles.js
+@@ -5,6 +5,18 @@ const applyPositionStyles = (node, style) => {
+             ? Yoga.POSITION_TYPE_ABSOLUTE
+             : Yoga.POSITION_TYPE_RELATIVE);
+     }
++    if ('top' in style) {
++        node.setPosition(Yoga.EDGE_TOP, style.top ?? 0);
++    }
++    if ('left' in style) {
++        node.setPosition(Yoga.EDGE_LEFT, style.left ?? 0);
++    }
++    if ('bottom' in style) {
++        node.setPosition(Yoga.EDGE_BOTTOM, style.bottom ?? 0);
++    }
++    if ('right' in style) {
++        node.setPosition(Yoga.EDGE_RIGHT, style.right ?? 0);
++    }  
+ };
+ const applyMarginStyles = (node, style) => {
+     if ('margin' in style) {

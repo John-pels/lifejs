@@ -34,17 +34,17 @@ export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
   config: z.infer<ConfigSchema>;
 
   /** ms per token */
-  #pace = new WeightedAverage(200); // 200ms per token is a good default
-  #jobsFullText: Record<string, string> = {};
-  #jobsFullAudio: Record<string, Int16Array> = {};
-  #jobsTakenText: Record<string, string> = {};
+  readonly #pace = new WeightedAverage(200); // 200ms per token is a good default
+  readonly #jobsFullText: Record<string, string> = {};
+  readonly #jobsFullAudio: Record<string, Int16Array> = {};
+  readonly #jobsTakenText: Record<string, string> = {};
 
   /**
    * Used to avoid pace contamination between jobs.
    * Each job needs a fixed pace during its lifetime, else this could lead
    * to broken textChunks estimates, like doublons or missing parts.
    */
-  #jobsPaces: Record<string, number> = {};
+  readonly #jobsPaces: Record<string, number> = {};
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });

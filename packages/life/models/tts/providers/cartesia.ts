@@ -2,42 +2,47 @@ import { CartesiaClient } from "@cartesia/cartesia-js";
 import type { StreamingResponse } from "@cartesia/cartesia-js/api";
 import type Websocket from "@cartesia/cartesia-js/wrapper/Websocket";
 import { z } from "zod";
+import { createConfig } from "@/shared/config";
 import { TTSBase, type TTSGenerateJob } from "../base";
 
 // Config
-export const cartesiaTTSConfigSchema = z.object({
-  apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
-  model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
-  language: z
-    .enum([
-      "en",
-      "fr",
-      "de",
-      "es",
-      "pt",
-      "zh",
-      "ja",
-      "hi",
-      "it",
-      "ko",
-      "nl",
-      "pl",
-      "ru",
-      "sv",
-      "tr",
-    ])
-    .default("en"),
-  voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
+export const cartesiaTTSConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("cartesia"),
+    apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
+    model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
+    language: z
+      .enum([
+        "en",
+        "fr",
+        "de",
+        "es",
+        "pt",
+        "zh",
+        "ja",
+        "hi",
+        "it",
+        "ko",
+        "nl",
+        "pl",
+        "ru",
+        "sv",
+        "tr",
+      ])
+      .default("en"),
+    voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
-export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfigSchema> {
-  #cartesia: CartesiaClient;
-  #socket: Websocket;
-  #initializedJobsIds: string[] = [];
+export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfig.serverSchema> {
+  readonly #cartesia: CartesiaClient;
+  readonly #socket: Websocket;
+  readonly #initializedJobsIds: string[] = [];
 
-  constructor(config: z.input<typeof cartesiaTTSConfigSchema>) {
-    super(cartesiaTTSConfigSchema, config);
+  constructor(config: z.input<typeof cartesiaTTSConfig.serverSchema>) {
+    super(cartesiaTTSConfig.serverSchema, config);
     if (!config.apiKey)
       throw new Error(
         "CARTESIA_API_KEY environment variable or config.apiKey must be provided to use this model.",

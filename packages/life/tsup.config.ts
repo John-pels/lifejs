@@ -1,9 +1,14 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["exports/define.ts", "agent/client.ts", "transport/auth.ts"],
+  entry: ["exports/**/*", "cli/index.ts"],
+  ignoreWatch: ["**/dist/**", "**/.life/**"],
   format: ["esm", "cjs"],
   dts: true,
   clean: true,
   treeshake: true,
+  sourcemap: true,
+  minify: false,
+  external: ["typescript"],
+  splitting: false,
 });

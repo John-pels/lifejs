@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Message, ToolDefinition } from "@/agent/resources";
+import type { Message, ToolDefinition } from "@/shared/resources";
 import { OpenAILLM } from "../providers/openai";
 import { XaiLLM } from "../providers/xai";
 
@@ -9,6 +9,7 @@ const providers = [
     name: "OpenAI",
     instance: process.env.OPENAI_API_KEY
       ? new OpenAILLM({
+          provider: "openai",
           apiKey: process.env.OPENAI_API_KEY,
           model: "gpt-4o-mini",
           temperature: 0.1,
@@ -20,6 +21,7 @@ const providers = [
     name: "xAI",
     instance: process.env.XAI_API_KEY
       ? new XaiLLM({
+          provider: "xai",
           apiKey: process.env.XAI_API_KEY,
           model: "grok-3-mini",
           temperature: 0.1,
@@ -365,7 +367,7 @@ async function runTests() {
   let testedProviders = 0;
 
   for (const provider of providers) {
-    // biome-ignore lint/nursery/noAwaitInLoop: expected here
+    // biome-ignore lint/performance/noAwaitInLoops: expected here
     const { passed, total } = await testProvider(provider);
     totalPassed += passed;
     totalTests += total;

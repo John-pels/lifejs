@@ -2,32 +2,37 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
-import type { Message } from "@/agent/resources";
+import { createConfig } from "@/shared/config";
+import type { Message } from "@/shared/resources";
 import { EOUBase } from "../../base";
 
 const transformers = import("@huggingface/transformers");
 
 // Config
-export const livekitEOUConfigSchema = z.object({
-  quantized: z.boolean().default(true),
-  /**
-   * Quick benchmarks have shown that Livekit models are very optimized for multi-turn
-   * inferences, the most balanced value considering inference time and accuracy was
-   * in the 2-5 messages range for the quantized version. Carefully benchmark the change
-   * if you consider increasing / decreasing this value outside of that range.
-   */
-  maxMessages: z.number().default(3),
-  maxTokens: z.number().default(512),
+export const livekitEOUConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("livekit"),
+    quantized: z.boolean().default(true),
+    /**
+     * Quick benchmarks have shown that Livekit models are very optimized for multi-turn
+     * inferences, the most balanced value considering inference time and accuracy was
+     * in the 2-5 messages range for the quantized version. Carefully benchmark the change
+     * if you consider increasing / decreasing this value outside of that range.
+     */
+    maxMessages: z.number().default(3),
+    maxTokens: z.number().default(512),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
 type PreTrainedTokenizer = InstanceType<Awaited<typeof transformers>["PreTrainedTokenizer"]>;
-export class LivekitEOU extends EOUBase<typeof livekitEOUConfigSchema> {
+export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.serverSchema> {
   #_tokenizer?: PreTrainedTokenizer;
   #_session?: InferenceSession;
 
-  constructor(config: z.input<typeof livekitEOUConfigSchema>) {
-    super(livekitEOUConfigSchema, config);
+  constructor(config: z.input<typeof livekitEOUConfig.serverSchema>) {
+    super(livekitEOUConfig.serverSchema, config);
   }
 
   // Get or create the ONNX inference session

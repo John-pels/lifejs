@@ -1,30 +1,24 @@
 import { z } from "zod";
-import { MistralLLM, mistralLLMConfigSchema } from "./providers/mistral";
-import { OpenAILLM, openAILLMConfigSchema } from "./providers/openai";
-import { XaiLLM, xaiLLMConfigSchema } from "./providers/xai";
+import { createConfig } from "@/shared/config";
+import { MistralLLM, mistralLLMConfig } from "./providers/mistral";
+import { OpenAILLM, openAILLMConfig } from "./providers/openai";
+import { XaiLLM, xaiLLMConfig } from "./providers/xai";
 
 // Providers
 export const llmProviders = {
-  mistral: { class: MistralLLM, configSchema: mistralLLMConfigSchema },
-  openai: { class: OpenAILLM, configSchema: openAILLMConfigSchema },
-  xai: { class: XaiLLM, configSchema: xaiLLMConfigSchema },
+  mistral: { class: MistralLLM, configSchema: mistralLLMConfig.serverSchema },
+  openai: { class: OpenAILLM, configSchema: openAILLMConfig.serverSchema },
+  xai: { class: XaiLLM, configSchema: xaiLLMConfig.serverSchema },
 } as const;
 
 export type LLMProvider = (typeof llmProviders)[keyof typeof llmProviders]["class"];
 
 // Config
-export type LLMProviderConfig<T extends "input" | "output"> = {
-  [K in keyof typeof llmProviders]: { provider: K } & (T extends "input"
-    ? z.input<(typeof llmProviders)[K]["configSchema"]>
-    : z.output<(typeof llmProviders)[K]["configSchema"]>);
-}[keyof typeof llmProviders];
-
-export const llmProviderConfigSchema = z.discriminatedUnion(
-  "provider",
-  Object.entries(llmProviders).map(([key, { configSchema }]) =>
-    configSchema.extend({ provider: z.literal(key) }),
-  ) as unknown as [
-    z.ZodObject<{ provider: z.ZodString }>,
-    ...z.ZodObject<{ provider: z.ZodString }>[],
-  ],
-);
+export const llmProviderConfig = createConfig({
+  serverSchema: z.discriminatedUnion("provider", [
+    mistralLLMConfig.serverSchema,
+    openAILLMConfig.serverSchema,
+    xaiLLMConfig.serverSchema,
+  ]),
+  clientSchema: z.object({}),
+});

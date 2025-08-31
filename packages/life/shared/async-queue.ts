@@ -1,5 +1,6 @@
 export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
-  #buf: T[] = [];
+  readonly #buf: T[] = [];
+  // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #wakeUp?: () => void;
   #closed = false;
   #totalLength = 0;
@@ -37,11 +38,11 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   }
 
   async next(): Promise<IteratorResult<T>> {
+    // biome-ignore lint/nursery/noUnnecessaryConditions: expected here
     while (true) {
       const value = this.#buf.shift();
       if (value !== undefined) return { value, done: false };
       if (this.#closed) return { value: undefined, done: true };
-      // biome-ignore lint/nursery/noAwaitInLoop: expected here
       await new Promise<void>((res) => (this.#wakeUp = res)); // sleep until push/stop
       this.#wakeUp = undefined;
     }

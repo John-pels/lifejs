@@ -1,6 +1,6 @@
 export class RollingBuffer<T> {
-  #maxSize: number;
-  #buffer: T[] = [];
+  readonly #maxSize: number;
+  readonly #buffer: T[] = [];
 
   constructor(maxSize: number) {
     this.#maxSize = maxSize;

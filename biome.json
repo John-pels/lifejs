@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.2/schema.json",
   "extends": ["ultracite"],
   "javascript": {
     "formatter": {
@@ -12,10 +12,9 @@
   "files": {
     "includes": [
       "**",
-      "!**/apps/playground",
+      "!**/apps/playground/benchmarks",
       "!**/packages/releases/formatter.js",
-      "!**/packages/life/shared/stable-stringify.ts",
-      "!**/packages/life/shared/klona.ts"
+      "!**/.life"
     ]
   },
   "linter": {
@@ -23,11 +22,14 @@
       "style": {
         "useSelfClosingElements": "off",
         "useBlockStatements": "off",
-        "noUselessElse": "off"
+        "noUselessElse": "off",
+        "noMagicNumbers": "off",
+        "useReadonlyClassProperties": "warn"
       },
       "suspicious": {
         "noConsole": "off",
-        "noAssignInExpressions": "off"
+        "noAssignInExpressions": "off",
+        "noUnknownAtRules": "off"
       },
       "correctness": {
         "useExhaustiveDependencies": "off"
@@ -35,8 +37,13 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": "warn"
       },
+      "performance": {
+        "noBarrelFile": "off",
+        "noAwaitInLoops": "error"
+      },
       "nursery": {
-        "noUnknownAtRule": "off"
+        "useConsistentTypeDefinitions": "off",
+        "noUnnecessaryConditions": "off"
       }
     }
   }

@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
+import { createConfig } from "@/shared/config";
 import { VADBase } from "../../base";
 
 const WINDOW_SAMPLES = 512;
@@ -10,24 +11,29 @@ const PAST_CONTEXT_SAMPLES = 64;
 const SAMPLE_RATE = 16_000n;
 
 // Config
-export const sileroVADConfigSchema = z.object({});
+export const sileroVADConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("silero"),
+  }),
+  clientSchema: z.object({}),
+});
 
 // Model
-export class SileroVAD extends VADBase<typeof sileroVADConfigSchema> {
+export class SileroVAD extends VADBase<typeof sileroVADConfig.serverSchema> {
   #_session: InferenceSession | null = null;
   // RNN latent state (2 × 1 × 128). Re‑used between calls.
-  #rnnState = new Float32Array(2 * 1 * 128);
+  readonly #rnnState = new Float32Array(2 * 1 * 128);
   // ONNX tensor for the constant sample‑rate value.
-  #srTensor = new BigInt64Array([SAMPLE_RATE]);
+  readonly #srTensor = new BigInt64Array([SAMPLE_RATE]);
   // Context window created once to avoid unnecessary allocations
-  #contextWindow = new Float32Array(PAST_CONTEXT_SAMPLES + WINDOW_SAMPLES);
+  readonly #contextWindow = new Float32Array(PAST_CONTEXT_SAMPLES + WINDOW_SAMPLES);
   // Past context provided to the model (64 samples), also created once for performance
-  #pastContext = new Float32Array(PAST_CONTEXT_SAMPLES);
+  readonly #pastContext = new Float32Array(PAST_CONTEXT_SAMPLES);
   // Holds residual samples from previous calls
   #residual = new Float32Array(0);
 
-  constructor(config: z.input<typeof sileroVADConfigSchema>) {
-    super(sileroVADConfigSchema, config);
+  constructor(config: z.input<typeof sileroVADConfig.serverSchema>) {
+    super(sileroVADConfig.serverSchema, config);
   }
 
   // Get or create the ONNX inference session

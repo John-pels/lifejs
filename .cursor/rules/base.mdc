@@ -1,7 +1,6 @@
-# Base
+# Base.mdc
 
-This file provides guidance to Cursor when working with code in this repository.
-
+This file provides guidance to Cursl when working with code in this repository.
 
 ## Project
 *Life.js is the first open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
@@ -55,11 +54,15 @@ Here is an overview of its sub-folders:
 
 ## Development Guidelines
 
+### Thinking
+- Use thinking at every step, whenever possible reason about your changes and ideas ( think ).
+
 ### Code Style
 - TypeScript for all code, avoid @ts-ignore and `any` whenever possible
 - Make sure changes / additions are consistent with the existing code around it
 - Be surgical, minimal and precise in your changes
 - Never drop any existing feature or behavior because it is incompatible with some changes you performed. If adapting that part is heavy and you're unsure, ask the user, else adapt the now incompatible part.
+- Do not workaround or implement a solution partially meeting requirements without asking the user first
 - Use interfaces over types whenever possible
 - Avoid enums, use const maps
 - Prefer functional and declarative patterns
@@ -68,14 +71,11 @@ Here is an overview of its sub-folders:
 - Descriptive naming with auxiliary verbs (isLoading, hasError)
 - Event handlers prefixed with "handle" or "process"
 
-### File Organization
-- Components: exports, subcomponents, helpers, types
-- Directories: lowercase with dashes (auth-wizard)
-- Minimal external dependencies
-
 ### Test your changes
 Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.
 
 ### Answers Tips
 - Keep your answer minimal and dense, still easy to read quickly
+- Be as transparent as possible with the user, always explain shortly your reasoning
+- If unsure, or facing a complex dilemma, stop the conversation and ask the user
 - Consider introducing a TL;DR at the top or bottom of complex explanations

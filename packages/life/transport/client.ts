@@ -1,42 +1,22 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { TransportCommon } from "./common";
+import type { transportConfig } from "./config";
 import type { BaseClientTransportProvider } from "./providers/base/client";
-import {
-  LiveKitClientTransportProvider,
-  livekitClientConfigSchema,
-} from "./providers/livekit/client";
+import { LiveKitClientTransportProvider } from "./providers/livekit/client";
 
 // Providers
 export const clientTransportProviders = {
-  livekit: { class: LiveKitClientTransportProvider, configSchema: livekitClientConfigSchema },
+  livekit: LiveKitClientTransportProvider,
 } as const;
-export type ClientTransportProvider =
-  (typeof clientTransportProviders)[keyof typeof clientTransportProviders]["class"];
-
-// Config
-export type ClientTransportProviderConfig<T extends "input" | "output"> = {
-  [K in keyof typeof clientTransportProviders]: { provider: K } & (T extends "input"
-    ? z.input<(typeof clientTransportProviders)[K]["configSchema"]>
-    : z.output<(typeof clientTransportProviders)[K]["configSchema"]>);
-}[keyof typeof clientTransportProviders];
-export const clientTransportProviderConfigSchema = z.discriminatedUnion(
-  "provider",
-  Object.entries(clientTransportProviders).map(([key, { configSchema }]) =>
-    configSchema.extend({ provider: z.literal(key) }),
-  ) as unknown as [
-    z.ZodObject<{ provider: z.ZodString }>,
-    ...z.ZodObject<{ provider: z.ZodString }>[],
-  ],
-);
 
 // Transport
 export class TransportClient extends TransportCommon {
   _provider: BaseClientTransportProvider<z.AnyZodObject>;
 
-  constructor(config: ClientTransportProviderConfig<"output">) {
+  constructor(config: z.output<typeof transportConfig.clientSchema>) {
     super();
-    const clientTransportProvider = clientTransportProviders[config.provider];
-    this._provider = new clientTransportProvider.class(config);
+    const ProviderClass = clientTransportProviders[config.provider];
+    this._provider = new ProviderClass(config);
   }
 
   // Proxy base methods from the provider for simpler usage

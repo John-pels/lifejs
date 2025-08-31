@@ -34,70 +34,122 @@
     "prepack": "cp ../../README.md README.md && cp ../../LICENSE LICENSE && cp ../../LICENSE.SERVICES LICENSE.SERVICES"
   },
   "bin": {
-    "life": "./dist/cli.js"
+    "life": "./dist/cli/index.mjs"
   },
   "sideEffects": false,
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "exports": {
-    "./define": {
+    "./config": {
       "import": {
-        "types": "./dist/exports/define.d.ts",
-        "default": "./dist/exports/define.mjs"
+        "types": "./dist/exports/config.d.ts",
+        "default": "./dist/exports/config.mjs"
       },
       "require": {
-        "types": "./dist/exports/define.d.ts",
-        "default": "./dist/exports/define.js"
+        "types": "./dist/exports/config.d.ts",
+        "default": "./dist/exports/config.js"
+      }
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/exports/server.d.ts",
+        "default": "./dist/exports/server.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/server.d.ts",
+        "default": "./dist/exports/server.js"
       }
     },
     "./client": {
       "import": {
-        "types": "./dist/agent/client.d.ts",
-        "default": "./dist/agent/client.mjs"
+        "types": "./dist/exports/client.d.ts",
+        "default": "./dist/exports/client.mjs"
       },
       "require": {
-        "types": "./dist/agent/client.d.ts",
-        "default": "./dist/agent/client.js"
+        "types": "./dist/exports/client.d.ts",
+        "default": "./dist/exports/client.js"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/exports/react.d.ts",
+        "default": "./dist/exports/react.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/react.d.ts",
+        "default": "./dist/exports/react.js"
       }
     },
     "./auth": {
       "import": {
-        "types": "./dist/transport/auth.d.ts",
-        "default": "./dist/transport/auth.mjs"
+        "types": "./dist/exports/auth.d.ts",
+        "default": "./dist/exports/auth.mjs"
       },
       "require": {
-        "types": "./dist/transport/auth.d.ts",
-        "default": "./dist/transport/auth.js"
+        "types": "./dist/exports/auth.d.ts",
+        "default": "./dist/exports/auth.js"
+      }
+    },
+    "./build/client": {
+      "import": {
+        "types": "./dist/exports/build/client.d.ts",
+        "default": "./dist/exports/build/client.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/build/client.d.ts",
+        "default": "./dist/exports/build/client.js"
+      }
+    },
+    "./build/server": {
+      "import": {
+        "types": "./dist/exports/build/server.d.ts",
+        "default": "./dist/exports/build/server.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/build/server.d.ts",
+        "default": "./dist/exports/build/server.js"
       }
     }
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.6.3",
+    "@ast-grep/napi": "^0.39.4",
+    "@huggingface/transformers": "^3.7.2",
     "@inkjs/ui": "^2.0.0",
-    "@livekit/protocol": "^1.39.3",
-    "@livekit/rtc-node": "^0.13.17",
+    "@livekit/protocol": "^1.41.0",
+    "@livekit/rtc-node": "^0.13.18",
     "@paralleldrive/cuid2": "^2.2.2",
     "@zenobius/ink-mouse": "^1.0.3",
-    "livekit-client": "^2.15.2",
-    "livekit-server-sdk": "^2.13.1",
+    "chalk": "^5.6.0",
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.0",
+    "defu": "^6.1.4",
+    "esbuild": "^0.25.9",
+    "fast-npm-meta": "^0.4.6",
+    "globby": "^14.1.0",
+    "ink": "^6.2.3",
+    "livekit-client": "^2.15.6",
+    "livekit-server-sdk": "^2.13.3",
+    "nanostores": "^1.0.1",
     "onnxruntime-node": "^1.22.0-rev",
-    "react": "^19",
+    "react": "^19.1.1",
+    "serialize-error": "^12.0.0",
     "superjson": "^2.2.2",
     "to-words": "^4.7.0",
     "yjs": "^13.6.27",
     "zod": "^3.25.58",
+    "zod-compare": "^1.1.0",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@cartesia/cartesia-js": "^2.2.5",
-    "@deepgram/sdk": "4.9.1",
-    "@mistralai/mistralai": "^1.7.4",
-    "@types/bun": "^1.2.18",
-    "openai": "^5.9.0",
+    "@deepgram/sdk": "4.11.2",
+    "@mistralai/mistralai": "^1.9.18",
+    "@types/bun": "^1.2.21",
+    "openai": "^5.16.0",
     "tsup": "^8.5.0"
   },
   "peerDependencies": {

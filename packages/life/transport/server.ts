@@ -2,42 +2,25 @@ import { ensureServer } from "@/shared/ensure-server";
 
 ensureServer("transport.server");
 
-import { z } from "zod";
+import type { z } from "zod";
 import { TransportCommon } from "./common";
+import type { transportConfig } from "./config";
 import type { BaseServerTransportProvider } from "./providers/base/server";
-import { LiveKitServerTransport, livekitServerConfigSchema } from "./providers/livekit/server";
+import { LiveKitServerTransport } from "./providers/livekit/server";
 
 // Providers
 export const serverTransportProviders = {
-  livekit: { class: LiveKitServerTransport, configSchema: livekitServerConfigSchema },
+  livekit: LiveKitServerTransport,
 } as const;
-export type ServerTransportProvider =
-  (typeof serverTransportProviders)[keyof typeof serverTransportProviders]["class"];
-
-// Config
-export type ServerTransportProviderConfig<T extends "input" | "output"> = {
-  [K in keyof typeof serverTransportProviders]: { provider: K } & (T extends "input"
-    ? z.input<(typeof serverTransportProviders)[K]["configSchema"]>
-    : z.output<(typeof serverTransportProviders)[K]["configSchema"]>);
-}[keyof typeof serverTransportProviders];
-export const serverTransportProviderConfigSchema = z.discriminatedUnion(
-  "provider",
-  Object.entries(serverTransportProviders).map(([key, { configSchema }]) =>
-    configSchema.extend({ provider: z.literal(key) }),
-  ) as unknown as [
-    z.ZodObject<{ provider: z.ZodString }>,
-    ...z.ZodObject<{ provider: z.ZodString }>[],
-  ],
-);
 
 // Transport
 export class TransportServer extends TransportCommon {
   _provider: BaseServerTransportProvider<z.AnyZodObject>;
 
-  constructor(config: ServerTransportProviderConfig<"output">) {
+  constructor(config: z.output<typeof transportConfig.serverSchema>) {
     super();
-    const serverTransportProvider = serverTransportProviders[config.provider];
-    this._provider = new serverTransportProvider.class(config);
+    const ProviderClass = serverTransportProviders[config.provider];
+    this._provider = new ProviderClass(config);
   }
 
   // Proxy base methods from the provider for simpler usage

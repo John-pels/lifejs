@@ -6,59 +6,64 @@ import {
   LiveTranscriptionEvents,
 } from "@deepgram/sdk";
 import { z } from "zod";
+import { createConfig } from "@/shared/config";
 import { STTBase, type STTGenerateJob } from "../base";
 
 // Config
-export const deepgramSTTConfigSchema = z.object({
-  apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
-  model: z
-    .enum([
-      "nova-3",
-      "nova-2",
-      "nova-2-general",
-      "nova-2-meeting",
-      "nova-2-phonecall",
-      "nova-2-voicemail",
-      "nova-2-finance",
-      "nova-2-conversationalai",
-      "nova-2-video",
-      "nova-2-medical",
-      "nova-2-drivethru",
-      "nova-2-automotive",
-      "nova-2-atc",
-      "nova",
-      "nova-general",
-      "nova-phonecall",
-      "enhanced",
-      "enhanced-general",
-      "enhanced-meeting",
-      "enhanced-phonecall",
-      "enhanced-finance",
-      "base",
-      "base-general",
-      "base-meeting",
-      "base-phonecall",
-      "base-voicemail",
-      "base-finance",
-      "base-conversationalai",
-      "base-video",
-      "whisper-tiny",
-      "whisper-base",
-      "whisper-small",
-      "whisper-medium",
-      "whisper-large",
-    ])
-    .default("nova-2-general"),
-  language: z.string().default("en"),
+export const deepgramSTTConfig = createConfig({
+  serverSchema: z.object({
+    provider: z.literal("deepgram"),
+    apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
+    model: z
+      .enum([
+        "nova-3",
+        "nova-2",
+        "nova-2-general",
+        "nova-2-meeting",
+        "nova-2-phonecall",
+        "nova-2-voicemail",
+        "nova-2-finance",
+        "nova-2-conversationalai",
+        "nova-2-video",
+        "nova-2-medical",
+        "nova-2-drivethru",
+        "nova-2-automotive",
+        "nova-2-atc",
+        "nova",
+        "nova-general",
+        "nova-phonecall",
+        "enhanced",
+        "enhanced-general",
+        "enhanced-meeting",
+        "enhanced-phonecall",
+        "enhanced-finance",
+        "base",
+        "base-general",
+        "base-meeting",
+        "base-phonecall",
+        "base-voicemail",
+        "base-finance",
+        "base-conversationalai",
+        "base-video",
+        "whisper-tiny",
+        "whisper-base",
+        "whisper-small",
+        "whisper-medium",
+        "whisper-large",
+      ])
+      .default("nova-2-general"),
+    language: z.string().default("en"),
+  }),
+  clientSchema: z.object({}),
 });
 
 // Model
-export class DeepgramSTT extends STTBase<typeof deepgramSTTConfigSchema> {
-  #deepgram: DeepgramClient;
-  #jobsSockets: Map<string, ListenLiveClient> = new Map();
+export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.serverSchema> {
+  readonly #deepgram: DeepgramClient;
+  readonly #jobsSockets: Map<string, ListenLiveClient> = new Map();
 
-  constructor(config: z.input<typeof deepgramSTTConfigSchema>) {
-    super(deepgramSTTConfigSchema, config);
+  constructor(config: z.input<typeof deepgramSTTConfig.serverSchema>) {
+    super(deepgramSTTConfig.serverSchema, config);
     if (!config.apiKey)
       throw new Error(
         "DEEPGRAM_API_KEY environment variable or config.apiKey must be provided to use this model.",
@@ -107,7 +112,7 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfigSchema> {
     return job;
   }
 
-  // biome-ignore lint/suspicious/useAwait: <explanation>
+  // biome-ignore lint/suspicious/useAwait: Need async to match STTBase abstract method
   protected async _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array) {
     this.#jobsSockets.get(job.id)?.send(pcm.buffer);
   }

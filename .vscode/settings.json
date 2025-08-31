@@ -65,7 +65,11 @@
     "**/LICENSE*": false,
     "**/.env*": false,
     "**/CONTRIBUTING.md": false,
-    "**/packages/releases": false
+    "**/packages/releases": false,
+    "**/CLAUDE.md": false,
+    "**/.life": false,
+    "**/.claude": false,
+    "**/AGENTS.md": false
   },
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^;]*)[\\);]", "[`'\"`]([^'\"`;]*)[`'\"`]"],
