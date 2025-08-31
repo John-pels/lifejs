@@ -13,12 +13,17 @@ const AgentInterface = () => {
   // const agent1 = useAgent("example", { id: "1" });
   const agent1 = createAgentClient("example");
   const { data: status } = useAgentStatus(agent1);
-  // const test = agent1.definition.$serverDef.plugins.generation.methods;
+  // const test = agent1._definition.$serverDef.plugins.generation.methods;
   agent1.test.getItem("item1");
   agent1.test.getConnector("connector1");
-  // @ts-expect-error
-  agent1.generation.server.methods.continuenot({});
+  // --------------
+
+  // DOESN'T WORK, METHODS ARE NOT TYPED CORRECTLY (ANY)
   agent1.generation.server.methods.continue({});
+  // @ts-expect-error - Doesn't catch any error
+  agent1.generation.server.methods.continueNot({});
+
+  // --------------
   agent1.generation.server.events.on(
     {
       include: ["messages.create", "messages.update", "agent.decide"],
@@ -34,7 +39,8 @@ const AgentInterface = () => {
   agent1.generation.server.events.on("messages.create", (event) => {
     event.type;
   });
-  agent1.generation.server.events.on(["messages.create", "messages.delete"], (event) => {
+  // @ts-expect-error
+  agent1.generation.server.events.on(["messages.create", "doesn'texist"], (event) => {
     event.type;
   });
 

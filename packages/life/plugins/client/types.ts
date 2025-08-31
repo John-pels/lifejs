@@ -16,10 +16,11 @@ import type { PluginClientBase } from "./class";
 // - Dependencies
 export type PluginClientDependencyDefinition = Pick<
   PluginClientDefinition,
-  "name" | "class" | "config" | "atoms" | "$serverDef" | "dependencies"
+  "name" | "class" | "config" | "atoms" | "$serverDef"
 >;
 export type PluginClientDependenciesDefinition = Record<string, PluginClientDependencyDefinition>;
 export type PluginClientDependencies<Definition extends PluginClientDependenciesDefinition> = {
+  // @ts-expect-error
   [K in keyof Definition]: PluginClientInstance<Definition[K]>;
 };
 

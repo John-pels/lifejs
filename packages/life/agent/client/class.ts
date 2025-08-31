@@ -3,8 +3,8 @@ import { TransportClient } from "@/transport/client";
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "./types";
 
 export class AgentClient<const Definition extends AgentClientDefinition> {
-  readonly _definition: Definition;
   readonly _isAgentClient = true;
+  readonly _definition: Definition;
   readonly id: string;
   readonly transport: TransportClient;
 

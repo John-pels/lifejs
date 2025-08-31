@@ -21,28 +21,73 @@ export type SimplifiedGenerationPluginServer = {
 
 export const generationPluginClient = definePluginClient<SimplifiedGenerationPluginServer>(
   "generation",
-).atoms(({ server }) => {
-  // Create a status atom that observes context status changes
-  const status = atom<{
-    listening: boolean;
-    thinking: boolean;
-    speaking: boolean;
-  } | null>(null);
+)
+  .class(
+    // biome-ignore lint/correctness/noUnusedFunctionParameters: used in types
+    ($Types, Base) =>
+      <
+        _ServerConfig extends (typeof $Types)["ServerConfig"],
+        _ClientConfig extends (typeof $Types)["ClientConfig"],
+      >() =>
+        class Client extends Base {
+          continue = this.server.methods.continue;
+          interrupt = this.server.methods.interrupt;
+          decide = this.server.methods.decide;
+          say = this.server.methods.say;
+          messages = {
+            create: this.server.methods.createMessage,
+            update: this.server.methods.updateMessage,
+            get: this.server.methods.getMessages,
+          };
+        },
+  )
+  .atoms(({ server }) => {
+    // Create a status atom that observes context status changes
+    const status = atom<{
+      listening: boolean;
+      thinking: boolean;
+      speaking: boolean;
+    } | null>(null);
 
-  // Subscribe to context changes when the atom is mounted
-  onMount(status, () => {
-    // Fetch initial status from context
-    status.set(server.context.get().status);
+    server.methods.continue({});
+    // @ts-expect-error
+    server.methods.continuenot({});
 
-    // Subscribe to status changes from the context
-    const unsubscribe = server.context.onChange(
-      (ctx) => ctx.status,
-      (newStatus) => status.set(newStatus),
+    // --------------
+    server.events.on(
+      {
+        include: ["messages.create", "messages.update", "agent.decide"],
+        exclude: ["messages.create", "messages.update"],
+      },
+      (event) => {
+        event.type;
+      },
     );
+    server.events.on("*", (event) => {
+      event.type;
+    });
+    server.events.on("messages.create", (event) => {
+      event.type;
+    });
+    // @ts-expect-error
+    server.events.on(["messages.create", "doesn'texist"], (event) => {
+      event.type;
+    });
 
-    // Return cleanup function
-    return () => unsubscribe?.();
+    // Subscribe to context changes when the atom is mounted
+    onMount(status, () => {
+      // Fetch initial status from context
+      status.set(server.context.get().status);
+
+      // Subscribe to status changes from the context
+      const unsubscribe = server.context.onChange(
+        (ctx) => ctx.status,
+        (newStatus) => status.set(newStatus),
+      );
+
+      // Return cleanup function
+      return () => unsubscribe?.();
+    });
+
+    return { status };
   });
-
-  return { status };
-});

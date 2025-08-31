@@ -18,7 +18,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   readonly _definition: ClientDefinition;
   readonly config: PluginClientConfig<ClientDefinition["config"], "output">;
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
-  readonly server = {} as PluginClientServer<ClientDefinition["$serverDef"]>;
+  server!: PluginClientServer<ClientDefinition["$serverDef"]>;
+
   readonly #agent: AgentClient<AgentClientDefinition>;
   get #dependencies() {
     const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
@@ -59,6 +60,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       ClientDefinition["config"],
       "output"
     >;
+
     this.atoms = definition.atoms({
       config: this.config,
       server: this.server,
