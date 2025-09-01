@@ -281,29 +281,39 @@ export class PluginServer<const Definition extends PluginDefinition> {
   }
 
   #getMethods() {
-    const methods: Record<string, (...args: unknown[]) => unknown> = {};
+    const methods: Record<string, (input: unknown) => unknown> = {};
 
     for (const [name, method] of Object.entries(this._definition.methods ?? {})) {
       // Create a function that validates inputs and calls the run function
-      methods[name] = (...args: unknown[]) => {
-        // Validate arguments using the schema
-        const validationResult = method.schema._def.args?.safeParse(args);
-        if (validationResult && !validationResult.success) {
+      methods[name] = (input: unknown) => {
+        // Validate input using the schema
+        const validationResult = method.schema.input.safeParse(input);
+        if (!validationResult.success) {
           throw new Error(
-            `Invalid arguments for method ${name}: ${validationResult.error.message}`,
+            `Invalid input for method ${name}: ${validationResult.error.message}`,
           );
         }
 
-        // Call the run function with plugin context and validated arguments
-        return method.run(
+        // Call the run function with plugin context and validated input
+        const result = method.run(
           {
             config: this.#config,
             context: this.#createWritableContextHandler(),
             events: this.#events as PluginEventsHandler<Definition["events"]>,
             telemetry: this.#telemetry,
           },
-          ...args,
+          validationResult.data,
         );
+
+        // Validate output using the schema
+        const outputValidation = method.schema.output.safeParse(result);
+        if (!outputValidation.success) {
+          throw new Error(
+            `Invalid output from method ${name}: ${outputValidation.error.message}`,
+          );
+        }
+
+        return outputValidation.data;
       };
     }
 

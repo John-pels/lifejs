@@ -53,8 +53,11 @@ export const storesPlugin = definePlugin("stores")
   )
   .methods({
     test: {
-      schema: z.function().args(z.void()).returns(z.string()),
-      run: () => "test",
+      schema: {
+        input: z.object({}),
+        output: z.object({ result: z.string() }),
+      },
+      run: () => ({ result: "test" }),
     },
   })
   .addService("crdt-manager", async ({ queue, events, config }) => {

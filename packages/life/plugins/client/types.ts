@@ -85,8 +85,8 @@ export type PluginClientContextHandler<
 // - Methods
 export type PluginClientMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
-    ...args: z.infer<MethodsDefinition[K]["schema"]["_def"]["args"]>
-  ) => Promise<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["_def"]["returns"]>>>;
+    input: z.infer<MethodsDefinition[K]["schema"]["input"]>
+  ) => Promise<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["output"]>>>;
 };
 
 // - Server

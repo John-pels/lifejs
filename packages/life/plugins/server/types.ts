@@ -125,18 +125,21 @@ export interface PluginEventsHandler<EventsDef extends PluginEventsDefinition> {
 }
 
 // - Methods
-// Type for method schemas definition (the new format with schema + run)
+// Type for method schemas definition (consistent with tools definition)
 export type PluginMethodsDefinition = Record<
   string,
-  // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function signatures
-  { schema: z.ZodFunction<any, any>; run: (...args: any[]) => any }
+  {
+    schema: { input: z.AnyZodObject; output: z.AnyZodObject };
+    // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function signatures
+    run: (...args: any[]) => any;
+  }
 >;
 
 // Type to extract methods from method definitions
 export type PluginMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
-    ...args: z.infer<MethodsDefinition[K]["schema"]["_def"]["args"]>
-  ) => z.infer<MethodsDefinition[K]["schema"]["_def"]["returns"]>;
+    input: z.infer<MethodsDefinition[K]["schema"]["input"]>,
+  ) => z.infer<MethodsDefinition[K]["schema"]["output"]>;
 };
 
 // - Lifecycle
@@ -149,6 +152,13 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
   onStop?: (params: {
+    config: PluginConfig<Definition["config"], "output">;
+    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
+    events: PluginEventsHandler<Definition["events"]>;
+    methods: PluginMethods<Definition["methods"]>;
+    telemetry: TelemetryClient;
+  }) => void | Promise<void>;
+  onRestart?: (params: {
     config: PluginConfig<Definition["config"], "output">;
     context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
     events: PluginEventsHandler<Definition["events"]>;

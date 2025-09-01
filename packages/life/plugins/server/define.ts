@@ -12,6 +12,7 @@ import type {
   PluginEventsHandler,
   PluginInterceptorFunction,
   PluginLifecycle,
+  PluginMethodsDefinition,
   PluginServiceFunction,
 } from "./types";
 
@@ -99,7 +100,57 @@ export class PluginBuilder<
     return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: required here
+  methodsold<const MethodsDef extends PluginMethodsDefinition>(methods: MethodsDef) {
+    const plugin = new PluginBuilder({
+      ...this._definition,
+      methods,
+    }) as PluginBuilder<
+      Definition & { methods: MethodsDef },
+      EffectKeys,
+      ServiceKeys,
+      InterceptorKeys,
+      ExcludedMethods | "methods"
+    >;
+    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
+  }
+
+  methods<const Schemas extends Record<string, { input: z.AnyZodObject; output: z.AnyZodObject }>>(
+    methods: {
+      [K in keyof Schemas]: {
+        schema: Schemas[K];
+        run: Schemas[K] extends { input: z.AnyZodObject; output: z.AnyZodObject }
+          ? (
+              params: {
+                config: PluginConfig<Definition["config"], "output">;
+                context: PluginContextHandler<
+                  PluginContext<Definition["context"], "output">,
+                  "read"
+                >;
+                events: PluginEventsHandler<Definition["events"]>;
+                telemetry: TelemetryClient;
+              },
+              input: z.infer<Schemas[K]["input"]>,
+            ) => z.infer<Schemas[K]["output"]> | Promise<z.infer<Schemas[K]["output"]>>
+          : never;
+      };
+    },
+  ) {
+    const plugin = new PluginBuilder({
+      ...this._definition,
+      methods,
+    }) as PluginBuilder<
+      Definition & { methods: typeof methods },
+      EffectKeys,
+      ServiceKeys,
+      InterceptorKeys,
+      ExcludedMethods | "methods"
+    >;
+    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
+  }
+
+  /*
+  
+    // biome-ignore lint/suspicious/noExplicitAny: required here
   methods<const Schemas extends Record<string, z.ZodFunction<any, any>>>(
     methods: {
       [K in keyof Schemas]: {
@@ -133,6 +184,8 @@ export class PluginBuilder<
     >;
     return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
   }
+    
+  */
 
   lifecycle<const LifecycleConfig extends PluginLifecycle<Definition>>(lifecycle: LifecycleConfig) {
     const plugin = new PluginBuilder({

@@ -145,72 +145,80 @@ export const generationPlugin = definePlugin("generation")
   )
   .methods({
     getMessages: {
-      schema: z.function().returns(z.array(messageSchema)),
-      run: ({ context }) => context.get().messages,
+      schema: {
+        input: z.object({}),
+        output: z.object({ messages: z.array(messageSchema) }),
+      },
+      run: ({ context }) => ({ messages: context.get().messages }),
     },
     createMessage: {
-      schema: z.function().args(createMessageInputSchema).returns(z.string()),
-      run: ({ events }, message) =>
-        events.emit({ type: "messages.create", data: message, urgent: true }),
+      schema: {
+        input: z.object({ message: createMessageInputSchema }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, { message }) => ({
+        eventId: events.emit({ type: "messages.create", data: message, urgent: true }),
+      }),
     },
     updateMessage: {
-      schema: z.function().args(updateMessageInputSchema).returns(z.string()),
-      run: ({ events }, message) =>
-        events.emit({ type: "messages.update", data: message, urgent: true }),
+      schema: {
+        input: z.object({ message: updateMessageInputSchema }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, { message }) => ({
+        eventId: events.emit({ type: "messages.update", data: message, urgent: true }),
+      }),
     },
     continue: {
-      schema: z
-        .function()
-        .args(
-          z.object({
-            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
-            preventInterruption: z.boolean().optional(),
-          }),
-        )
-        .returns(z.string()),
-      run: ({ events }, params) =>
-        events.emit({ type: "agent.continue", data: params, urgent: true }),
+      schema: {
+        input: z.object({
+          interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+          preventInterruption: z.boolean().optional(),
+        }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, params) => ({
+        eventId: events.emit({ type: "agent.continue", data: params, urgent: true }),
+      }),
     },
     decide: {
-      schema: z
-        .function()
-        .args(
-          z.object({
-            messages: z.array(messageSchema),
-            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
-            preventInterruption: z.boolean().optional(),
-          }),
-        )
-        .returns(z.string()),
-      run: ({ events }, params) =>
-        events.emit({ type: "agent.decide", data: params, urgent: true }),
+      schema: {
+        input: z.object({
+          messages: z.array(messageSchema),
+          interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+          preventInterruption: z.boolean().optional(),
+        }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, params) => ({
+        eventId: events.emit({ type: "agent.decide", data: params, urgent: true }),
+      }),
     },
     say: {
-      schema: z
-        .function()
-        .args(
-          z.object({
-            text: z.string(),
-            interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
-            preventInterruption: z.boolean().optional(),
-          }),
-        )
-        .returns(z.string()),
-      run: ({ events }, params) => events.emit({ type: "agent.say", data: params, urgent: true }),
+      schema: {
+        input: z.object({
+          text: z.string(),
+          interrupt: z.enum(["abrupt", "smooth"]).or(z.literal(false)).optional(),
+          preventInterruption: z.boolean().optional(),
+        }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, params) => ({
+        eventId: events.emit({ type: "agent.say", data: params, urgent: true }),
+      }),
     },
     interrupt: {
-      schema: z
-        .function()
-        .args(
-          z.object({
-            reason: z.string(),
-            author: z.enum(["user", "application"]),
-            force: z.boolean().optional(),
-          }),
-        )
-        .returns(z.string()),
-      run: ({ events }, params) =>
-        events.emit({ type: "agent.interrupt", data: params, urgent: true }),
+      schema: {
+        input: z.object({
+          reason: z.string(),
+          author: z.enum(["user", "application"]),
+          force: z.boolean().optional(),
+        }),
+        output: z.object({ eventId: z.string() }),
+      },
+      run: ({ events }, params) => ({
+        eventId: events.emit({ type: "agent.interrupt", data: params, urgent: true }),
+      }),
     },
   })
   .lifecycle({
