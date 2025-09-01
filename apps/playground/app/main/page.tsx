@@ -1,9 +1,9 @@
-import { useAgent, useAgentStatus } from "life/react";
+import { useAgent, useAgentGenerationStatus } from "life/react";
 
 export default function Page() {
   // const agent1 = useAgent("example", { id: "1" });
   const agent1 = useAgent("example");
-  const { data: status } = useAgentStatus(agent1);
+  const { data: status } = useAgentGenerationStatus(agent1);
   // const test = agent1._definition.$serverDef.plugins.generation.methods;
   agent1.test.getItem("item1");
   agent1.test.getConnector("connector1");

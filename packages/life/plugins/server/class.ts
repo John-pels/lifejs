@@ -40,7 +40,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       selector: PluginEventsSelector<keyof Definition["events"]>;
     }
   >();
-  readonly #contextValue: PluginContext<Definition["context"], "output">;
+  readonly #context: PluginContext<Definition["context"], "output">;
   readonly #contextListeners = new Map<
     string,
     {
@@ -60,11 +60,12 @@ export class PluginServer<const Definition extends PluginDefinition> {
     agent: AgentServer,
     definition: Definition,
     config: PluginConfig<Definition["config"], "output">,
+    context: PluginContext<Definition["context"], "output"> = {},
   ) {
     this._definition = definition;
     this.#agent = agent;
     this.#config = config;
-    this.#contextValue = definition.context.parse({});
+    this.#context = definition.context.parse(context);
     this.#telemetry = lifeTelemetry.child(`plugin-${definition.name}`);
 
     // Expose methods via RPC
@@ -128,7 +129,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
       schema: { output: z.object({}) },
-      execute: () => this.#contextValue,
+      execute: () => this.#context,
     });
   }
 
@@ -204,7 +205,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   // Obtain a cloned snapshot of the context
   #getContext(): PluginContext<Definition["context"], "output"> {
-    return klona(this.#contextValue);
+    return klona(this.#context);
   }
 
   // Context setter
@@ -217,8 +218,8 @@ export class PluginServer<const Definition extends PluginDefinition> {
         ) => PluginContext<Definition["context"], "output">[K]),
   ): void {
     // Create a cloned snapshot of the current value and context
-    const oldContext = klona(this.#contextValue);
-    const currentKeyValue = klona(this.#contextValue[key]);
+    const oldContext = klona(this.#context);
+    const currentKeyValue = klona(this.#context[key]);
 
     // Obtain the new value
     let newKeyValue: PluginContext<Definition["context"], "output">[K];
@@ -232,7 +233,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     }
 
     // Set the new value
-    this.#contextValue[key] = klona(newKeyValue);
+    this.#context[key] = klona(newKeyValue);
 
     // Notify listeners
     this.#notifyContextListeners(oldContext);
@@ -260,7 +261,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
   async #notifyContextListeners(oldContextValue: PluginContext<Definition["context"], "output">) {
     await Promise.all([
       Array.from(this.#contextListeners.values()).map(async (listener) => {
-        const newSelectedValue = listener.selector(this.#contextValue);
+        const newSelectedValue = listener.selector(this.#context);
         const oldSelectedValue = listener.selector(oldContextValue);
         // Only call if value actually changed
         if (!canon.equal(newSelectedValue, oldSelectedValue)) {
@@ -270,7 +271,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       // Send new context value via RPC
       this.#agent.transport.call({
         name: `plugin.${this._definition.name}.context.changed`,
-        input: { value: this.#contextValue, timestamp: Date.now() },
+        input: { value: this.#context, timestamp: Date.now() },
         schema: {
           input: z.object({ value: z.any(), timestamp: z.number() }),
         },
@@ -412,6 +413,25 @@ export class PluginServer<const Definition extends PluginDefinition> {
       } catch (error) {
         this.#telemetry.log.error({
           message: `Error while running onStart() lifecycle hook for plugin '${this._definition.name}'.`,
+          error,
+          attributes: { plugin: this._definition.name },
+        });
+        await this.#callOnErrorHook(error);
+      }
+    }
+
+    if (this.#agent.isRestart && this._definition.lifecycle?.onRestart) {
+      try {
+        await this._definition.lifecycle.onRestart({
+          config: this.#config,
+          context: this.#createWritableContextHandler(),
+          events: this.#events as PluginEventsHandler<Definition["events"]>,
+          methods: this.#getMethods(),
+          telemetry: this.#telemetry,
+        });
+      } catch (error) {
+        this.#telemetry.log.error({
+          message: `Error while running onRestart() lifecycle hook for plugin '${this._definition.name}'.`,
           error,
           attributes: { plugin: this._definition.name },
         });

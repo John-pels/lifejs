@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { type agentConfig, defineConfig } from "@/agent/config";
 import type {
   PluginConfig,
@@ -6,7 +6,11 @@ import type {
   PluginDependenciesDefinition,
   PluginDependencyDefinition,
 } from "@/plugins/server/types";
-import type { AgentBuilderWithPluginsMethods, AgentDefinition, ScopeDefinition } from "./types";
+import type {
+  AgentBuilderWithPluginsMethods,
+  AgentDefinition,
+  AgentScopeDefinition,
+} from "./types";
 
 export class AgentBuilder<
   const Definition extends AgentDefinition,
@@ -36,13 +40,13 @@ export class AgentBuilder<
     >;
   }
 
-  scope<Schema extends z.ZodTypeAny>(scopeDef: ScopeDefinition<Schema>) {
+  scope<Schema extends z.ZodTypeAny>(scopeDef: AgentScopeDefinition<Schema>) {
     // Create a new builder instance with the provided scope
     const builder = new AgentBuilder({
       ...this._definition,
       scope: scopeDef,
     }) as AgentBuilder<
-      Definition & { scope: ScopeDefinition<Schema> },
+      Definition & { scope: AgentScopeDefinition<Schema> },
       ExcludedMethods | "scope"
     >;
 
@@ -125,5 +129,6 @@ export function defineAgent<const Name extends string>(name: Name) {
     config: defineConfig({}).withDefaults,
     plugins: {},
     pluginConfigs: {},
+    scope: { schema: z.object({}), hasAccess: () => true },
   });
 }

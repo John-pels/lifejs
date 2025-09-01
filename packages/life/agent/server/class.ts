@@ -1,3 +1,4 @@
+import type z from "zod";
 import { isSameType } from "zod-compare";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
@@ -8,7 +9,7 @@ import { PluginServer } from "@/plugins/server/class";
 import type { PluginDefinition } from "@/plugins/server/types";
 import { newId } from "@/shared/prefixed-id";
 import { TransportServer } from "@/transport/server";
-import type { AgentDefinition } from "./types";
+import type { AgentDefinition, AgentScope } from "./types";
 
 export class AgentServer {
   id = newId("agent");
@@ -23,9 +24,25 @@ export class AgentServer {
     tts: InstanceType<TTSProvider>;
   };
   plugins: Record<string, PluginServer<PluginDefinition>> = {};
+  scope: AgentScope<AgentDefinition["scope"]>;
+  pluginsContexts: Record<string, z.output<PluginDefinition["context"]>>;
+  isRestart: boolean;
 
-  constructor(definition: AgentDefinition) {
+  constructor({
+    definition,
+    scope,
+    pluginsContexts,
+    isRestart,
+  }: {
+    definition: AgentDefinition;
+    scope?: AgentScope<AgentDefinition["scope"]>;
+    pluginsContexts?: Record<string, z.output<PluginDefinition["context"]>>;
+    isRestart?: boolean;
+  }) {
     this.definition = definition;
+    this.scope = scope ?? definition.scope.schema.parse({});
+    this.pluginsContexts = pluginsContexts ?? {};
+    this.isRestart = isRestart ?? false;
 
     // Initialize transport
     this.transport = new TransportServer(definition.config.transport);
@@ -107,7 +124,12 @@ export class AgentServer {
     // - Create plugin servers
     for (const plugin of Object.values(this.definition.plugins)) {
       const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
-      this.plugins[plugin.name] = new PluginServer(this, plugin, config);
+      this.plugins[plugin.name] = new PluginServer(
+        this,
+        plugin,
+        config,
+        this.pluginsContexts?.[plugin.name] ?? {},
+      );
     }
 
     // - Prepare all plugins (this sets up services, interceptors, etc.)
