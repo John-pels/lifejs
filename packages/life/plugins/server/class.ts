@@ -11,6 +11,8 @@ import type {
   PluginEventsHandler,
   PluginEventsSelector,
   PluginInterceptorFunction,
+  PluginMethods,
+  PluginMethodsDefinition,
 } from "@/plugins/server/types";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
@@ -70,40 +72,38 @@ export class PluginServer<const Definition extends PluginDefinition> {
       this.#agent.transport.register({
         name: `plugin.${this._definition.name}.methods.${name}`,
         schema: method.schema,
-        execute: this.#getMethods()[name] as (...args: unknown[]) => unknown,
+        // biome-ignore lint/suspicious/noExplicitAny: fine here
+        execute: this.#getMethods()[name] as (input: any) => any,
       });
     }
 
     // Expose events.emit() via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.events.emit`,
-      schema: z
-        .function()
-        .args(
-          z.object({
-            type: z.string(),
-            data: z.any(),
-            urgent: z.boolean().optional(),
-          }),
-        )
-        .returns(z.string()),
-      execute: this.#events.emit as (...args: unknown[]) => string,
+      schema: {
+        input: z.object({
+          type: z.string(),
+          data: z.any(),
+          urgent: z.boolean().optional(),
+        }),
+        output: z.object({ id: z.string() }),
+      },
+      execute: (input) => ({
+        id: this.#events.emit(input as PluginEvent<Definition["events"], "input">),
+      }),
     });
 
     // Handle events subscription via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.events.subscribe`,
-      schema: z
-        .function()
-        .args(
-          z.object({
-            listenerId: z.string(),
-            selector: z.any(),
-          }),
-        )
-        .returns(z.void()),
-      execute: (args) => {
-        const { listenerId, selector } = args;
+      schema: {
+        input: z.object({
+          listenerId: z.string(),
+          selector: z.any(),
+        }),
+      },
+      execute: (input) => {
+        const { listenerId, selector } = input;
         this.#eventsListeners.set(listenerId, {
           id: listenerId,
           callback: "remote",
@@ -113,16 +113,13 @@ export class PluginServer<const Definition extends PluginDefinition> {
     });
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.events.unsubscribe`,
-      schema: z
-        .function()
-        .args(
-          z.object({
-            listenerId: z.string(),
-          }),
-        )
-        .returns(z.void()),
-      execute: (args) => {
-        const { listenerId } = args;
+      schema: {
+        input: z.object({
+          listenerId: z.string(),
+        }),
+      },
+      execute: (input) => {
+        const { listenerId } = input;
         this.#eventsListeners.delete(listenerId);
       },
     });
@@ -130,10 +127,8 @@ export class PluginServer<const Definition extends PluginDefinition> {
     // Handle context synchronization via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
-      schema: z.function().returns(z.any()),
-      execute: () => {
-        return this.#contextValue;
-      },
+      schema: { output: z.object({}) },
+      execute: () => this.#contextValue,
     });
   }
 
@@ -275,7 +270,10 @@ export class PluginServer<const Definition extends PluginDefinition> {
       // Send new context value via RPC
       this.#agent.transport.call({
         name: `plugin.${this._definition.name}.context.changed`,
-        args: { value: this.#contextValue, timestamp: Date.now() },
+        input: { value: this.#contextValue, timestamp: Date.now() },
+        schema: {
+          input: z.object({ value: z.any(), timestamp: z.number() }),
+        },
       }),
     ]);
   }
@@ -289,9 +287,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
         // Validate input using the schema
         const validationResult = method.schema.input.safeParse(input);
         if (!validationResult.success) {
-          throw new Error(
-            `Invalid input for method ${name}: ${validationResult.error.message}`,
-          );
+          throw new Error(`Invalid input for method ${name}: ${validationResult.error.message}`);
         }
 
         // Call the run function with plugin context and validated input
@@ -308,16 +304,14 @@ export class PluginServer<const Definition extends PluginDefinition> {
         // Validate output using the schema
         const outputValidation = method.schema.output.safeParse(result);
         if (!outputValidation.success) {
-          throw new Error(
-            `Invalid output from method ${name}: ${outputValidation.error.message}`,
-          );
+          throw new Error(`Invalid output from method ${name}: ${outputValidation.error.message}`);
         }
 
         return outputValidation.data;
       };
     }
 
-    return methods;
+    return methods as PluginMethods<PluginMethodsDefinition>;
   }
 
   // Helper method to call onError lifecycle hook
@@ -505,7 +499,10 @@ export class PluginServer<const Definition extends PluginDefinition> {
               if (callback === "remote") {
                 await this.#agent.transport.call({
                   name: `plugin.${this._definition.name}.events.callback`,
-                  args: { listenerId: id, event },
+                  input: { listenerId: id, event },
+                  schema: {
+                    input: z.object({ listenerId: z.string(), event: z.any() }),
+                  },
                 });
               }
 

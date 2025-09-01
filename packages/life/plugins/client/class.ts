@@ -69,30 +69,29 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
 
     // Wire methods
     for (const name of Object.keys(definition.$serverDef.methods)) {
-      this.server.methods[name as keyof typeof this.server.methods] = (...args: unknown[]) =>
+      this.server.methods[name as keyof typeof this.server.methods] = (input: unknown) =>
         agent.transport.call({
           name: `plugin.${this._definition.name}.methods.${name}`,
-          args,
+          // @ts-expect-error - cannot provide schema client side here
+          input,
         });
     }
 
     // Wire events
-    this.server.events.emit = (...args: unknown[]) =>
+    this.server.events.emit = (input: unknown) =>
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.emit`,
-        args,
+        // @ts-expect-error - cannot provide schema client side here
+        input,
       });
     agent.transport.register({
       name: `plugin.${this._definition.name}.events.callback`,
-      schema: z
-        .function()
-        .args(
-          z.object({
-            listenerId: z.string(),
-            event: z.object({ type: z.string(), id: z.string(), data: z.any() }),
-          }),
-        )
-        .returns(z.void()),
+      schema: {
+        input: z.object({
+          listenerId: z.string(),
+          event: z.object({ type: z.string(), id: z.string(), data: z.any() }),
+        }),
+      },
       execute: async ({ listenerId, event }) => {
         await this.#eventsListeners.get(listenerId)?.callback(event);
       },
@@ -109,7 +108,10 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       // Ask plugin's server to stream selected event
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.subscribe`,
-        args: { listenerId: id, selector },
+        input: { listenerId: id, selector },
+        schema: {
+          input: z.object({ listenerId: z.string(), selector: z.any() }),
+        },
       });
 
       // Return unsubscribe function
@@ -117,7 +119,10 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         // Stop subscription server-side
         agent.transport.call({
           name: `plugin.${this._definition.name}.events.unsubscribe`,
-          args: { listenerId: id },
+          input: { listenerId: id },
+          schema: {
+            input: z.object({ listenerId: z.string() }),
+          },
         });
 
         // Clean up callback
@@ -156,6 +161,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
+        schema: {
+          output: z.object({ value: z.any(), timestamp: z.number() }),
+        },
       })
       .then((response) => {
         if (response.status === "error") {
@@ -166,16 +174,15 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
           );
           return;
         }
-        this.#lastContextValueTimestamp = response.data.timestamp;
-        this.#contextValue = response.data.value;
+        this.#lastContextValueTimestamp = response.data?.timestamp ?? 0;
+        this.#contextValue = response.data?.value ?? {};
         this.#notifyContextListeners({});
       });
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.changed`,
-      schema: z
-        .function()
-        .args(z.object({ value: z.any(), timestamp: z.number() }))
-        .returns(z.void()),
+      schema: {
+        input: z.object({ value: z.any(), timestamp: z.number() }),
+      },
       execute: async ({ value, timestamp }) => {
         const oldContextValue = klona(this.#contextValue);
         if (timestamp > this.#lastContextValueTimestamp) {
