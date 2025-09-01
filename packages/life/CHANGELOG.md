@@ -1,5 +1,19 @@
 # life
 
+## 0.13.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [8864727](https://github.com/lifejs/lifejs/commit/8864727b07a838b293650d65ee5e95463bf26850) — Introduce 'Scopes' which enable authentication and access control on agents instances.
+- [@LilaRest](https://github.com/LilaRest) in [54f4229](https://github.com/lifejs/lifejs/commit/54f422978c45d4b26df0168eeb3346eef52e3c9c) — Add PluginServer onRestart() lifecycle hook, called when an agent restarts after an unexpected crash
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [799ea8e](https://github.com/lifejs/lifejs/commit/799ea8e06b263a80329f36673cbd8285ef887f42) — Refactor transport procedures schema definition for consistency
+- [@LilaRest](https://github.com/LilaRest) in [ffc6e2b](https://github.com/lifejs/lifejs/commit/ffc6e2bf1d89e0d84dee323761dea32daa0d1ef7) — Adapt the compiler so it can work with tsup's splitting=true setting
+- [@LilaRest](https://github.com/LilaRest) in [efc9c4a](https://github.com/lifejs/lifejs/commit/efc9c4a70b63545f83d8a3427e8c2eaae3bfda81) — Refactor generation plugin's tool schema for consistency
+- [@LilaRest](https://github.com/LilaRest) in [54f4229](https://github.com/lifejs/lifejs/commit/54f422978c45d4b26df0168eeb3346eef52e3c9c) — Refactor plugins methods' schema definition for consistency
+
 ## 0.12.1
 
 ### Patch Changes
