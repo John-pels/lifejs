@@ -93,8 +93,10 @@ export type UpdateMessageInput = z.infer<typeof updateMessageInputSchema>;
 export const toolSchema = z.object({
   name: z.string(),
   description: z.string(),
-  inputSchema: z.instanceof(z.ZodObject),
-  outputSchema: z.instanceof(z.ZodObject),
+  schema: z.object({
+    input: z.instanceof(z.ZodObject),
+    output: z.instanceof(z.ZodObject),
+  }),
   run: z
     .function()
     .args(z.record(z.any()))

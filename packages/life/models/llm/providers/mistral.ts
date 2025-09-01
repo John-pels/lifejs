@@ -119,7 +119,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.serverSchema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: zodToJsonSchema(tool.inputSchema),
+        parameters: zodToJsonSchema(tool.schema.input),
       },
     };
   }

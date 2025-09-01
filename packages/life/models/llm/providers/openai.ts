@@ -80,7 +80,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.serverSchema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: zodToJsonSchema(tool.inputSchema),
+        parameters: zodToJsonSchema(tool.schema.input),
       },
     };
   }

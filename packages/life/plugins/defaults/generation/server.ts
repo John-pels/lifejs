@@ -19,26 +19,7 @@ export const generationPlugin = definePlugin("generation")
   .config(
     z.object({
       collections: z.array(z.string()),
-      tools: z.array(toolSchema).default([
-        {
-          name: "get-weather",
-          description: "Get the weather for a given city",
-          inputSchema: z.object({
-            city: z.string(),
-          }),
-          outputSchema: z.object({
-            weather: z.string(),
-          }),
-          run: () => {
-            return {
-              success: true,
-              output: {
-                weather: "Sunny",
-              },
-            };
-          },
-        },
-      ]),
+      tools: z.array(toolSchema),
       voiceDetection: z
         .object({
           scoreInThreshold: z.number().default(0.5),

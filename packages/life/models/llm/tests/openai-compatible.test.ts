@@ -46,12 +46,14 @@ function createSearchTool(): ToolDefinition {
   return {
     name: "search",
     description: "Search for information on the web",
-    inputSchema: z.object({
-      query: z.string().describe("The search query"),
-    }),
-    outputSchema: z.object({
-      result: z.string().describe("The search result"),
-    }),
+    schema: {
+      input: z.object({
+        query: z.string().describe("The search query"),
+      }),
+      output: z.object({
+        result: z.string().describe("The search result"),
+      }),
+    },
     run: async (input: object) => ({
       success: true,
       output: { result: `Mock search result for: ${(input as { query: string }).query}` },
@@ -63,12 +65,15 @@ function createCalculatorTool(): ToolDefinition {
   return {
     name: "calculator",
     description: "Perform mathematical calculations",
-    inputSchema: z.object({
-      expression: z.string().describe("Mathematical expression to evaluate"),
-    }),
-    outputSchema: z.object({
-      result: z.number().describe("The calculation result"),
-    }),
+
+    schema: {
+      input: z.object({
+        expression: z.string().describe("Mathematical expression to evaluate"),
+      }),
+      output: z.object({
+        result: z.number().describe("The calculation result"),
+      }),
+    },
     run: async () => ({ success: true, output: { result: Math.random() * 100 } }),
   };
 }
@@ -77,13 +82,15 @@ function createWeatherTool(): ToolDefinition {
   return {
     name: "weather",
     description: "Get weather information for a location",
-    inputSchema: z.object({
-      location: z.string().describe("The location to get weather for"),
-    }),
-    outputSchema: z.object({
-      temperature: z.number().describe("Temperature in Celsius"),
-      condition: z.string().describe("Weather condition"),
-    }),
+    schema: {
+      input: z.object({
+        location: z.string().describe("The location to get weather for"),
+      }),
+      output: z.object({
+        temperature: z.number().describe("Temperature in Celsius"),
+        condition: z.string().describe("Weather condition"),
+      }),
+    },
     run: async () => ({
       success: true,
       temperature: Math.round(Math.random() * 30 + 10),

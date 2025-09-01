@@ -21,12 +21,14 @@ export default defineAgent("example")
       {
         name: "get-weather",
         description: "Get the weather for a given location",
-        inputSchema: z.object({
-          location: z.string(),
-        }),
-        outputSchema: z.object({
-          weather: z.string(),
-        }),
+        schema: {
+          input: z.object({
+            location: z.string(),
+          }),
+          output: z.object({
+            weather: z.string(),
+          }),
+        },
         run: async ({ location }) => {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           return {
