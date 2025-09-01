@@ -1,5 +1,13 @@
 # life
 
+## 0.12.1
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [b09e110](https://github.com/lifejs/lifejs/commit/b09e110b68caa6e21109a59ba7c841553a820ce4) — Refactor plugin client public interface, agent and dependencies are now private by default, and context, methods and events are grouped under .server.\* key
+- [@LilaRest](https://github.com/LilaRest) in [c5f1d58](https://github.com/lifejs/lifejs/commit/c5f1d584096f04ccfe399624797c82e3f85cb88e) — 'core' plugin has been renamed to 'generation' for explicitness
+- [@LilaRest](https://github.com/LilaRest) in [3b45f92](https://github.com/lifejs/lifejs/commit/3b45f92c2741ca6b70cac2e2aa5ed79c78086b1a) — Agent's plugins types were still exposing .dependencies and .agent
+
 ## 0.12.0
 
 ### Minor Changes
