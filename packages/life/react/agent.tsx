@@ -1,7 +1,9 @@
 import type clients from "life/exports/build-client";
 import { createContext, type FC, type ReactNode, useContext, useMemo } from "react";
 import type { GeneratedAgentClient } from "@/agent/client/types";
-import { createAgentClient } from "@/exports/client";
+
+// biome-ignore lint/suspicious/noExplicitAny: any type needed for dynamic import
+const createAgentClient: any = () => "";
 
 interface AgentContextValue {
   client: ReturnType<typeof createAgentClient>;

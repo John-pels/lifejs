@@ -4,6 +4,14 @@ import { testPlugin } from "./plugins/test/server";
 
 export default defineAgent("example")
   .plugins([...defaults.plugins, testPlugin])
+  .scope({
+    schema: z.object({
+      userId: z.string(),
+    }),
+    hasAccess: ({ request, scope }) => {
+      return request.headers.get("Authorization") === scope.userId;
+    },
+  })
   .test({
     items: ["item1", "item2"] as const,
   })

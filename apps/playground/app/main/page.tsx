@@ -1,18 +1,8 @@
-import { createAgentClient } from "life/client";
-import { AgentProvider, useAgentStatus } from "life/react";
+import { useAgent, useAgentStatus } from "life/react";
 
 export default function Page() {
-  return (
-    <AgentProvider id="1" name="example">
-      {/* serverUrl="ws://localhost:3003" */}
-      <AgentInterface />
-    </AgentProvider>
-  );
-}
-
-const AgentInterface = () => {
   // const agent1 = useAgent("example", { id: "1" });
-  const agent1 = createAgentClient("example");
+  const agent1 = useAgent("example");
   const { data: status } = useAgentStatus(agent1);
   // const test = agent1._definition.$serverDef.plugins.generation.methods;
   agent1.test.getItem("item1");
@@ -65,4 +55,4 @@ const AgentInterface = () => {
         "Not connected."} */}
     </div>
   );
-};
+}

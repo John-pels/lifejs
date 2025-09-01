@@ -1,6 +1,6 @@
-export { AgentClient } from "@/agent/client/class";
-export { createAgentClient } from "@/agent/client/create";
+export type { AgentClient } from "@/agent/client/class";
 export { defineAgentClient } from "@/agent/client/define";
+export { createLifeClient } from "@/client/create";
 export { definePluginClient } from "@/plugins/client/define";
 
 import { generationPluginClient } from "@/plugins/defaults/generation/client";

@@ -1,6 +1,6 @@
 import clients from "life/exports/build-client";
-import { AgentClient } from "./class";
-import type { GeneratedAgentClient } from "./types";
+import { AgentClient } from "@/agent/client/class";
+import type { GeneratedAgentClient } from "@/agent/client/types";
 
 export const createAgentClient = <Name extends keyof typeof clients>(
   name: Name,
@@ -13,3 +13,5 @@ export const createAgentClient = <Name extends keyof typeof clients>(
     id: args?.id,
   }) as unknown as GeneratedAgentClient<Name>;
 };
+
+export class LifeClient {}

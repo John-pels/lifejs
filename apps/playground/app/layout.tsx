@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type React from "react";
 import "./globals.css";
+// import { LifeProvider } from "life/react";
+// import { life } from "@/lib/life";
 
 export const metadata: Metadata = {
   title: "Life.js • Playground",
@@ -15,7 +17,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/* <LifeProvider client={life}> */}
       <body>{children}</body>
+      {/* </LifeProvider> */}
     </html>
   );
 }

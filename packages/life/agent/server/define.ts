@@ -6,7 +6,7 @@ import type {
   PluginDependenciesDefinition,
   PluginDependencyDefinition,
 } from "@/plugins/server/types";
-import type { AgentBuilderWithPluginsMethods, AgentDefinition } from "./types";
+import type { AgentBuilderWithPluginsMethods, AgentDefinition, ScopeDefinition } from "./types";
 
 export class AgentBuilder<
   const Definition extends AgentDefinition,
@@ -33,6 +33,27 @@ export class AgentBuilder<
         ExcludedMethods | "config"
       >,
       ExcludedMethods | "config"
+    >;
+  }
+
+  scope<Schema extends z.ZodTypeAny>(scopeDef: ScopeDefinition<Schema>) {
+    // Create a new builder instance with the provided scope
+    const builder = new AgentBuilder({
+      ...this._definition,
+      scope: scopeDef,
+    }) as AgentBuilder<
+      Definition & { scope: ScopeDefinition<Schema> },
+      ExcludedMethods | "scope"
+    >;
+
+    // Return the new builder with the plugins methods, minus excluded methods
+    return this.#withPluginsMethods(builder, this._definition.plugins) as Omit<
+      AgentBuilderWithPluginsMethods<
+        typeof builder,
+        Definition["plugins"],
+        ExcludedMethods | "scope"
+      >,
+      ExcludedMethods | "scope"
     >;
   }
 
