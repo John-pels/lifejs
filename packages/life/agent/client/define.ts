@@ -5,7 +5,6 @@ import type {
   PluginClientDependenciesDefinition,
   PluginClientDependencyDefinition,
 } from "@/plugins/client/types";
-import { type agentConfig, defineConfig } from "../config";
 import type { AgentDefinition } from "../server/types";
 import type { AgentClientBuilderWithPluginsMethods, AgentClientDefinition } from "./types";
 
@@ -19,24 +18,6 @@ export class AgentClientBuilder<
 
   constructor(def: Definition) {
     this._definition = def;
-  }
-
-  config(params: z.input<typeof agentConfig.clientSchema>) {
-    // Create a new builder instance with the provided config
-    const builder = new AgentClientBuilder({
-      ...this._definition,
-      config: defineConfig(params).withDefaults,
-    }) as AgentClientBuilder<ServerDefinition, Definition, ExcludedMethods | "config">;
-
-    // Return the new builder with the plugins methods, minus excluded methods
-    return this.#withPluginsMethods(builder, this._definition.plugins) as Omit<
-      AgentClientBuilderWithPluginsMethods<
-        typeof builder,
-        Definition["plugins"],
-        ExcludedMethods | "config"
-      >,
-      ExcludedMethods | "config"
-    >;
   }
 
   plugins<const Plugins extends readonly { _definition: PluginClientDefinition }[]>(
@@ -117,7 +98,6 @@ export function defineAgentClient<const ServerAgent extends { _definition: Agent
 ) {
   const defaultDefinition = {
     name,
-    config: defineConfig({}).withDefaults,
     plugins: {},
     pluginConfigs: {},
     $serverDef: {} as ServerAgent["_definition"],

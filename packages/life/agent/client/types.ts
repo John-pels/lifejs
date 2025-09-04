@@ -1,4 +1,3 @@
-import type z from "zod";
 import type { ClientBuild } from "@/exports/build/client";
 import type { PluginClientBase } from "@/plugins/client/class";
 import type {
@@ -6,14 +5,12 @@ import type {
   PluginClientConfig,
   PluginClientDefinition,
 } from "@/plugins/client/types";
-import type { agentConfig } from "../config";
 import type { AgentDefinition } from "../server/types";
 import type { AgentClient } from "./class";
 import type { AgentClientBuilder } from "./define";
 
 export type AgentClientDefinition = {
   name: string;
-  config: z.output<typeof agentConfig.clientSchema>;
   plugins: Record<string, PluginClientDefinition>;
   pluginConfigs: Record<string, unknown>;
   $serverDef: AgentDefinition;
