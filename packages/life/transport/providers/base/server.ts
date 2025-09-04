@@ -16,7 +16,7 @@ export abstract class BaseServerTransportProvider<ConfigSchema extends z.AnyZodO
     type: EventType,
     callback: (event: Extract<ServerTransportEvent, { type: EventType }>) => void,
   ): void;
-  abstract joinRoom(roomId: string, token: string): Promise<void>;
+  abstract joinRoom(roomName: string, token: string): Promise<void>;
   abstract leaveRoom(): Promise<void>;
   abstract streamText(
     topic: string,

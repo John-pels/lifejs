@@ -1,4 +1,3 @@
-import type z from "zod";
 import { isSameType } from "zod-compare";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
@@ -7,13 +6,15 @@ import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import { PluginServer } from "@/plugins/server/class";
 import type { PluginDefinition } from "@/plugins/server/types";
-import { newId } from "@/shared/prefixed-id";
+import type { SerializableValue } from "@/shared/canon";
+import { lifeTelemetry } from "@/telemetry/client";
 import { TransportServer } from "@/transport/server";
 import type { AgentDefinition, AgentScope } from "./types";
 
 export class AgentServer {
-  id = newId("agent");
-  definition: AgentDefinition;
+  _definition: AgentDefinition;
+  _isAgentServer = true;
+  id: string;
   transport: TransportServer;
   storage = null;
   models: {
@@ -25,24 +26,28 @@ export class AgentServer {
   };
   plugins: Record<string, PluginServer<PluginDefinition>> = {};
   scope: AgentScope<AgentDefinition["scope"]>;
-  pluginsContexts: Record<string, z.output<PluginDefinition["context"]>>;
   isRestart: boolean;
+  telemetry = lifeTelemetry.child("agent-server");
+  readonly #initialPluginsContexts: Record<string, SerializableValue>;
 
   constructor({
+    id,
     definition,
     scope,
     pluginsContexts,
     isRestart,
   }: {
+    id: string;
     definition: AgentDefinition;
     scope?: AgentScope<AgentDefinition["scope"]>;
-    pluginsContexts?: Record<string, z.output<PluginDefinition["context"]>>;
+    pluginsContexts?: Record<string, SerializableValue>;
     isRestart?: boolean;
   }) {
-    this.definition = definition;
+    this._definition = definition;
+    this.id = id;
     this.scope = scope ?? definition.scope.schema.parse({});
-    this.pluginsContexts = pluginsContexts ?? {};
     this.isRestart = isRestart ?? false;
+    this.#initialPluginsContexts = pluginsContexts ?? {};
 
     // Initialize transport
     this.transport = new TransportServer(definition.config.transport);
@@ -70,23 +75,23 @@ export class AgentServer {
 
   #validatePlugins() {
     // Validate plugins have unique names
-    const pluginNames = Object.values(this.definition.plugins).map((plugin) => plugin.name);
+    const pluginNames = Object.values(this._definition.plugins).map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
     if (duplicates.length > 0) {
       const uniqueDuplicates = [...new Set(duplicates)];
       throw new Error(
-        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this.definition.name}')`,
+        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this._definition.name}')`,
       );
     }
 
     // Validate plugin dependencies
-    for (const plugin of Object.values(this.definition.plugins)) {
+    for (const plugin of Object.values(this._definition.plugins)) {
       for (const [depName, depDef] of Object.entries(plugin.dependencies || {})) {
         // - Ensure the plugin is provided
-        const depPlugin = Object.values(this.definition.plugins).find((p) => p.name === depName);
+        const depPlugin = Object.values(this._definition.plugins).find((p) => p.name === depName);
         if (!depPlugin) {
           throw new Error(
-            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
+            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this._definition.name}')`,
           );
         }
 
@@ -96,7 +101,7 @@ export class AgentServer {
           const actualEventDef = depPlugin.events?.[eventType];
           if (!actualEventDef) {
             throw new Error(
-              `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}", but this event does not exist. (agent: '${this.definition.name}')`,
+              `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}", but this event does not exist. (agent: '${this._definition.name}')`,
             );
           }
 
@@ -106,12 +111,12 @@ export class AgentServer {
             const actualSchema = actualEventDef.dataSchema;
             if (!actualSchema) {
               throw new Error(
-                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this.definition.name}')`,
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this._definition.name}')`,
               );
             }
             if (!isSameType(expectedSchema, actualSchema)) {
               throw new Error(
-                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this.definition.name}')`,
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this._definition.name}')`,
               );
             }
           }
@@ -121,46 +126,61 @@ export class AgentServer {
   }
 
   async start() {
-    // - Create plugin servers
-    for (const plugin of Object.values(this.definition.plugins)) {
-      const config = plugin.config.parse(this.definition.pluginConfigs[plugin.name] ?? {});
-      this.plugins[plugin.name] = new PluginServer(
-        this,
-        plugin,
-        config,
-        this.pluginsContexts?.[plugin.name] ?? {},
-      );
+    using h0 = (await this.telemetry.trace("AgentServer.start()")).start();
+
+    try {
+      // Create plugin servers
+      for (const definition of Object.values(this._definition.plugins)) {
+        const config = definition.config.parse(
+          this._definition.pluginConfigs[definition.name] ?? {},
+        );
+        this.plugins[definition.name] = new PluginServer({
+          agent: this,
+          definition,
+          config,
+          context: this.#initialPluginsContexts?.[definition.name] ?? {},
+        });
+      }
+
+      // Prepare all plugins (this sets up services, interceptors, etc.)
+      for (const plugin of Object.values(this._definition.plugins))
+        this.plugins[plugin.name as keyof typeof this.plugins]?.init();
+
+      // Start all plugin servers
+      await Promise.all(Object.values(this.plugins).map((p) => p.start()));
+
+      // Return that the agent server was started successfully
+      return { success: true };
+    } catch (error) {
+      const message = "Failed to start agent server.";
+      h0.log.error({ message, error });
+      return { success: false, message };
     }
-
-    // - Prepare all plugins (this sets up services, interceptors, etc.)
-    // biome-ignore lint/style/noNonNullAssertion: defined above, so exists
-    for (const plugin of Object.values(this.definition.plugins)) this.plugins[plugin.name]!.init();
-
-    // Start all plugin servers
-    await Promise.all(Object.values(this.plugins).map((p) => p.start()));
   }
 
   async stop() {
-    console.log("Stopping agent...");
+    using h0 = (await this.telemetry.trace("AgentServer.stop()")).start();
 
-    // Stop all plugins
-    await Promise.all(
-      Object.entries(this.plugins).map(([pluginId, plugin]) => {
-        return plugin.stop().catch((error) => {
-          console.error(`Error stopping plugin ${pluginId}:`, error);
-        });
-      }),
-    );
-
-    // Disconnect transport
     try {
-      await this.transport.leaveRoom();
-      console.log("Transport disconnected");
-    } catch (error) {
-      console.error("Error disconnecting transport:", error);
-    }
+      // Stop all plugins
+      await Promise.all(
+        Object.entries(this.plugins).map(([pluginId, plugin]) => {
+          return plugin.stop().catch((error) => {
+            h0.log.error({ message: `Error stopping plugin ${pluginId}:`, error });
+          });
+        }),
+      );
 
-    console.log("Agent stopped");
+      // Disconnect transport
+      await this.transport.leaveRoom();
+
+      // Return that the agent server was stopped successfully
+      return { success: true };
+    } catch (error) {
+      const message = "Failed to stop agent server.";
+      h0.log.error({ message, error });
+      return { success: false, message };
+    }
   }
 }
 

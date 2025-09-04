@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import { generateHeader } from "@/cli/utils/header";
 import type { InitOptions } from "./action";
 import { executeInit } from "./action";
 
@@ -18,8 +17,7 @@ export function createInitCommand() {
     .option("-p, --package-manager <pm>", "Package manager to use.", "bun")
     .action(async (projectName: string | undefined, options: InitOptions) => {
       try {
-        console.log(await generateHeader("Init"));
-        executeInit(projectName, options);
+        await executeInit(projectName, options);
       } catch (error) {
         if (!(error instanceof Error)) return;
         console.error("\x1b[31mError:\x1b[0m", error.message);

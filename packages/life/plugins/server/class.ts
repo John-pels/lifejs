@@ -56,12 +56,17 @@ export class PluginServer<const Definition extends PluginDefinition> {
   readonly #servicesQueues: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>[] = [];
   readonly #telemetry: TelemetryClient;
 
-  constructor(
-    agent: AgentServer,
-    definition: Definition,
-    config: PluginConfig<Definition["config"], "output">,
-    context: PluginContext<Definition["context"], "output"> = {},
-  ) {
+  constructor({
+    agent,
+    definition,
+    config,
+    context = {},
+  }: {
+    agent: AgentServer;
+    definition: Definition;
+    config: PluginConfig<Definition["config"], "output">;
+    context: SerializableValue;
+  }) {
     this._definition = definition;
     this.#agent = agent;
     this.#config = config;
@@ -187,7 +192,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
   // Create read-only context with onChange and get
   #createReadonlyContextHandler() {
     return {
-      onChange: this.#onContextChange.bind(this),
+      onChange: this.onContextChange.bind(this),
       get: this.#getContext.bind(this),
     } as PluginContextHandler<PluginContext<Definition["context"], "output">, "read">;
   }
@@ -240,7 +245,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
   }
 
   // Subscribe to context changes
-  #onContextChange(
+  onContextChange(
     selector: (context: PluginContext<Definition["context"], "output">) => SerializableValue,
     callback: (newValue: SerializableValue, oldValue: SerializableValue) => void,
   ): () => void {

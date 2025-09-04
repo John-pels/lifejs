@@ -1,13 +1,13 @@
-import type clients from "life/exports/build-client";
 import { createContext, type FC, type ReactNode, useContext, useMemo } from "react";
 import type { GeneratedAgentClient } from "@/agent/client/types";
+import type { ClientBuild } from "@/exports/build/client";
 
 // biome-ignore lint/suspicious/noExplicitAny: any type needed for dynamic import
 const createAgentClient: any = () => "";
 
 interface AgentContextValue {
   client: ReturnType<typeof createAgentClient>;
-  name: keyof typeof clients;
+  name: keyof ClientBuild;
   id?: string;
 }
 
@@ -15,7 +15,7 @@ const AgentContext = createContext<AgentContextValue | null>(null);
 const AgentContextRegistry = new Map<string, React.Context<AgentContextValue | null>>();
 
 interface AgentProviderProps {
-  name: keyof typeof clients;
+  name: keyof ClientBuild;
   children: ReactNode;
   id?: string;
 }
@@ -42,7 +42,7 @@ interface UseAgentOptions {
   id?: string;
 }
 
-export function useAgent<K extends keyof typeof clients>(
+export function useAgent<K extends keyof ClientBuild>(
   name: K,
   options?: UseAgentOptions,
 ): GeneratedAgentClient<K> {

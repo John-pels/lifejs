@@ -35,9 +35,9 @@ export class LiveKitClientTransportProvider extends BaseClientTransportProvider<
       );
   }
 
-  async joinRoom(roomId: string, token: string): Promise<void> {
+  async joinRoom(roomName: string, token: string): Promise<void> {
     // If we are already connected to this room, do nothing
-    if (roomId === this.room?.name) return;
+    if (roomName === this.room?.name) return;
     // If we are already connected to a room, leave it before
     if (this.isConnected) await this.leaveRoom();
 

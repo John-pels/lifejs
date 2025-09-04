@@ -1,5 +1,5 @@
-import type clients from "life/exports/build-client";
 import type z from "zod";
+import type { ClientBuild } from "@/exports/build/client";
 import type { PluginClientBase } from "@/plugins/client/class";
 import type {
   PluginClientClassDefinition,
@@ -73,7 +73,7 @@ export type AgentClientWithPlugins<
   >;
 };
 
-export type GeneratedAgentClient<Name extends keyof typeof clients> = AgentClientWithPlugins<
-  AgentClient<(typeof clients)[Name]["definition"]>,
-  (typeof clients)[Name]["plugins"]
+export type GeneratedAgentClient<Name extends keyof ClientBuild> = AgentClientWithPlugins<
+  AgentClient<ClientBuild[Name]["definition"]>,
+  ClientBuild[Name]["plugins"]
 >;

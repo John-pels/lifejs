@@ -127,6 +127,7 @@ export interface TelemetrySpanHandle {
 export interface TelemetryClient {
   child(name: string): TelemetryClient;
   setGlobalAttribute(key: string, value: unknown): void;
+  sendSignal(signal: TelemetrySignal): void;
   registerConsumer(consumer: TelemetryConsumer): () => void;
   log: TelemetryLogWriter;
   trace(name: string, attributes?: TelemetryAttributes): Promise<{ start(): TelemetrySpanHandle }>;

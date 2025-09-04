@@ -35,5 +35,8 @@
   "patchedDependencies": {
     "tailwindcss-capsize@4.0.0": "patches/tailwindcss-capsize@4.0.0.patch",
     "ink@6.2.3": "patches/ink@6.2.3.patch"
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.49.0"
   }
 }

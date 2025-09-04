@@ -265,6 +265,13 @@ export class Telemetry implements TelemetryClient {
    */
   getSpan() {
     return this.#spanContext.getStore();
+  } /**
+   * Send a telemetry signal to all consumers.
+   * This a raw method, prefer using log.*(), counter(), updown(), histogram(), etc.
+   * @param signal - The telemetry signal to send
+   */
+  sendSignal(signal: TelemetrySignal): void {
+    for (const consumer of this.#allConsumers) consumer.queue.push(signal);
   }
 
   /**
@@ -290,9 +297,7 @@ export class Telemetry implements TelemetryClient {
           kind: "counter",
           value: n,
         };
-        for (const consumer of this.#allConsumers) {
-          consumer.queue.push({ type: "metric", ...fullMetric });
-        }
+        this.sendSignal({ type: "metric", ...fullMetric });
       },
       increment: (attributes?: TelemetryAttributes) => {
         this.counter(name).add(1, attributes);
@@ -324,9 +329,7 @@ export class Telemetry implements TelemetryClient {
           kind: "updown",
           value: n,
         };
-        for (const consumer of this.#allConsumers) {
-          consumer.queue.push({ type: "metric", ...fullMetric });
-        }
+        this.sendSignal({ type: "metric", ...fullMetric });
       },
       remove: (n: number | bigint, attributes?: TelemetryAttributes) => {
         this.updown(name).add(-n, attributes);
@@ -362,9 +365,7 @@ export class Telemetry implements TelemetryClient {
           kind: "histogram",
           value,
         };
-        for (const consumer of this.#allConsumers) {
-          consumer.queue.push({ type: "metric", ...fullMetric });
-        }
+        this.sendSignal({ type: "metric", ...fullMetric });
       },
     };
   }
@@ -446,7 +447,7 @@ export class Telemetry implements TelemetryClient {
       span.duration = ns.since(span.startTimestamp);
 
       // Send span to all consumer queues
-      for (const consumer of this.#allConsumers) consumer.queue.push({ type: "span", ...span });
+      this.sendSignal({ type: "span", ...span });
 
       // Restore parent context (if any)
       if (parentSpan !== undefined) this.#spanContext.enterWith(parentSpan);
@@ -585,8 +586,8 @@ export class Telemetry implements TelemetryClient {
     // Add to current span context if exists
     if (isFromSpan && parentSpan) parentSpan.logs.push(log);
 
-    // Send to consumer queues (if log is not emitted from a span handle)
-    for (const consumer of this.#allConsumers) consumer.queue.push({ type: "log", ...log });
+    // Send to consumer queues
+    this.sendSignal({ type: "log", ...log });
   }
 }
 

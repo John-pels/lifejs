@@ -40,7 +40,7 @@ export class AgentBuilder<
     >;
   }
 
-  scope<Schema extends z.ZodTypeAny>(scopeDef: AgentScopeDefinition<Schema>) {
+  scope<Schema extends z.AnyZodObject>(scopeDef: AgentScopeDefinition<Schema>) {
     // Create a new builder instance with the provided scope
     const builder = new AgentBuilder({
       ...this._definition,

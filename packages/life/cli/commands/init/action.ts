@@ -1,3 +1,6 @@
+import { generateHeader } from "@/cli/utils/header";
+import { loadEnvVars } from "@/cli/utils/load-env-vars";
+
 export interface InitOptions {
   template?: string;
   typescript?: boolean;
@@ -6,7 +9,13 @@ export interface InitOptions {
   packageManager?: string;
 }
 
-export const executeInit = (projectName?: string, options: InitOptions = {}) => {
+export const executeInit = async (projectName?: string, options: InitOptions = {}) => {
+  // Print header
+  console.log(await generateHeader("Init"));
+
+  // Load environment vars
+  loadEnvVars(process.cwd());
+
   const name = projectName || "my-life-app";
 
   console.log(`Creating a new Life.js project: ${name}`);

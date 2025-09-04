@@ -1,30 +1,19 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import path, { join, relative } from "node:path";
+import path, { dirname, join, relative } from "node:path";
 import { Lang, parseAsync } from "@ast-grep/napi";
 import chalk from "chalk";
 import chokidar, { type FSWatcher } from "chokidar";
 import esbuild from "esbuild";
 import { globbySync } from "globby";
 import ts from "typescript";
-import z from "zod";
 import { ns } from "@/shared/nanoseconds";
 import { lifeTelemetry } from "@/telemetry/client";
+import { type CompilerOptions, compilerOptionsSchema } from "./options";
 
 const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
 
-const compilerOptionsSchema = z.object({
-  projectRoot: z.string(),
-  outputDir: z.string().default(".life"),
-  watch: z.boolean().default(false),
-  optimize: z.boolean().default(true),
-});
-
-export type CompilerOptions<T extends "input" | "output"> = T extends "input"
-  ? z.input<typeof compilerOptionsSchema>
-  : z.output<typeof compilerOptionsSchema>;
-
-export class Compiler {
+export class LifeCompiler {
   options: CompilerOptions<"output">;
   entryPaths = {
     servers: [] as string[],
@@ -60,9 +49,9 @@ export class Compiler {
     this.options = compilerOptionsSchema.parse(options);
 
     // Ensure outputDir is absolute
-    this.options.outputDir = this.options.outputDir.startsWith("/")
-      ? this.options.outputDir
-      : join(this.options.projectRoot, this.options.outputDir);
+    this.options.outputDirectory = this.options.outputDirectory.startsWith("/")
+      ? this.options.outputDirectory
+      : join(this.options.projectDirectory, this.options.outputDirectory);
   }
 
   async start() {
@@ -70,8 +59,8 @@ export class Compiler {
     using h0 = (await this.telemetry.trace("start()")).start();
     h0.log.info({ message: "Starting compiler." });
     h0.log.debug({ message: `Optimized build: ${this.options.optimize}` });
-    h0.log.debug({ message: `Project root: ${this.options.projectRoot}` });
-    h0.log.debug({ message: `Output directory: ${this.options.outputDir}` });
+    h0.log.debug({ message: `Project directory: ${this.options.projectDirectory}` });
+    h0.log.debug({ message: `Output directory: ${this.options.outputDirectory}` });
 
     // 1. Reset and link the build directory output to life/build
     await Promise.all([this.resetOutputDirectory(), this.linkBuildDirectory()]);
@@ -100,10 +89,19 @@ export class Compiler {
       message: `Agents compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
     });
 
-    // 6. Watch for new/deleted entry paths if watch mode is enabled
+    // 5. Watch for new/deleted entry paths if watch mode is enabled
     if (this.options.watch) {
       this.watchEntryPaths();
       h0.log.info({ message: "Watching for changes..." });
+
+      // 4. Listen for SIGINT and SIGTERM to gracefully stop the compiler
+      const handleShutdown = async (signal: string) => {
+        console.log("");
+        this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
+        await this.stop();
+      };
+      process.once("SIGINT", () => handleShutdown("SIGINT"));
+      process.once("SIGTERM", () => handleShutdown("SIGTERM"));
     }
     // Else stop the compiler
     else await this.stop();
@@ -130,6 +128,9 @@ export class Compiler {
 
     // Ensure telemetry consumers have finished processing
     await this.telemetry.flush();
+
+    // Add non-empty last list for readability (if not in watch mode)
+    console.log(" ");
   }
 
   isEntryPath(absPath: string) {
@@ -158,7 +159,7 @@ export class Compiler {
     const entryPaths = globbySync(
       ["**/agent/{server.ts,client.ts}", "**/agents/*/{server.ts,client.ts}", "**/life.config.ts"],
       {
-        cwd: this.options.projectRoot,
+        cwd: this.options.projectDirectory,
         ignore: EXCLUDED_DEFAULTS,
         dot: false,
         onlyFiles: true,
@@ -205,9 +206,9 @@ export class Compiler {
   }
 
   watchEntryPaths() {
-    // Watch for files changes in the project root
-    const watcher = chokidar.watch(".", {
-      cwd: this.options.projectRoot,
+    // Watch for files changes in the project directory
+    this.watcher = chokidar.watch(".", {
+      cwd: this.options.projectDirectory,
       ignoreInitial: true,
       ignored: EXCLUDED_DEFAULTS,
     });
@@ -477,12 +478,9 @@ export class Compiler {
     };
 
     // Watch files add/remove/change
-    watcher.on("add", (p) => processWatchEvent("added", p));
-    watcher.on("unlink", (p) => processWatchEvent("removed", p));
-    watcher.on("change", (p) => processWatchEvent("changed", p));
-
-    // Store the watcher so it can be cleaned up later in stop()
-    this.watcher = watcher;
+    this.watcher.on("add", (p) => processWatchEvent("added", p));
+    this.watcher.on("unlink", (p) => processWatchEvent("removed", p));
+    this.watcher.on("change", (p) => processWatchEvent("changed", p));
   }
 
   async compileConfig(configPath: string, recompileAffectedAgents = true) {
@@ -581,7 +579,7 @@ export class Compiler {
       });
       if (!defineAgentCall) {
         h0.log.warn({
-          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectRoot, serverPath))}' doesn't contain a ${chalk.bold.italic("defineAgent(...)")} call. It has been ignored.`,
+          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectDirectory, serverPath))}' doesn't contain a ${chalk.bold.italic("defineAgent(...)")} call. It has been ignored.`,
           attributes: { serverPath },
         });
         return { needBundle: false, name: null };
@@ -599,7 +597,7 @@ export class Compiler {
       });
       if (!exportDefaultStatement) {
         h0.log.warn({
-          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectRoot, serverPath))}' doesn't export ${chalk.bold.italic("defineAgent(...)")} call as default. It has been ignored. Use ${chalk.bold.italic("export default defineAgent(...)")}.`,
+          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectDirectory, serverPath))}' doesn't export ${chalk.bold.italic("defineAgent(...)")} call as default. It has been ignored. Use ${chalk.bold.italic("export default defineAgent(...)")}.`,
           attributes: { serverPath },
         });
         return { needBundle: false, name: null };
@@ -610,7 +608,7 @@ export class Compiler {
       if (name) name = JSON.parse(name) as string;
       if (!name) {
         h0.log.warn({
-          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectRoot, serverPath))}' has ${chalk.bold.italic("defineAgent()")} but doesn't provide a name. It has been ignored. Use ${chalk.bold.italic("defineAgent(<name>)")}.`,
+          message: `Agent server '${chalk.bold.italic(path.relative(this.options.projectDirectory, serverPath))}' has ${chalk.bold.italic("defineAgent()")} but doesn't provide a name. It has been ignored. Use ${chalk.bold.italic("defineAgent(<name>)")}.`,
           attributes: { serverPath },
         });
         return { needBundle: false, name: null };
@@ -634,7 +632,7 @@ export default {
       `.trim();
 
       // 6. Write the agent server build content
-      const buildPath = path.join(this.options.outputDir, "server", "raw", `${name}.ts`);
+      const buildPath = path.join(this.options.outputDirectory, "server", "raw", `${name}.ts`);
       await writeFile(buildPath, content, "utf-8");
       this.buildIndex.servers.add(buildPath);
 
@@ -669,7 +667,7 @@ export default {
       });
       if (!defineAgentClientCall) {
         h0.log.warn({
-          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectRoot, clientPath))}' doesn't contain a ${chalk.bold.italic("defineAgentClient(...)")} call. It has been ignored.`,
+          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectDirectory, clientPath))}' doesn't contain a ${chalk.bold.italic("defineAgentClient(...)")} call. It has been ignored.`,
           attributes: { clientPath },
         });
         return { needBundle: false, name: null };
@@ -687,7 +685,7 @@ export default {
       });
       if (!exportDefaultStatement) {
         h0.log.warn({
-          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectRoot, clientPath))}' doesn't export ${chalk.bold.italic("defineAgentClient(...)")} call as default. It has been ignored. Use ${chalk.bold.italic("export default defineAgentClient(...)")}.`,
+          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectDirectory, clientPath))}' doesn't export ${chalk.bold.italic("defineAgentClient(...)")} call as default. It has been ignored. Use ${chalk.bold.italic("export default defineAgentClient(...)")}.`,
           attributes: { clientPath },
         });
         return { needBundle: false, name: null };
@@ -698,7 +696,7 @@ export default {
       if (name) name = JSON.parse(name) as string;
       if (!name) {
         h0.log.warn({
-          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectRoot, clientPath))}' has ${chalk.bold.italic("defineAgentClient()")} but doesn't provide a name. It has been ignored. Use ${chalk.bold.italic("defineAgentClient(<name>)")}.`,
+          message: `Agent client '${chalk.bold.italic(path.relative(this.options.projectDirectory, clientPath))}' has ${chalk.bold.italic("defineAgentClient()")} but doesn't provide a name. It has been ignored. Use ${chalk.bold.italic("defineAgentClient(<name>)")}.`,
           attributes: { clientPath },
         });
         return { needBundle: false, name: null };
@@ -731,7 +729,7 @@ ${pluginEntries}
       `.trim();
 
       // 6. Write the agent client build content
-      const buildPath = path.join(this.options.outputDir, "client", `${name}.ts`);
+      const buildPath = path.join(this.options.outputDirectory, "client", `${name}.ts`);
       await writeFile(buildPath, content, "utf-8");
       this.buildIndex.clients.add(buildPath);
 
@@ -768,11 +766,11 @@ export default {
     .join(",\n")}
 }
 `.trim();
-      const indexPath = path.join(this.options.outputDir, "server", "raw", "index.ts");
+      const indexPath = path.join(this.options.outputDirectory, "server", "raw", "index.ts");
       await writeFile(indexPath, indexContent, "utf-8");
 
       // 3. If an optimize build is not requested, use the raw index as bundle index
-      const distIndexPath = path.join(this.options.outputDir, "server", "dist", "index.ts");
+      const distIndexPath = path.join(this.options.outputDirectory, "server", "dist", "index.ts");
       if (!this.options.optimize) {
         await writeFile(distIndexPath, indexContent, "utf-8");
         return;
@@ -783,7 +781,7 @@ export default {
       else {
         this.serverBundleContext = await esbuild.context({
           entryPoints: [indexPath],
-          outdir: path.join(this.options.outputDir, "server", "dist"),
+          outdir: path.join(this.options.outputDirectory, "server", "dist"),
           bundle: true,
           format: "esm",
           platform: "node",
@@ -827,7 +825,7 @@ export default {
     .join(",\n")}
 }
 `.trim();
-      const indexPath = path.join(this.options.outputDir, "client", "index.ts");
+      const indexPath = path.join(this.options.outputDirectory, "client", "index.ts");
       await writeFile(indexPath, indexContent, "utf-8");
     } catch (error) {
       h0.log.error({ message: "Failed to generate client bundle. Unexpected error.", error });
@@ -835,219 +833,58 @@ export default {
   }
 
   ensureAbsolute(p: string) {
-    return path.resolve(this.options.projectRoot, p);
+    return path.resolve(this.options.projectDirectory, p);
   }
 
   async resetOutputDirectory() {
-    await rm(this.options.outputDir, { recursive: true, force: true });
+    await rm(this.options.outputDirectory, { recursive: true, force: true });
     await Promise.all([
-      mkdir(path.join(this.options.outputDir, "server", "raw"), { recursive: true }),
-      mkdir(path.join(this.options.outputDir, "server", "dist"), { recursive: true }),
-      mkdir(path.join(this.options.outputDir, "client"), { recursive: true }),
+      mkdir(path.join(this.options.outputDirectory, "server", "raw"), { recursive: true }),
+      mkdir(path.join(this.options.outputDirectory, "server", "dist"), { recursive: true }),
+      mkdir(path.join(this.options.outputDirectory, "client"), { recursive: true }),
     ]);
   }
 
   async linkBuildDirectory() {
     // Paths to generated build files in .life/build/
-    const generatedClientPath = join(this.options.outputDir, "client", "index.ts");
-    const generatedServerPath = join(this.options.outputDir, "server", "dist", "index.js");
+    const generatedClientPath = join(this.options.outputDirectory, "client", "index.ts");
+    const generatedServerPath = join(this.options.outputDirectory, "server", "dist", "index.js");
 
     // Find node_modules and set up dist directory
-    const nodeModulesPath = await this.findNodeModules(this.options.projectRoot);
+    const nodeModulesPath = await this.findNodeModules(this.options.projectDirectory);
     const distDir = join(nodeModulesPath, "life/dist");
-    const relativeGeneratedClientPath = relative(distDir, generatedClientPath);
-    const relativeGeneratedServerPath = relative(distDir, generatedServerPath);
 
-    // Find the client-build and server-build files
-    const { readdirSync } = await import("node:fs");
-    const distFiles = readdirSync(distDir);
-    const clientRootDtsFiles = distFiles.filter(
-      (f) => f.startsWith("build-client") && (f.endsWith(".d.ts") || f.endsWith(".d.mts")),
-    );
-    const serverRootDtsFiles = distFiles.filter(
-      (f) => f.startsWith("build-server") && (f.endsWith(".d.ts") || f.endsWith(".d.mts")),
-    );
-    const chunkFiles = distFiles.filter(
-      (f) => f.startsWith("chunk-") && (f.endsWith(".js") || f.endsWith(".mjs")),
-    );
-    let serverBuildChunkMjsFile: string | null = null;
-    let clientBuildChunkMjsFile: string | null = null;
-    let serverBuildChunkJsFile: string | null = null;
-    let clientBuildChunkJsFile: string | null = null;
+    // Get all files in the dist directory recursively
+    const { glob } = await import("glob");
+    const distFiles = await glob("**/*", {
+      cwd: distDir,
+      nodir: true,
+      absolute: false,
+    });
+
+    // Process all files concurrently, replacing placeholders
     await Promise.all(
-      chunkFiles.map(async (file) => {
+      distFiles.map(async (file) => {
         const filePath = join(distDir, file);
         const content = await readFile(filePath, "utf-8");
-        if (content.includes("export { build_server_default };")) {
-          serverBuildChunkMjsFile = file;
-        } else if (content.includes("export { build_client_default };")) {
-          clientBuildChunkMjsFile = file;
-        } else if (content.includes("exports.build_server_default = build_server_default;")) {
-          serverBuildChunkJsFile = file;
-        } else if (content.includes("exports.build_client_default = build_client_default;")) {
-          clientBuildChunkJsFile = file;
-        }
+
+        // Replace placeholders
+        // @dev '()' empty groups are used in regexes to avoid those mathching themselves.
+        const clientPath = relative(dirname(filePath), generatedClientPath);
+        const serverPath = relative(dirname(filePath), generatedServerPath);
+        const updatedContent = content
+          .replaceAll(/"LIFE()_CLIENT_BUILD_PATH"/g, `"${clientPath}"`)
+          .replaceAll(/"LIFE()_SERVER_BUILD_PATH"/g, `"${serverPath}"`)
+          .replaceAll(/"LIFE()_BUILD_MODE"/g, '"production"')
+          .replaceAll(/'LIFE()_CLIENT_BUILD_PATH'/g, `'${clientPath}'`)
+          .replaceAll(/'LIFE()_SERVER_BUILD_PATH'/g, `'${serverPath}'`)
+          .replaceAll(/'LIFE()_BUILD_MODE'/g, "'production'");
+
+        // Write back if content changed
+        if (updatedContent !== content) await writeFile(filePath, updatedContent, "utf-8");
       }),
     );
-
-    // Rewrite the rootDTS files and chunks
-    await Promise.all([
-      ...clientRootDtsFiles.map(async (file) => {
-        const filePath = join(distDir, file);
-        const content = await readFile(filePath, "utf-8");
-        const ast = await parseAsync(Lang.TypeScript, content);
-        const root = ast.root();
-        const match = root.find({
-          rule: {
-            pattern: "declare const _default",
-          },
-        });
-        // Replace the _default declaration with an import from the generated client path
-        const edit = match?.replace(`import type _default from "${relativeGeneratedClientPath}";`);
-        if (edit) {
-          await writeFile(filePath, root.commitEdits([edit]), "utf-8");
-        }
-      }),
-      ...serverRootDtsFiles.map(async (file) => {
-        const filePath = join(distDir, file);
-        const content = await readFile(filePath, "utf-8");
-        const ast = await parseAsync(Lang.TypeScript, content);
-        const root = ast.root();
-        const match = root.find({
-          rule: {
-            pattern: "declare const _default",
-          },
-        });
-        const edit = match?.replace(`import type _default from "${relativeGeneratedServerPath}";`);
-        if (edit) {
-          await writeFile(filePath, root.commitEdits([edit]), "utf-8");
-        }
-      }),
-      (async () => {
-        if (!serverBuildChunkMjsFile) return;
-        const filePath = join(distDir, serverBuildChunkMjsFile);
-        const newContent = `import build_server_default from "${relativeGeneratedServerPath}";\nexport { build_server_default };`;
-        await writeFile(filePath, newContent, "utf-8");
-      })(),
-      (async () => {
-        if (!clientBuildChunkMjsFile) return;
-        const filePath = join(distDir, clientBuildChunkMjsFile);
-        const newContent = `import build_client_default from "${relativeGeneratedClientPath}";\nexport { build_client_default };`;
-        await writeFile(filePath, newContent, "utf-8");
-      })(),
-      (async () => {
-        if (!serverBuildChunkJsFile) return;
-        const filePath = join(distDir, serverBuildChunkJsFile);
-        const newContent = `const build_server_default = require("${relativeGeneratedServerPath}");\nexports.build_server_default = build_server_default;`;
-        await writeFile(filePath, newContent, "utf-8");
-      })(),
-      (async () => {
-        if (!clientBuildChunkJsFile) return;
-        const filePath = join(distDir, clientBuildChunkJsFile);
-        const newContent = `const build_client_default = require("${relativeGeneratedClientPath}");\nexports.build_client_default = build_client_default;`;
-        await writeFile(filePath, newContent, "utf-8");
-      })(),
-    ]);
   }
-
-  // @dev This is the old tsdown-compatible code. Unfortunately tsdown is still not fully stable and
-  // was raising issues and so was temporarily removed in favor of tsup.
-  //   async linkBuildDirectory() {
-  //     // Paths to generated build files in .life/build/
-  //     const generatedClientPath = join(this.options.outputDir, "client", "index.ts");
-  //     const generatedServerPath = join(this.options.outputDir, "server", "dist", "index.js");
-
-  //     // Find node_modules and set up dist directory
-  //     const nodeModulesPath = await this.findNodeModules(this.options.projectRoot);
-  //     const distDir = join(nodeModulesPath, "life/dist");
-  //     const relativeGeneratedClientPath = relative(distDir, generatedClientPath);
-  //     const relativeGeneratedServerPath = relative(distDir, generatedServerPath);
-
-  //     // Find the client-build and server-build files (they have random IDs appended by tsdown)
-  //     const { readdirSync } = await import("node:fs");
-  //     const distFiles = readdirSync(distDir);
-  //     const clientBuildFiles = distFiles.filter((f) => f.startsWith("build-client"));
-  //     const serverBuildFiles = distFiles.filter((f) => f.startsWith("build-server"));
-  //     const clientMjsFiles = clientBuildFiles.filter((f) => f.endsWith(".mjs"));
-  //     const clientJsFiles = clientBuildFiles.filter((f) => f.endsWith(".js"));
-  //     const clientDtsFiles = clientBuildFiles.filter(
-  //       (f) => f.endsWith(".d.ts") || f.endsWith(".d.mts"),
-  //     );
-  //     const serverMjsFiles = serverBuildFiles.filter((f) => f.endsWith(".mjs"));
-  //     const serverJsFiles = serverBuildFiles.filter((f) => f.endsWith(".js"));
-  //     const serverDtsFiles = serverBuildFiles.filter(
-  //       (f) => f.endsWith(".d.ts") || f.endsWith(".d.mts"),
-  //     );
-
-  //     // Rewrite client MJS files
-  //     await Promise.all(
-  //       clientMjsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const content = await readFile(filePath, "utf-8");
-  //         const newContent = content.replace(
-  //           "var build_client_default = {};",
-  //           `import build_client_default from "${relativeGeneratedClientPath}";`,
-  //         );
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-
-  //     // Rewrite the client JS files
-  //     await Promise.all(
-  //       clientJsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const newContent = `const build_client_default = require('${relativeGeneratedClientPath}');
-  // exports.build_client_default = build_client_default.default;
-  //         `;
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-
-  //     // Rewrite the client DTS files
-  //     await Promise.all(
-  //       clientDtsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const newContent = `import _default from "${relativeGeneratedClientPath}";
-  // export { _default };
-  //         `;
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-
-  //     // Rewrite the server MJS files
-  //     await Promise.all(
-  //       serverMjsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const content = await readFile(filePath, "utf-8");
-  //         const newContent = content.replace(
-  //           "var build_server_default = {};",
-  //           `import build_server_default from "${relativeGeneratedServerPath}";`,
-  //         );
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-
-  //     // Rewrite the server JS files
-  //     await Promise.all(
-  //       serverJsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const newContent = `const build_server_default = require('${relativeGeneratedServerPath}');
-  // exports.build_server_default = build_server_default.default;`;
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-
-  //     // Rewrite the server DTS files
-  //     await Promise.all(
-  //       serverDtsFiles.map(async (file) => {
-  //         const filePath = join(distDir, file);
-  //         const newContent = `import _default from "${relativeGeneratedServerPath}";
-  // export { _default };
-  //         `;
-  //         await writeFile(filePath, newContent, "utf-8");
-  //       }),
-  //     );
-  //   }
 
   async hashFile(filePath: string) {
     const content = await readFile(filePath, "utf-8");
@@ -1062,7 +899,7 @@ export default {
     try {
       const result = await esbuild.build({
         entryPoints: [entryPath],
-        outdir: this.options.outputDir,
+        outdir: this.options.outputDirectory,
         bundle: true,
         format: "esm",
         packages: "external",
@@ -1113,8 +950,6 @@ export default {
     return !relativePath.startsWith("..");
   }
 
-  // ------
-
   async fileExists(filePath: string) {
     try {
       await access(filePath);
@@ -1130,14 +965,18 @@ export default {
     if (this.languageService) return;
 
     const configPath = ts.findConfigFile(
-      this.options.projectRoot,
+      this.options.projectDirectory,
       ts.sys.fileExists,
       "tsconfig.json",
     );
     if (!configPath) return;
 
     const { config } = ts.readConfigFile(configPath, ts.sys.readFile);
-    const parsedConfig = ts.parseJsonConfigFileContent(config, ts.sys, this.options.projectRoot);
+    const parsedConfig = ts.parseJsonConfigFileContent(
+      config,
+      ts.sys,
+      this.options.projectDirectory,
+    );
 
     // Optimize for performance
     parsedConfig.options.skipLibCheck = true;
@@ -1159,7 +998,7 @@ export default {
         const content = ts.sys.readFile(fileName);
         return content ? ts.ScriptSnapshot.fromString(content) : undefined;
       },
-      getCurrentDirectory: () => this.options.projectRoot,
+      getCurrentDirectory: () => this.options.projectDirectory,
       getCompilationSettings: () => parsedConfig.options,
       getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
       fileExists: ts.sys.fileExists,
