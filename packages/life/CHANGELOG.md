@@ -1,5 +1,12 @@
 # life
 
+## 0.14.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [e33c48a](https://github.com/lifejs/lifejs/commit/e33c48a4cd910558ec3b6ea58bbc1c5203321eb7) — Support restarting logic in agent and plugin servers
+- [@LilaRest](https://github.com/LilaRest) in [2153112](https://github.com/lifejs/lifejs/commit/2153112cbbdedd5992b05398509ae5aa432138cc) — The Life.js Server is ready! Supports process-level isolation, authentication, access-control, auto-restart on agent crash, health infos for monitoring, and telemetry as usual.
+
 ## 0.13.0
 
 ### Minor Changes
