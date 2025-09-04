@@ -49,7 +49,7 @@ export class AgentProcess {
   }
 
   async getDefinition() {
-    const servers = await importServerBuild();
+    const servers = await importServerBuild(true);
     const definition = servers?.[this.name as keyof typeof servers]?.definition;
     return definition;
   }

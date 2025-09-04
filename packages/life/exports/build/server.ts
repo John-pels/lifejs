@@ -17,10 +17,10 @@ export type ServerBuild = Mode extends "production"
   : Awaited<ActualServerBuild>["default"] : typeof defaultBuild
 
 /* @__PURE__ */
-export async function importServerBuild(): Promise<ServerBuild> {  
+export async function importServerBuild(noCache: boolean = false): Promise<ServerBuild> {  
   if (mode !== "production") return defaultBuild as ServerBuild;  
   try {
-    const v = (Math.random() * 100000000).toFixed(0);
+    const v = noCache ? (Math.random() * 100000000).toFixed(0) : "";
     const module = await import(path + `?v=${v}`);
     return (module.default || module) as ServerBuild;
   } catch {

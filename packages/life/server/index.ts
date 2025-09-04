@@ -270,7 +270,7 @@ export class LifeServer {
   }
 
   async listAvailableAgents() {
-    const build = await importServerBuild();
+    const build = await importServerBuild(true);
     return Object.entries(build).map(([name, { definition }]) => ({
       name,
       scopeKeys: definition?.scope?.schema?.shape ? Object.keys(definition.scope.schema.shape) : [],
@@ -302,7 +302,7 @@ export class LifeServer {
 
     try {
       // Ensure the request agent exists
-      const build = await importServerBuild();
+      const build = await importServerBuild(true);
       const definition = build[name as keyof typeof build]?.definition;
       if (!definition) {
         const message = `Definition not found for agent '${name}'.`;

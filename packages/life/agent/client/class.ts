@@ -180,21 +180,6 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   }
 
   /**
-   * Check if the server is responsive
-   * @returns True if server responds with "pong"
-   */
-  async ping() {
-    try {
-      const response = await fetch(`${this.#serverUrl}/server/ping`);
-      const text = await response.text();
-      return text === "pong";
-    } catch (error) {
-      console.error("Ping failed:", error);
-      return false;
-    }
-  }
-
-  /**
    * Get agent information from the server
    * @returns Agent information including status and metrics
    * @throws Error if unable to retrieve agent info

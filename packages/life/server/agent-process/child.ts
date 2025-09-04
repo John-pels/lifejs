@@ -22,7 +22,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
     async start(params) {
       try {
         // Create the agent server
-        const servers = await importServerBuild();
+        const servers = await importServerBuild(true);
         const definition = servers?.[params.name as keyof typeof servers]?.definition;
         agentServer = new AgentServer({
           id: params.id,

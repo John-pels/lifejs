@@ -15,10 +15,10 @@ export type ClientBuild = Mode extends "production"
   : Awaited<ActualClientBuild>["default"] : typeof defaultBuild
 
 /* @__PURE__ */
-export async function importClientBuild(): Promise<ClientBuild> {  
+export async function importClientBuild(noCache: boolean = false): Promise<ClientBuild> {  
   if (mode !== "production") return defaultBuild as ClientBuild;  
   try {
-    const v = (Math.random() * 100000000).toFixed(0);
+    const v = noCache ? (Math.random() * 100000000).toFixed(0) : "";
     const module = await import(path + `?v=${v}`);
     return (module.default || module) as ClientBuild;
   } catch {

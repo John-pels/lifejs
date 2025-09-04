@@ -1,6 +1,9 @@
+// import { createLifeClient } from "life/client";
 import { useAgent, useAgentGenerationStatus } from "life/react";
 
 export default function Page() {
+  // const client = createLifeClient({ serverUrl: "http://localhost:3003" });
+  // const { success, agent } = await client.createAgent("example", { test: true });
   // const agent1 = useAgent("example", { id: "1" });
   const agent1 = useAgent("example");
   const { data: status } = useAgentGenerationStatus(agent1);
