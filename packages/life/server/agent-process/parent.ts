@@ -26,6 +26,7 @@ export class AgentProcess {
   #restartTimeout: NodeJS.Timeout | null = null;
   #readyResolve: (() => void) | null = null;
   #child: BirpcReturn<ChildMethods, ParentMethods> | null = null;
+  #handleChildExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
 
   constructor({
     name,
@@ -77,7 +78,6 @@ export class AgentProcess {
       // Update the status
       this.status = "starting";
       const waitReady = new Promise<void>((resolve) => {
-        console.log("P7: Setting up ready promise");
         this.#readyResolve = resolve;
       });
 
@@ -90,7 +90,6 @@ export class AgentProcess {
       }
 
       // Fork the child process
-      // Since parent.ts is bundled into cli/index.js, we need to navigate from there to server/agent-process/child.js
       const currentDir = path.dirname(fileURLToPath(import.meta.url));
       const childPath = path.join(currentDir, "..", "server", "agent-process", "child.js");
       this.nodeProcess = fork(childPath, [], {
@@ -115,9 +114,7 @@ export class AgentProcess {
             this.lastSeenAt = Date.now();
           },
           ready: () => {
-            console.log("P10: ready() called from child");
             this.#readyResolve?.();
-            console.log("P11: ready() resolved");
           },
         },
         {
@@ -129,7 +126,8 @@ export class AgentProcess {
       );
 
       // Handle child process exit
-      this.nodeProcess.on("exit", (code, signal) => this.handleChildExit(code, signal));
+      this.#handleChildExitCallback = this.handleChildExit.bind(this);
+      this.nodeProcess.on("exit", this.#handleChildExitCallback);
 
       // Inject environment variables into the child process
       this.#child.injectEnvVars(process.env);
@@ -146,9 +144,7 @@ export class AgentProcess {
       if (!startResult.success) return startResult;
 
       // Wait for the agent to be ready
-      console.log("P8: Waiting for ready signal from child");
       await waitReady;
-      console.log("P9: Received ready signal from child");
 
       // Start health check
       this.startHealthCheck();
@@ -202,18 +198,30 @@ export class AgentProcess {
       // Stop health check
       this.stopHealthCheck();
 
+      // Stop listening for child process exit
+      if (this.#handleChildExitCallback)
+        this.nodeProcess?.off("exit", this.#handleChildExitCallback);
+
       // Gracefully stop the agent (10s timeout)
+      let stopResult: { success: boolean; message?: string } | undefined;
       try {
         await Promise.race([
-          this.#child?.stop(),
+          (async () => {
+            stopResult = await this.#child?.stop();
+          })(),
           new Promise((resolve) => setTimeout(resolve, 10_000)),
         ]);
       } catch (_) {
         // Ignore
       }
+      if (!stopResult?.success) {
+        h0.log.warn({
+          message: `Agent process '${this.name}' did not shutdown gracefully. Will force kill. Reason: ${stopResult?.message}`,
+        });
+      }
 
-      // Force kill if still running
-      if (this.nodeProcess && !this.nodeProcess.killed) this.nodeProcess.kill("SIGKILL");
+      // Terminate the child process
+      this.nodeProcess?.kill("SIGKILL");
 
       // Update the status
       this.status = "stopped";
@@ -225,9 +233,9 @@ export class AgentProcess {
       return { success: true };
     } catch (error) {
       // Uncaught error
-      const message = `Failed to stop agent '${this.name}'.`;
+      const message = `Failed to stop agent '${this.name}'. Will force kill.`;
       h0.log.error({ message, error });
-      if (this.nodeProcess && !this.nodeProcess.killed) this.nodeProcess.kill("SIGKILL");
+      if (this.nodeProcess && this.nodeProcess.exitCode === null) this.nodeProcess.kill("SIGKILL");
       this.status = "stopped";
       this.nodeProcess = null;
       this.lastStartedAt = undefined;

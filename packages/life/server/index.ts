@@ -1,10 +1,13 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
-import type { FSWatcher } from "chokidar";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import chalk from "chalk";
+import chokidar, { type FSWatcher } from "chokidar";
 import { agentConfig } from "@/agent/config";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
+import { ns } from "@/shared/nanoseconds";
 import { newId } from "@/shared/prefixed-id";
 import { ProcessStats } from "@/shared/process-stats";
 import { lifeTelemetry } from "@/telemetry/client";
@@ -14,7 +17,7 @@ import { AgentProcess } from "./agent-process/parent";
 import { LifeServerApi } from "./api";
 import { type ServerOptions, serverOptionsSchema } from "./options";
 
-// const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
+const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
 
 export class LifeServer {
   options: ServerOptions<"output">;
@@ -23,6 +26,7 @@ export class LifeServer {
   api: LifeServerApi;
   readonly #agentProcesses = new Map<string, AgentProcess>();
   readonly #processStats = new ProcessStats();
+  readonly #fileHashes = new Map<string, string>();
   #startedAt: number | null = null;
 
   constructor(options: ServerOptions<"input">) {
@@ -45,7 +49,12 @@ export class LifeServer {
     // 2. Start the API
     await this.api.start();
 
-    // 3. Listen for SIGINT and SIGTERM to gracefully stop the server
+    // 3. Start watching build directory if in watch mode
+    if (this.options.watch) {
+      await this.watchBuildDirectory();
+    }
+
+    // 4. Listen for SIGINT and SIGTERM to gracefully stop the server
     const handleShutdown = async (signal: string) => {
       console.log(""); // new line for readability
       this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
@@ -54,7 +63,11 @@ export class LifeServer {
     process.once("SIGINT", () => handleShutdown("SIGINT"));
     process.once("SIGTERM", () => handleShutdown("SIGTERM"));
 
+    // Set started at
     this.#startedAt = Date.now();
+
+    // Telemetry
+    this.telemetry.counter("server_started").increment();
   }
 
   #stopStarted = false;
@@ -81,9 +94,6 @@ export class LifeServer {
 
     // Ensure telemetry consumers have finished processing
     await this.telemetry.flush();
-
-    // Add non-empty last list for readability
-    console.log(" ");
   }
 
   async ensureBuildDirectory(): Promise<boolean> {
@@ -135,31 +145,128 @@ export class LifeServer {
     return true;
   }
 
-  watchBuildDirectory() {
-    if (!this.options.projectDirectory) return;
+  async watchBuildDirectory() {
+    using _ = (await this.telemetry.trace("watchBuildDirectory()")).start();
 
-    // TODO: Adapt this code, so we track specific agents and restart only the one that have changed
-    // TODO: Also add file content hashing, so rewriting the same file doesn't restart the agent
+    // Get the raw server directory
+    const buildDir = join(this.options.projectDirectory, ".life");
+    const rawServerDir = join(buildDir, "server", "raw");
 
-    // Watch for files changes in the server build directory
-    // this.watcher = chokidar.watch(".", {
-    //   cwd: path.join(this.options.buildDirectory, "server"),
-    //   ignoreInitial: true,
-    //   ignored: EXCLUDED_DEFAULTS,
-    // });
+    // Initialize content hashes for existing agent files to track actual changes
+    const { readdirSync } = await import("node:fs");
+    const files = readdirSync(rawServerDir).filter(
+      (file) => file.endsWith(".ts") && file !== "index.ts",
+    );
 
-    // const processWatchEvent = async (relPath: string) => {
-    //   using _ = (await this.telemetry.trace("processWatchEvent()", { relPath })).start();
+    // Read all files in parallel to avoid await-in-loop issue
+    await Promise.all(
+      files.map(async (file) => {
+        const filePath = join(rawServerDir, file);
+        try {
+          const content = await readFile(filePath, "utf-8");
+          const hash = createHash("md5").update(content).digest("hex");
+          this.#fileHashes.set(filePath, hash);
+        } catch (error) {
+          this.telemetry.log.debug({
+            message: "Failed to initialize hash for file",
+            error,
+            attributes: { path: filePath },
+          });
+        }
+      }),
+    );
 
-    //   // Ensure the path is absolute
-    //   await this.stopProcesses();
-    //   await this.startProcesses();
-    // };
+    // Watch for changes to agent build files
+    this.watcher = chokidar.watch(".", {
+      cwd: rawServerDir,
+      ignoreInitial: true,
+      ignored: ["index.ts", ...EXCLUDED_DEFAULTS],
+      awaitWriteFinish: {
+        stabilityThreshold: 50,
+        pollInterval: 5,
+      },
+    });
 
-    // // Watch files add/remove/change
-    // this.watcher.on("add", processWatchEvent);
-    // this.watcher.on("unlink", processWatchEvent);
-    // this.watcher.on("change", processWatchEvent);
+    const processWatchEvent = async (action: "change", relPath: string) => {
+      using h0 = (await this.telemetry.trace("processWatchEvent()", { action, relPath })).start();
+
+      try {
+        const absPath = join(rawServerDir, relPath);
+
+        // Only process change events (add/unlink ignored for now)
+        if (action !== "change") return;
+
+        // Check if file content has actually changed using hash comparison
+        const content = await readFile(absPath, "utf-8");
+        const newHash = createHash("md5").update(content).digest("hex");
+        const oldHash = this.#fileHashes.get(absPath);
+        if (oldHash === newHash) return;
+
+        // Update stored hash
+        this.#fileHashes.set(absPath, newHash);
+
+        // Extract agent name from filename
+        const agentName = basename(relPath, ".ts");
+
+        h0.log.debug({
+          message: `Detected change in agent '${agentName}', restarting affected processes.`,
+          attributes: { agentName, path: absPath },
+        });
+
+        // Find all running processes for this agent
+        const processesToRestart: AgentProcess[] = [];
+        for (const [, process] of this.#agentProcesses) {
+          if (process.name === agentName && process.status === "running") {
+            processesToRestart.push(process);
+          }
+        }
+
+        if (processesToRestart.length === 0) {
+          h0.log.debug({
+            message: `No running processes found for agent '${agentName}'.`,
+            attributes: { agentName },
+          });
+          return;
+        }
+
+        // Restart affected processes in parallel and track timing
+        using h1 = (
+          await this.telemetry.trace("restart-agent-processes", {
+            agentName,
+            count: processesToRestart.length,
+          })
+        ).start();
+
+        await Promise.all(
+          processesToRestart.map(async (process) => {
+            h0.log.debug({
+              message: `Restarting process '${process.id}' for agent '${agentName}'.`,
+              attributes: { processId: process.id, agentName },
+            });
+            await process.restart();
+          }),
+        );
+
+        h1.end();
+
+        // Log with timing similar to compiler
+        const instanceCount = processesToRestart.length;
+        const formattedName = chalk.bold.italic(agentName);
+        h0.log.info({
+          message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+          attributes: { agentName, instanceCount },
+        });
+      } catch (error) {
+        h0.log.error({
+          message: "Failed to process watch event",
+          error,
+          attributes: { path: relPath },
+        });
+      }
+    };
+
+    // Listen for file changes
+    this.watcher.on("change", (relPath) => processWatchEvent("change", relPath));
   }
 
   async listAvailableAgents() {
@@ -286,8 +393,24 @@ export class LifeServer {
       const processResult = await this.getAgentProcess(id, sessionToken);
       const process = processResult.process;
       if (!(process && processResult.success)) return processResult;
+
+      // Track timing for starting the process
+      using h1 = (
+        await this.telemetry.trace("start-process", { id, agentName: process.name })
+      ).start();
+
       const startResult = await process.start();
+      h1.end();
+
       if (!startResult.success) return startResult;
+
+      // Log with timing
+      const formattedName = chalk.bold.italic(process.name);
+      h0.log.info({
+        message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        attributes: { id, agentName: process.name },
+      });
+
       return { success: true };
     } catch (error) {
       const message = `Failed to start agent process: ${id}`;
@@ -302,8 +425,24 @@ export class LifeServer {
       const processResult = await this.getAgentProcess(id, sessionToken);
       const process = processResult.process;
       if (!(process && processResult.success)) return processResult;
+
+      // Track timing for stopping the process
+      using h1 = (
+        await this.telemetry.trace("stop-process", { id, agentName: process.name })
+      ).start();
+
       const stopResult = await process.stop();
+      h1.end();
+
       if (!stopResult.success) return stopResult;
+
+      // Log with timing
+      const formattedName = chalk.bold.italic(process.name);
+      h0.log.info({
+        message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        attributes: { id, agentName: process.name },
+      });
+
       return { success: true };
     } catch (error) {
       const message = `Failed to stop agent process: ${id}`;
@@ -318,8 +457,23 @@ export class LifeServer {
       const processResult = await this.getAgentProcess(id, sessionToken);
       const process = processResult.process;
       if (!(process && processResult.success)) return processResult;
+
+      // Track timing for restarting the process
+      using h1 = (
+        await this.telemetry.trace("restart-process", { id, agentName: process.name })
+      ).start();
       const restartResult = await process.restart();
+      h1.end();
+
       if (!restartResult.success) return restartResult;
+
+      // Log with timing
+      const formattedName = chalk.bold.italic(process.name);
+      h0.log.info({
+        message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        attributes: { id, agentName: process.name },
+      });
+
       return true;
     } catch (error) {
       const message = `Failed to restart agent process: ${id}`;

@@ -13,10 +13,10 @@ export default defineAgent("example")
     },
   })
   .test({
-    items: ["item1", "item3"] as const,
+    items: ["item1", "item2"] as const,
   })
   .generation({
-    collections: ["collection1", "collection200"],
+    collections: ["collection1", "collection3"],
     tools: [
       {
         name: "get-weather",

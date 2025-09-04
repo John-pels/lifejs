@@ -99,14 +99,13 @@ process.on("uncaughtException", (error) => {
   telemetry.log.error({ error });
   process.exit(1);
 });
-
 process.on("unhandledRejection", (reason) => {
   telemetry.log.error({ message: reason instanceof Error ? reason.message : String(reason) });
   process.exit(1);
 });
 
 // Graceful shutdown on SIGTERM
-process.on("SIGTERM", async () => {
-  if (agentServer) await agentServer.stop();
-  process.exit(0);
-});
+// process.on("SIGTERM", async () => {
+//   if (agentServer) await agentServer.stop();
+//   process.exit(0);
+// });

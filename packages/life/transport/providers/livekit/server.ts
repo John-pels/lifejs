@@ -1,15 +1,21 @@
-import {
+// Import LiveKit RTC Node in production mode to avoid DEBUG-level logs
+const prev = process.env.NODE_ENV;
+process.env.NODE_ENV = "production";
+const lk = require("@livekit/rtc-node") as typeof import("@livekit/rtc-node");
+const {
+  Room,
+  RoomEvent,
+  TrackPublishOptions,
+  TrackSource,
   AudioFrame,
   AudioSource,
   AudioStream,
   dispose,
   LocalAudioTrack,
-  type RemoteTrack,
-  Room,
-  RoomEvent,
-  TrackPublishOptions,
-  TrackSource,
-} from "@livekit/rtc-node";
+} = lk;
+process.env.NODE_ENV = prev;
+
+import type { RemoteTrack, Room as RoomType } from "@livekit/rtc-node";
 import type { z } from "zod";
 import { BaseServerTransportProvider, type ServerTransportEvent } from "../base/server";
 import { livekitConfig } from "./config";
@@ -24,7 +30,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
   typeof livekitConfig.serverSchema
 > {
   isConnected = false;
-  room: Room | null = null;
+  room: RoomType | null = null;
   listeners: Partial<
     Record<ServerTransportEvent["type"], ((event: ServerTransportEvent) => void)[]>
   > = {};
@@ -44,7 +50,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
     name: string,
     connector: LiveKitServerTransport,
   ): asserts connector is LiveKitServerTransport & {
-    room: Room & { localParticipant: NonNullable<Room["localParticipant"]> };
+    room: RoomType & { localParticipant: NonNullable<RoomType["localParticipant"]> };
   } {
     if (!(this.isConnected && this.room?.localParticipant))
       throw new Error(
@@ -54,7 +60,7 @@ export class LiveKitServerTransport extends BaseServerTransportProvider<
 
   // private activeAudioStreams = new Map<string, AudioStream>();
 
-  #initializeListeners(room: Room) {
+  #initializeListeners(room: RoomType) {
     // audio-chunk
     room.on(RoomEvent.TrackSubscribed, async (track) => {
       let isUnsubscribed = false;

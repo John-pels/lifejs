@@ -11,6 +11,19 @@ import { applyHelpFormatting } from "./utils/help-formatter";
 import { formatVersion, getVersion } from "./utils/version";
 
 async function main() {
+  // Set up cleanup function to run before process exits
+  let cleanupDone = false;
+  const cleanup = async () => {
+    if (cleanupDone) return;
+    cleanupDone = true;
+    await cliTelemetry.flush();
+    console.log(""); // Newline after the command for better readability
+  };
+  process.on("SIGINT", () => setImmediate(cleanup));
+  process.on("SIGTERM", () => setImmediate(cleanup));
+  process.on("beforeExit", () => cleanup);
+
+  // Initialize program
   const program = new Command();
   const version = await getVersion();
 
@@ -44,13 +57,7 @@ async function main() {
   program
     .name("life")
     .version(formatVersion(version).output, "-v, --version", "Display version number.")
-    .helpOption("-h, --help", "Display help for command.")
-    .hook("postAction", async () => {
-      // Ensure telemetry is flushed
-      await cliTelemetry.flush();
-      // Add a newline after the command for better readability
-      console.log("");
-    });
+    .helpOption("-h, --help", "Display help for command.");
 
   // Register commands
   const commands = [

@@ -7,6 +7,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 import esbuild from "esbuild";
 import { globbySync } from "globby";
 import ts from "typescript";
+import { klona } from "@/shared/klona";
 import { ns } from "@/shared/nanoseconds";
 import { lifeTelemetry } from "@/telemetry/client";
 import { type CompilerOptions, compilerOptionsSchema } from "./options";
@@ -128,9 +129,6 @@ export class LifeCompiler {
 
     // Ensure telemetry consumers have finished processing
     await this.telemetry.flush();
-
-    // Add non-empty last list for readability (if not in watch mode)
-    console.log(" ");
   }
 
   isEntryPath(absPath: string) {
@@ -211,6 +209,10 @@ export class LifeCompiler {
       cwd: this.options.projectDirectory,
       ignoreInitial: true,
       ignored: EXCLUDED_DEFAULTS,
+      awaitWriteFinish: {
+        stabilityThreshold: 20,
+        pollInterval: 5,
+      },
     });
 
     // Callback when entry path is added/removed/changed
@@ -621,22 +623,42 @@ export class LifeCompiler {
       }
       configPaths.sort((a, b) => b.length - a.length);
 
-      // 5. Generate agent server build content
+      // 5. Obtain a unified checksum of the server file dependencies tree
+      const treeFiles = new Set<string>([serverPath, ...configPaths]);
+      // - Add all dependencies from the dependenciesMap
+      for (const file of klona(treeFiles)) {
+        const deps = this.entryPaths.dependenciesMap.get(file);
+        if (deps) for (const dep of deps) treeFiles.add(dep);
+      }
+      // - Obtain the hashes for all tree files
+      const treeHashes = Array.from(treeFiles).map((file) => this.hashes.get(file));
+      const filteredTreeHashes = treeHashes.filter((hash) => hash !== undefined);
+      if (treeHashes.length !== filteredTreeHashes.length) {
+        h0.log.warn({
+          message: "Some tree files have no hash. Shouldn't happen.",
+          attributes: { treeFiles },
+        });
+      }
+      // - Compute the unified hash from all tree hashes
+      const checksum = createHash("md5").update(treeHashes.join(":")).digest("hex");
+
+      // 6. Generate agent server build content
       const content = `
       ${configPaths.map((configPath, i) => `import config${i} from "${configPath}";`).join("\n")}
 import agent from "${serverPath}";
 export default {
   definition: agent._definition,
   globalConfigs: [${configPaths.map((_, i) => `config${i}`).join(", ")}],
+  checksum: "${checksum}"
 } as const;
       `.trim();
 
-      // 6. Write the agent server build content
+      // 7. Write the agent server build content
       const buildPath = path.join(this.options.outputDirectory, "server", "raw", `${name}.ts`);
       await writeFile(buildPath, content, "utf-8");
       this.buildIndex.servers.add(buildPath);
 
-      // 7. Return true to re-bundle
+      // 8. Return true to re-bundle
       return { needBundle: true, name };
     } catch (error) {
       h0.log.error({
