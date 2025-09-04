@@ -1,5 +1,15 @@
 # life
 
+## 0.15.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [c035d02](https://github.com/lifejs/lifejs/commit/c035d026d5734f2a1cf9fabe37cfaf3cbb268ce2) — The Life.js server now supports hot-reloading 🔥
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [c035d02](https://github.com/lifejs/lifejs/commit/c035d026d5734f2a1cf9fabe37cfaf3cbb268ce2) — A lot of stability fixes on the server and compiler
+
 ## 0.14.0
 
 ### Minor Changes
