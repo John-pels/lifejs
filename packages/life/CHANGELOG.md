@@ -1,5 +1,14 @@
 # life
 
+## 0.16.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [08d200f](https://github.com/lifejs/lifejs/commit/08d200ff2c2d4c4dc3b27ab4269341db1c226e8f) — First version of the LifeClient
+- [@LilaRest](https://github.com/LilaRest) in [73b7375](https://github.com/lifejs/lifejs/commit/73b7375d51d9ac60583e00d7fbc1f7df1ba181ec) — Mirror server endpoints on the agent client
+- [@LilaRest](https://github.com/LilaRest) in [f404f1c](https://github.com/lifejs/lifejs/commit/f404f1c18d5c12900248a6e9fa726e7e3f227321) — Unify the errors representation into LifeError. Supports scope (public/internal), HTTP codes equivalents, serialization, and retriability.
+- [@LilaRest](https://github.com/LilaRest) in [f404f1c](https://github.com/lifejs/lifejs/commit/f404f1c18d5c12900248a6e9fa726e7e3f227321) — Enforce return type consistency across the codebase with the new 'operation' helper library.
+
 ## 0.15.0
 
 ### Minor Changes
