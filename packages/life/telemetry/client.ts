@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import os from "node:os";
 import { AsyncQueue } from "@/shared/async-queue";
-import { klona } from "@/shared/klona";
+import { deepClone } from "@/shared/deep-clone";
 import { ns } from "@/shared/nanoseconds";
 import packageJson from "../package.json" with { type: "json" };
 import { AnonymousDataConsumer } from "./anonymous";
@@ -492,7 +492,7 @@ export class Telemetry implements TelemetryClient {
     };
 
     // Create getSpan() method
-    const getSpan = () => klona(span);
+    const getSpan = () => deepClone(span);
 
     // Create end() method
     const end = () => this.#endSpan(span, parentSpan);

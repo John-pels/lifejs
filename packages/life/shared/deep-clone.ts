@@ -12,7 +12,7 @@
  *
  * Source: Klona (https://github.com/lukeed/klona/blob/master/src/full.js)
  */
-export function klona<T>(x: T): T {
+export function deepClone<T>(x: T): T {
   if (typeof x !== "object") return x;
 
   var i = 0,
@@ -28,19 +28,19 @@ export function klona<T>(x: T): T {
   } else if (str === "[object Set]") {
     tmp = new Set();
     x.forEach(function (val) {
-      tmp.add(klona(val));
+      tmp.add(deepClone(val));
     });
   } else if (str === "[object Map]") {
     tmp = new Map();
     x.forEach(function (val, key) {
-      tmp.set(klona(key), klona(val));
+      tmp.set(deepClone(key), deepClone(val));
     });
   } else if (str === "[object Date]") {
     tmp = new Date(+x);
   } else if (str === "[object RegExp]") {
     tmp = new RegExp(x.source, x.flags);
   } else if (str === "[object DataView]") {
-    tmp = new x.constructor(klona(x.buffer));
+    tmp = new x.constructor(deepClone(x.buffer));
   } else if (str === "[object ArrayBuffer]") {
     tmp = x.slice(0);
   } else if (str.slice(-6) === "Array]") {
@@ -64,7 +64,7 @@ export function klona<T>(x: T): T {
 }
 
 function set(obj, key, val) {
-  if (typeof val.value === "object") val.value = klona(val.value);
+  if (typeof val.value === "object") val.value = deepClone(val.value);
   if (
     !val.enumerable ||
     val.get ||

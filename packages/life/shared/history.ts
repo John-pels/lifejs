@@ -1,4 +1,4 @@
-import { klona } from "@/shared/klona";
+import { deepClone } from "@/shared/deep-clone";
 import { newId } from "@/shared/prefixed-id";
 import {
   type CreateMessageInput,
@@ -32,7 +32,7 @@ export class History {
   }
 
   findLastMessageOfRole(role: Message["role"] | Message["role"][]) {
-    return klona(this.#messages)
+    return deepClone(this.#messages)
       .reverse()
       .find((message) =>
         typeof role === "string" ? message.role === role : role.includes(message.role),

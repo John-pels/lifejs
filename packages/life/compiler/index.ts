@@ -7,7 +7,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 import esbuild from "esbuild";
 import { globbySync } from "globby";
 import ts from "typescript";
-import { klona } from "@/shared/klona";
+import { deepClone } from "@/shared/deep-clone";
 import { ns } from "@/shared/nanoseconds";
 import { lifeTelemetry } from "@/telemetry/client";
 import { type CompilerOptions, compilerOptionsSchema } from "./options";
@@ -626,7 +626,7 @@ export class LifeCompiler {
       // 5. Obtain a unified checksum of the server file dependencies tree
       const treeFiles = new Set<string>([serverPath, ...configPaths]);
       // - Add all dependencies from the dependenciesMap
-      for (const file of klona(treeFiles)) {
+      for (const file of deepClone(treeFiles)) {
         const deps = this.entryPaths.dependenciesMap.get(file);
         if (deps) for (const dep of deps) treeFiles.add(dep);
       }

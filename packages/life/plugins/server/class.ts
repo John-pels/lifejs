@@ -16,7 +16,7 @@ import type {
 } from "@/plugins/server/types";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
-import { klona } from "@/shared/klona";
+import { deepClone } from "@/shared/deep-clone";
 import { newId } from "@/shared/prefixed-id";
 import { lifeTelemetry } from "@/telemetry/client";
 import type { TelemetryClient } from "@/telemetry/types";
@@ -210,7 +210,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   // Obtain a cloned snapshot of the context
   #getContext(): PluginContext<Definition["context"], "output"> {
-    return klona(this.#context);
+    return deepClone(this.#context);
   }
 
   // Context setter
@@ -223,8 +223,8 @@ export class PluginServer<const Definition extends PluginDefinition> {
         ) => PluginContext<Definition["context"], "output">[K]),
   ): void {
     // Create a cloned snapshot of the current value and context
-    const oldContext = klona(this.#context);
-    const currentKeyValue = klona(this.#context[key]);
+    const oldContext = deepClone(this.#context);
+    const currentKeyValue = deepClone(this.#context[key]);
 
     // Obtain the new value
     let newKeyValue: PluginContext<Definition["context"], "output">[K];
@@ -238,7 +238,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     }
 
     // Set the new value
-    this.#context[key] = klona(newKeyValue);
+    this.#context[key] = deepClone(newKeyValue);
 
     // Notify listeners
     this.#notifyContextListeners(oldContext);
@@ -485,7 +485,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
           // biome-ignore lint/performance/noAwaitInLoops: sequential execution expected here
           await effect({
             agent: this.#agent,
-            event: klona(event),
+            event: deepClone(event),
             config: this.#config,
             context: this.#createWritableContextHandler(),
             events: this.#events as PluginEventsHandler<Definition["events"]>,
@@ -497,7 +497,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
         // 3. Feed services' queues
         for (const queue of this.#servicesQueues) {
-          queue.push(klona(event));
+          queue.push(deepClone(event));
         }
 
         // 4. Notify events listeners

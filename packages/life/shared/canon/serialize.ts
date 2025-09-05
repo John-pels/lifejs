@@ -1,6 +1,7 @@
 import { deserializeError, serializeError } from "serialize-error";
 import superjson, { type SuperJSONResult } from "superjson";
 import { ZodError, z } from "zod";
+import { deserializeLifeError, LifeError, serializeLifeError } from "../error";
 
 // Register custom transformer for ZodError to preserve all error information
 // We use unknown[] as the serialized type since ZodIssue has complex union types
@@ -25,6 +26,17 @@ superjson.registerCustom<Error, any>(
     deserialize: (data) => deserializeError(data),
   },
   "Error",
+);
+
+// Register custom transformer for LifeError objects
+// biome-ignore lint/suspicious/noExplicitAny: Record<string, unknown> is serializable
+superjson.registerCustom<LifeError, any>(
+  {
+    isApplicable: (v): v is LifeError => v instanceof LifeError,
+    serialize: (err) => serializeLifeError(err),
+    deserialize: (data) => deserializeLifeError(data),
+  },
+  "LifeError",
 );
 
 // - Primitive types

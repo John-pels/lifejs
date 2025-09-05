@@ -2,7 +2,7 @@ import z from "zod";
 import type { AgentClient } from "@/agent/client/class";
 import type { AgentClientDefinition } from "@/agent/client/types";
 import { canon, type SerializableValue } from "@/shared/canon";
-import { klona } from "@/shared/klona";
+import { deepClone } from "@/shared/deep-clone";
 import { newId } from "@/shared/prefixed-id";
 import type { PluginContext } from "../server/types";
 import type {
@@ -157,7 +157,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#contextListeners.delete(listenerId);
       };
     };
-    this.server.context.get = () => klona(this.#contextValue);
+    this.server.context.get = () => deepClone(this.#contextValue);
     this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
@@ -184,7 +184,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         input: z.object({ value: z.any(), timestamp: z.number() }),
       },
       execute: async ({ value, timestamp }) => {
-        const oldContextValue = klona(this.#contextValue);
+        const oldContextValue = deepClone(this.#contextValue);
         if (timestamp > this.#lastContextValueTimestamp) {
           this.#lastContextValueTimestamp = timestamp;
           this.#contextValue = value;
