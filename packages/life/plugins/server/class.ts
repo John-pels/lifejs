@@ -295,7 +295,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       this.#agent.transport.call({
         name: `plugin.${this._definition.name}.context.changed`,
         input: { value: this.#context, timestamp: Date.now() },
-        schema: {
+        inputSchema: {
           input: z.object({ value: z.any(), timestamp: z.number() }),
         },
       }),
@@ -554,7 +554,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
                   await this.#agent.transport.call({
                     name: `plugin.${this._definition.name}.events.callback`,
                     input: { listenerId: id, event },
-                    schema: {
+                    inputSchema: {
                       input: z.object({ listenerId: z.string(), event: z.any() }),
                     },
                   });

@@ -414,7 +414,7 @@ export class LifeServer {
       }
       if (process.sessionToken !== sessionToken) {
         return op.failure({
-          code: "InvalidInput",
+          code: "Validation",
           message: `Invalid session token for agent process '${id}'.`,
         });
       }

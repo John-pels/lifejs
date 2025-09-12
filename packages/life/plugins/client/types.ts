@@ -2,7 +2,6 @@ import type { WritableAtom } from "nanostores";
 import type z from "zod";
 import type { Config } from "@/shared/config";
 import type * as op from "@/shared/operation";
-import type { RPCResponse } from "@/transport/client/rpc";
 import type {
   PluginContext,
   PluginContextDefinition,
@@ -80,9 +79,7 @@ export type PluginClientEventsHandler<EventsDef extends PluginEventsDefinition> 
   PluginEventsHandler<EventsDef>,
   "emit"
 > & {
-  emit: (
-    event: PluginEvent<EventsDef, "input">,
-  ) => Promise<op.OperationResult<RPCResponse<string>>>;
+  emit: (event: PluginEvent<EventsDef, "input">) => Promise<op.OperationResult<string>>;
 };
 
 // - Context
@@ -94,7 +91,7 @@ export type PluginClientContextHandler<
 export type PluginClientMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
     input: z.infer<MethodsDefinition[K]["schema"]["input"]>,
-  ) => Promise<op.OperationResult<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["output"]>>>>;
+  ) => Promise<op.OperationResult<z.infer<MethodsDefinition[K]["schema"]["output"]>>>;
 };
 
 // - Server

@@ -80,18 +80,17 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       this.server.methods[name as keyof typeof this.server.methods] = (input: unknown) =>
         agent.transport.call({
           name: `plugin.${this._definition.name}.methods.${name}`,
-          // @ts-expect-error - cannot provide schema client side here
           input,
-        });
+          // biome-ignore lint/suspicious/noExplicitAny: no need further type precision here
+        }) as any;
     }
 
     // Wire events
     this.server.events.emit = (input: unknown) =>
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.emit`,
-        // @ts-expect-error - cannot provide schema client side here
         input,
-      });
+      }) as Promise<op.OperationResult<string>>;
     agent.transport.register({
       name: `plugin.${this._definition.name}.events.callback`,
       schema: {
@@ -118,7 +117,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.subscribe`,
         input: { listenerId: id, selector },
-        schema: {
+        inputSchema: {
           input: z.object({ listenerId: z.string(), selector: z.any() }),
         },
       });
@@ -129,7 +128,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         agent.transport.call({
           name: `plugin.${this._definition.name}.events.unsubscribe`,
           input: { listenerId: id },
-          schema: {
+          inputSchema: {
             input: z.object({ listenerId: z.string() }),
           },
         });
@@ -170,9 +169,6 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
-        schema: {
-          output: z.object({ value: z.any(), timestamp: z.number() }),
-        },
       })
       .then((result) => {
         const [err, response] = result;
@@ -185,8 +181,26 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
           );
           return;
         }
-        this.#lastContextValueTimestamp = response.data?.timestamp ?? 0;
-        this.#contextValue = response.data?.value ?? {};
+
+        // Validate output
+        const { data: output, error: outputError } = z
+          .object({ value: z.any(), timestamp: z.number() })
+          .safeParse(response);
+        if (outputError) {
+          // Todo: Use telemetry client instead
+          console.error(
+            "Failed to validate the initial context value for plugin",
+            this._definition.name,
+            outputError,
+          );
+          return;
+        }
+
+        // Initialize context
+        this.#lastContextValueTimestamp = output.timestamp ?? 0;
+        this.#contextValue = output.value ?? {};
+
+        // Send a first notification to listeners
         this.#notifyContextListeners({});
       });
     this.#agent.transport.register({

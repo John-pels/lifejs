@@ -42,9 +42,10 @@
  * ```
  */
 
+import z from "zod";
 import {
   isLifeError,
-  type LifeError,
+  LifeError,
   type LifeErrorParams,
   lifeError,
   type lifeErrorCodes,
@@ -357,4 +358,68 @@ export function toPublic<T>(input: T) {
 
   // Return as-is for primitive types
   return input as ToPublic<T>;
+}
+
+// Export a Zod schema for the OperationResult type
+export const resultSchema = z
+  .tuple([z.null(), z.unknown()])
+  .or(z.tuple([z.instanceof(LifeError), z.null()]))
+  .transform(
+    (val): OperationResult<OperationData> => val as unknown as OperationResult<OperationData>,
+  );
+
+/**
+ * Serializes an OperationResult into a plain object for transport.
+ *
+ * @param result - The OperationResult to serialize
+ * @returns A plain object with _isOperationResult marker and the result data
+ *
+ * @example
+ * ```typescript
+ * const result = success({ id: 1, name: "Alice" });
+ * const serialized = serializeResult(result);
+ * // serialized: { _isOperationResult: true, result: [undefined, { id: 1, name: "Alice" }] }
+ * ```
+ */
+export function serializeResult<D extends OperationData>(
+  result: OperationResult<D>,
+): { _isOperationResult: true; result: readonly [LifeError | undefined, D | undefined] } {
+  if (!isResult(result)) {
+    throw new Error("The provided value is not an OperationResult");
+  }
+  return {
+    _isOperationResult: true,
+    result: [result[0], result[1]] as const,
+  };
+}
+
+/**
+ * Deserializes a plain object back into an OperationResult with the proper symbol.
+ *
+ * @param obj - The serialized object to deserialize
+ * @returns An OperationResult with the OPERATION_RESULT symbol attached
+ *
+ * @example
+ * ```typescript
+ * const serialized = { _isOperationResult: true, result: [undefined, { id: 1, name: "Alice" }] };
+ * const result = deserializeResult(serialized);
+ * // result is now a proper OperationResult that will pass isResult() check
+ * ```
+ */
+export function deserializeResult<D extends OperationData>(obj: {
+  _isOperationResult: true;
+  result: readonly [LifeError | undefined, D | undefined];
+}): OperationResult<D> {
+  if (!obj._isOperationResult) {
+    throw new Error("The provided object is not a serialized OperationResult");
+  }
+  if (!Array.isArray(obj.result) || obj.result.length !== 2) {
+    throw new Error("The provided object is not a serialized OperationResult");
+  }
+
+  const [error, data] = obj.result;
+
+  // Reconstruct the OperationResult with the symbol
+  if (error) return failure(error) as OperationResult<D>;
+  return success(data) as OperationResult<D>;
 }

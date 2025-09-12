@@ -54,7 +54,7 @@ function myFunc() {
     // (or) can return any data alongside success
     return op.success("hello world") 
     // (or) indicate failure (with a LifeError instance or definition)
-    return op.failure({ code: "InvalidInput", message: "" }) 
+    return op.failure({ code: "Validation", message: "" }) 
 }
 ```
 2. catch any unhandled error in their block using this pattern:

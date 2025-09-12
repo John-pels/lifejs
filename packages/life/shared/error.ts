@@ -11,11 +11,11 @@ interface LifeErrorCodeDefinition {
 
 export const lifeErrorCodes = {
   /**
-   * Used when the user sends an invalid input.
+   * Used when the user sends or the server returns invalid data.
    */
-  InvalidInput: {
+  Validation: {
     retriable: false,
-    defaultMessage: "Invalid input provided.",
+    defaultMessage: "Invalid data provided.",
     httpEquivalent: 400,
     extraSchema: z.object({
       /**
@@ -200,7 +200,7 @@ const serializedLifeErrorSchema = z.object({
 export function serializeLifeError(error: LifeError): Record<string, unknown> {
   if (!(error instanceof LifeError))
     throw new LifeError({
-      code: "InvalidInput",
+      code: "Validation",
       message: "The provided object is not a LifeError instance.",
     });
   return {
@@ -217,13 +217,13 @@ export function serializeLifeError(error: LifeError): Record<string, unknown> {
 export function deserializeLifeError(obj: Record<string, unknown>): LifeError {
   if (!obj._isLifeError)
     throw new LifeError({
-      code: "InvalidInput",
+      code: "Validation",
       message: "The provided object is not a serialized LifeError.",
     });
   const { success, data } = serializedLifeErrorSchema.safeParse(obj);
   if (!success)
     throw new LifeError({
-      code: "InvalidInput",
+      code: "Validation",
       message: "The provided object is not a serialized LifeError.",
     });
   return new LifeError({

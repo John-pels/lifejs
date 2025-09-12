@@ -92,7 +92,7 @@ export class LifeApi {
       bodyLimit({
         maxSize: 50 * 1024,
         onError: (c) =>
-          c.json(op.failure({ code: "InvalidInput", message: "Request body is too large." }), 413),
+          c.json(op.failure({ code: "Validation", message: "Request body is too large." }), 413),
       }),
     );
 
@@ -251,7 +251,7 @@ export class LifeApi {
       if (typeof inputStr !== "string")
         return prepareResponse(
           op.failure({
-            code: "InvalidInput",
+            code: "Validation",
             message: `${type === "ws" ? "WebSocket message" : "HTTP request body"} must be a string.`,
           }),
         );
@@ -265,7 +265,7 @@ export class LifeApi {
       if (rawInputError)
         return prepareResponse(
           op.failure({
-            code: "InvalidInput",
+            code: "Validation",
             message: `Input object must contain a 'handlerId' field.`,
           }),
         );
@@ -278,7 +278,7 @@ export class LifeApi {
         handlerId = `${rawInput.handlerId} (unknown)`;
         return prepareResponse(
           op.failure({
-            code: "InvalidInput",
+            code: "Validation",
             message: `Input object 'type' key must be one of the following: ${Object.keys(getHandlers(this.server.telemetry)).join(", ")}`,
           }),
         );
@@ -298,7 +298,7 @@ export class LifeApi {
       if (inputError)
         return prepareResponse(
           op.failure({
-            code: "InvalidInput",
+            code: "Validation",
             message: `Invalid input shape for handler '${rawInput.handlerId}'.`,
             zodError: inputError,
           }),
@@ -357,7 +357,7 @@ export class LifeApi {
   }) {
     try {
       const queue = this.#streamHandlersQueues.get(input.handlerId);
-      if (!queue) return op.failure({ code: "InvalidInput", message: "Stream queue not found." });
+      if (!queue) return op.failure({ code: "Validation", message: "Stream queue not found." });
       queue.push({
         action: input.action === "subscribe" ? "add" : "remove",
         subscriptionId: input.subscriptionId,

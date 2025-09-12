@@ -14,26 +14,17 @@ export const rpcRequestSchema = z.object({
 export const rpcResponseSchema = z.object({
   type: z.literal("response"),
   id: z.string(),
-  name: z.string(),
-  status: z.enum(["success", "error"]),
-  data: z.unknown().optional(),
-  error: z
-    .object({
-      code: z.enum(["NOT_FOUND", "INVALID_INPUT", "INVALID_OUTPUT", "UNKNOWN", "TIMEOUT"]),
-      message: z.string(),
-      raw: z.unknown().optional(),
-    })
-    .optional(),
+  result: op.resultSchema,
 });
 
 export const rpcMessageSchema = z.discriminatedUnion("type", [rpcRequestSchema, rpcResponseSchema]);
 
-export type RPCRequest<Input = unknown> = z.infer<typeof rpcRequestSchema> & {
+export type RPCRequest<Input = unknown> = Omit<z.infer<typeof rpcRequestSchema>, "input"> & {
   input?: Input;
 };
 
-export type RPCResponse<Data = unknown> = z.infer<typeof rpcResponseSchema> & {
-  data?: Data;
+export type RPCResponse<Output = unknown> = Omit<z.infer<typeof rpcResponseSchema>, "output"> & {
+  output?: Output;
 };
 
 // RPC procedure
@@ -51,14 +42,20 @@ type RPCProcedure<Schema extends RPCProcedureSchema = RPCProcedureSchema> = {
 // RPC transport
 export abstract class TransportRPC {
   readonly #procedures = new Map<string, RPCProcedure>();
-  readonly #pendingResponses = new Map<string, (value: RPCResponse) => Promise<void>>();
+  readonly #resolveResults = new Map<
+    string,
+    (value: op.OperationResult<unknown>) => MaybePromise<void>
+  >();
 
   /**
    * Register a remote procedure.
    * @param procedure - The procedure to register
    */
   register<Schema extends RPCProcedureSchema>(procedure: RPCProcedure<Schema>) {
-    this.#procedures.set(procedure.name, procedure as unknown as RPCProcedure);
+    this.#procedures.set(
+      procedure.name,
+      procedure as unknown as RPCProcedure<{ input: z.AnyZodObject; output: z.AnyZodObject }>,
+    );
   }
 
   /**
@@ -69,180 +66,136 @@ export abstract class TransportRPC {
    */
   async call<Schema extends RPCProcedureSchema = RPCProcedureSchema>({
     name,
-    input,
-    schema,
+    inputSchema: schema,
+    input: rawInput,
   }: {
     name: string;
-    input?: Schema["input"] extends z.AnyZodObject ? z.infer<Schema["input"]> : never;
-    schema?: Schema;
-  }): Promise<
-    op.OperationResult<
-      RPCResponse<Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never>
-    >
-  > {
+    inputSchema?: Schema;
+    input?: Schema["input"] extends z.AnyZodObject ? z.infer<Schema["input"]> : unknown;
+  }) {
+    let timeoutId: NodeJS.Timeout | undefined;
+
     try {
-      // - Generate a new procedure ID
       const id = newId("rpc");
 
-      // - Prepare the response promise
-      const responsePromise = new Promise((resolve) => {
-        // Return a timeout error after 30s
-        const timeout = setTimeout(() => {
-          this.#pendingResponses.delete(id);
-          resolve({
-            type: "response",
-            id,
-            name,
-            status: "error",
-            error: {
-              code: "TIMEOUT",
-              message: `RPC timeout after 30s: ${name}`,
-            },
-          });
+      // Validate input data, error if invalid
+      const { data: input, error: inputError } = schema?.input
+        ? schema.input.safeParse(rawInput)
+        : { data: rawInput, error: null };
+      if (inputError) return op.failure({ code: "Validation", zodError: inputError });
+
+      // Create a timeout promise that resolve with failure after 30 seconds
+      const timeoutPromise = new Promise<op.OperationResult<unknown>>((resolve) => {
+        timeoutId = setTimeout(() => {
+          this.#resolveResults.delete(id);
+          resolve(op.failure({ code: "Timeout", message: `RPC timeout after 30s: ${name}` }));
         }, 30_000);
+      });
 
-        // Add the call to the pending responses map
-        this.#pendingResponses.set(id, async (response: RPCResponse) => {
-          clearTimeout(timeout);
-          this.#pendingResponses.delete(id);
-
-          // Validate the response output if schema is provided and response was successful
-          if (schema && response.status === "success" && schema.output) {
-            const outputResult = await schema.output?.safeParseAsync(response.data);
-            if (!outputResult.success) {
-              return resolve({
-                id: response.id,
-                name: response.name,
-                type: "response",
-                status: "error",
-                error: {
-                  code: "INVALID_OUTPUT",
-                  message: `Invalid output from procedure '${response.name}'.`,
-                  raw: outputResult.error,
-                },
-              });
-            }
-          }
-
-          // Resolve the response promise as is if valid or no schema was provided
-          resolve(response);
+      // Create a promise that resolves when the response is received
+      const resultPromise = new Promise<
+        op.OperationResult<
+          Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never
+        >
+      >((resolve) => {
+        this.#resolveResults.set(id, (res) => {
+          clearTimeout(timeoutId);
+          this.#resolveResults.delete(id);
+          resolve(
+            res as unknown as op.OperationResult<
+              Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never
+            >,
+          );
         });
       });
 
-      // - Send the request
-      const request: RPCRequest = { type: "request", id, name, input };
-      await this.sendObject("rpc", request);
+      // Send the request
+      await this.sendObject("rpc", { type: "request", id, name, input });
 
-      // - Return the response promise
-      return op.success(
-        (await responsePromise) as unknown as RPCResponse<
-          Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never
-        >,
-      );
+      // Capture whichever resolves first between timeout or result
+      const result = await Promise.race([resultPromise, timeoutPromise]);
+
+      // Clear the timeout
+      clearTimeout(timeoutId);
+
+      // Return the result
+      return result;
     } catch (error) {
+      clearTimeout(timeoutId);
       return op.failure({ code: "Unknown", error });
     }
   }
 
   protected initRPC() {
     this.receiveObject("rpc", async (data) => {
-      // Parse and validate the incoming RPC message
-      const parsed = rpcMessageSchema.safeParse(data);
-      if (!parsed.success) return console.error("Invalid RPC message:", parsed.error);
-      const message = parsed.data;
+      // - Helper to send a response
+      let messageId: string | undefined;
+      const sendResult = async (result: op.OperationResult<unknown>) => {
+        if (!messageId) return;
+        await this.sendObject("rpc", { type: "response", id: messageId, result });
+      };
 
-      // Handle responses
-      if (message.type === "response") {
-        const response = this.#pendingResponses.get(message.id);
-        if (response) await response(message);
-        return;
-      }
-
-      // Handle requests
-      // - Get the local execution function, or error if not found
       try {
+        // Parse and validate the incoming RPC message
+        const { data: message, error: messageError } = rpcMessageSchema.safeParse(data);
+        if (messageError) return console.error("Invalid RPC message:", messageError);
+        messageId = message.id;
+
+        // Handle responses
+        if (message.type === "response") {
+          const resolveResult = this.#resolveResults.get(message.id);
+          if (resolveResult) await resolveResult(message.result);
+          return;
+        }
+
+        // Handle requests
+        // - Get the local execution function, error if not found
         const procedure = this.#procedures.get(message.name);
         if (!procedure) {
-          const response: RPCResponse = {
-            type: "response",
-            id: message.id,
-            name: message.name,
-            status: "error",
-            error: {
-              code: "NOT_FOUND",
+          return await sendResult(
+            op.failure({
+              code: "NotFound",
               message: `Procedure not found: '${message.name}'.`,
-            },
-          };
-          await this.sendObject("rpc", response);
-          return;
+            }),
+          );
         }
 
-        // - Parse the procedure's input, or error if invalid
-        // Default to empty array if input not provided (for procedures with no arguments)
-        const inputResult = procedure.schema.input
+        // - Parse the procedure's input, error if invalid
+        const { data: input, error: inputError } = procedure.schema.input
           ? procedure.schema.input.safeParse(message.input)
-          : { success: true, data: undefined, error: null };
-        if (!inputResult.success) {
-          const response: RPCResponse = {
-            type: "response",
-            id: message.id,
-            name: message.name,
-            status: "error",
-            error: {
-              code: "INVALID_INPUT",
+          : { data: undefined, error: null };
+        if (inputError) {
+          return await sendResult(
+            op.failure({
+              code: "Validation",
               message: `Invalid input parameters for procedure '${message.name}'.`,
-              raw: inputResult.error,
-            },
-          };
-          await this.sendObject("rpc", response);
-          return;
+              zodError: inputError ?? undefined,
+            }),
+          );
         }
 
-        // @ts-expect-error - Execute the procedure
-        const output = await procedure.execute(inputResult.data);
+        // - Execute the procedure
+        const [err, rawOutput] = await procedure.execute(input as never);
+        if (err) return await sendResult(op.failure(err));
 
         // - Validate the output
-        const outputResult = procedure.schema.output
-          ? await procedure.schema.output.safeParseAsync(output)
-          : { success: true, data: output, error: null };
-        if (!outputResult.success) {
-          const response: RPCResponse = {
-            type: "response",
-            id: message.id,
-            name: message.name,
-            status: "error",
-            error: {
-              code: "INVALID_OUTPUT",
+        const { data: output, error: outputError } = procedure.schema.output
+          ? await procedure.schema.output.safeParseAsync(rawOutput)
+          : { data: rawOutput, error: null };
+        if (outputError) {
+          return await sendResult(
+            op.failure({
+              code: "Validation",
               message: `Invalid output from procedure '${message.name}'.`,
-              raw: outputResult.error,
-            },
-          };
-          await this.sendObject("rpc", response);
-          return;
+              zodError: outputError ?? undefined,
+            }),
+          );
         }
 
-        // - Send the response
-        const response: RPCResponse = {
-          name: message.name,
-          type: "response",
-          id: message.id,
-          status: "success",
-          data: outputResult.data,
-        };
-        await this.sendObject("rpc", response);
-      } catch (err) {
-        const response: RPCResponse = {
-          type: "response",
-          id: message.id,
-          name: message.name,
-          status: "error",
-          error: {
-            code: "UNKNOWN",
-            message: err instanceof Error ? err.message : String(err),
-            raw: err,
-          },
-        };
-        await this.sendObject("rpc", response);
+        // - Send the output result
+        await sendResult(op.success(output));
+      } catch (error) {
+        await sendResult(op.failure({ code: "Unknown", error }));
       }
     });
   }

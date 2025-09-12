@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { isLifeError, lifeError } from "./error";
-import { attempt, failure, isResult, success, type ToPublic, toPublic } from "./operation";
+import {
+  attempt,
+  deserializeResult,
+  failure,
+  isResult,
+  serializeResult,
+  success,
+  type ToPublic,
+  toPublic,
+} from "./operation";
 
 describe("operation", () => {
   describe("success", () => {
@@ -41,7 +50,7 @@ describe("operation", () => {
     });
 
     test("accepts existing LifeError instance", () => {
-      const error = lifeError({ code: "InvalidInput", message: "Bad input" });
+      const error = lifeError({ code: "Validation", message: "Bad input" });
       const result = failure(error);
       expect(result[0]).toBe(error);
       expect(result[1]).toBeUndefined();
@@ -303,7 +312,7 @@ describe("operation", () => {
       }
 
       failingMethod() {
-        return failure({ code: "InvalidInput" });
+        return failure({ code: "Validation" });
       }
 
       propertyValue = "test property";
@@ -397,12 +406,12 @@ describe("operation", () => {
       }
 
       fetchData(id: number) {
-        if (id < 0) return failure({ code: "InvalidInput", message: "Invalid ID" });
+        if (id < 0) return failure({ code: "Validation", message: "Invalid ID" });
         return success({ id, data: `Data for ${id}` });
       }
 
       updateName(newName: string) {
-        if (!newName) return failure({ code: "InvalidInput", message: "Name cannot be empty" });
+        if (!newName) return failure({ code: "Validation", message: "Name cannot be empty" });
         this.name = newName;
         return success();
       }
@@ -518,6 +527,221 @@ describe("operation", () => {
       const identity = <T>(value: T) => success(value);
       const [_, data] = identity({ generic: true });
       expect(data).toEqual({ generic: true });
+    });
+  });
+
+  describe("serializeResult", () => {
+    test("serializes success result with data", () => {
+      const result = success({ id: 1, name: "Alice" });
+      const serialized = serializeResult(result);
+
+      expect(serialized._isOperationResult).toBe(true);
+      expect(serialized.result[0]).toBeUndefined();
+      expect(serialized.result[1]).toEqual({ id: 1, name: "Alice" });
+    });
+
+    test("serializes success result without data", () => {
+      const result = success();
+      const serialized = serializeResult(result);
+
+      expect(serialized._isOperationResult).toBe(true);
+      expect(serialized.result[0]).toBeUndefined();
+      expect(serialized.result[1]).toBeUndefined();
+    });
+
+    test("serializes failure result", () => {
+      const error = lifeError({ code: "NotFound", message: "Resource not found" });
+      const result = failure(error);
+      const serialized = serializeResult(result);
+
+      expect(serialized._isOperationResult).toBe(true);
+      expect(serialized.result[0]).toBe(error);
+      expect(serialized.result[1]).toBeUndefined();
+    });
+
+    test("throws on non-OperationResult input", () => {
+      expect(() => serializeResult([undefined, "data"] as any)).toThrow(
+        "The provided value is not an OperationResult",
+      );
+      expect(() => serializeResult("not a result" as any)).toThrow(
+        "The provided value is not an OperationResult",
+      );
+      expect(() => serializeResult(null as any)).toThrow(
+        "The provided value is not an OperationResult",
+      );
+    });
+
+    test("preserves complex data structures", () => {
+      const complexData = {
+        nested: { deep: { value: [1, 2, 3] } },
+        date: new Date("2024-01-01"),
+        map: new Map([["key", "value"]]),
+      };
+      const result = success(complexData);
+      const serialized = serializeResult(result);
+
+      expect(serialized.result[1]).toEqual(complexData);
+    });
+  });
+
+  describe("deserializeResult", () => {
+    test("deserializes success result with data", () => {
+      const serialized = {
+        _isOperationResult: true as const,
+        result: [undefined, { id: 1, name: "Bob" }] as const,
+      };
+      const result = deserializeResult(serialized);
+
+      expect(isResult(result)).toBe(true);
+      expect(result[0]).toBeUndefined();
+      expect(result[1]).toEqual({ id: 1, name: "Bob" });
+    });
+
+    test("deserializes success result without data", () => {
+      const serialized = {
+        _isOperationResult: true as const,
+        result: [undefined, undefined] as const,
+      };
+      const result = deserializeResult(serialized);
+
+      expect(isResult(result)).toBe(true);
+      expect(result[0]).toBeUndefined();
+      expect(result[1]).toBeUndefined();
+    });
+
+    test("deserializes failure result", () => {
+      const error = lifeError({ code: "Forbidden", message: "Access denied" });
+      const serialized = {
+        _isOperationResult: true as const,
+        result: [error, undefined] as const,
+      };
+      const result = deserializeResult(serialized);
+
+      expect(isResult(result)).toBe(true);
+      expect(result[0]).toBe(error);
+      expect(result[1]).toBeUndefined();
+    });
+
+    test("throws on invalid input - missing marker", () => {
+      const invalidInput = {
+        result: [undefined, "data"],
+      } as any;
+      expect(() => deserializeResult(invalidInput)).toThrow(
+        "The provided object is not a serialized OperationResult",
+      );
+    });
+
+    test("throws on invalid input - wrong result format", () => {
+      const invalidInput = {
+        _isOperationResult: true,
+        result: "not an array",
+      } as any;
+      expect(() => deserializeResult(invalidInput)).toThrow(
+        "The provided object is not a serialized OperationResult",
+      );
+    });
+
+    test("throws on invalid input - wrong array length", () => {
+      const invalidInput = {
+        _isOperationResult: true,
+        result: [undefined],
+      } as any;
+      expect(() => deserializeResult(invalidInput)).toThrow(
+        "The provided object is not a serialized OperationResult",
+      );
+    });
+  });
+
+  describe("serializeResult and deserializeResult round-trip", () => {
+    test("round-trip for success with primitive data", () => {
+      const testCases = [
+        { original: success(42), expected: 42 },
+        { original: success("test string"), expected: "test string" },
+        { original: success(true), expected: true },
+        { original: success(null), expected: null },
+      ];
+
+      for (const { original, expected } of testCases) {
+        const serialized = serializeResult(original as any);
+        const deserialized = deserializeResult(serialized as any);
+
+        expect(isResult(deserialized)).toBe(true);
+        expect(deserialized[0]).toBeUndefined();
+        expect(deserialized[1]).toBe(expected);
+      }
+    });
+
+    test("round-trip for success with complex data", () => {
+      const original = success({
+        id: 123,
+        name: "Test",
+        tags: ["a", "b", "c"],
+        metadata: { created: new Date(), active: true },
+      });
+
+      const serialized = serializeResult(original);
+      const deserialized = deserializeResult(serialized);
+
+      expect(isResult(deserialized)).toBe(true);
+      expect(deserialized[0]).toBeUndefined();
+      expect(deserialized[1]).toEqual(original[1]);
+    });
+
+    test("round-trip for various failure codes", () => {
+      const errorCodes = ["NotFound", "Validation", "Forbidden", "Unknown"] as const;
+
+      for (const code of errorCodes) {
+        const original = failure({ code, message: `Error: ${code}` });
+        const serialized = serializeResult(original);
+        const deserialized = deserializeResult(serialized);
+
+        expect(isResult(deserialized)).toBe(true);
+        expect(deserialized[0]?.code).toBe(code);
+        expect(deserialized[0]?.message).toBe(`Error: ${code}`);
+        expect(deserialized[1]).toBeUndefined();
+      }
+    });
+
+    test("round-trip preserves LifeError properties", () => {
+      const error = lifeError({
+        code: "RateLimit",
+        message: "Too many requests",
+        retryAfterMs: 5000,
+      });
+      const original = failure(error);
+      const serialized = serializeResult(original);
+      const deserialized = deserializeResult(serialized);
+
+      expect(isResult(deserialized)).toBe(true);
+      const deserializedError = deserialized[0];
+      expect(deserializedError?.code).toBe("RateLimit");
+      expect(deserializedError?.message).toBe("Too many requests");
+      expect(deserializedError?.retryAfterMs).toBe(5000);
+    });
+
+    test("round-trip for void success", () => {
+      const original = success();
+      const serialized = serializeResult(original);
+      const deserialized = deserializeResult(serialized);
+
+      expect(isResult(deserialized)).toBe(true);
+      expect(deserialized[0]).toBeUndefined();
+      expect(deserialized[1]).toBeUndefined();
+    });
+
+    test("serialized format can be JSON stringified and parsed", () => {
+      const original = success({ test: "json compatibility" });
+      const serialized = serializeResult(original);
+
+      // Simulate JSON round-trip
+      const jsonString = JSON.stringify(serialized);
+      const parsed = JSON.parse(jsonString);
+
+      // Deserialize the parsed JSON
+      const deserialized = deserializeResult(parsed);
+
+      expect(isResult(deserialized)).toBe(true);
+      expect(deserialized[1]).toEqual({ test: "json compatibility" });
     });
   });
 });

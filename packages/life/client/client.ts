@@ -50,7 +50,7 @@ export class LifeClient {
 
       if (!(agentId && sessionToken && transportRoom)) {
         return op.failure({
-          code: "InvalidInput",
+          code: "Validation",
           message: "Server response missing required fields",
         });
       }

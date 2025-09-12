@@ -12,7 +12,7 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
         // Ensure the signal scope is client to prevent server-side telemetry data tampering
         if (["client", "agent.client", "plugin.client"].includes(data.signal.scope))
           return op.failure({
-            code: "InvalidInput",
+            code: "Validation",
             message: `Telemetry signal scope must be in ["client", "agent.client", "plugin.client"].`,
           });
         return op.success();

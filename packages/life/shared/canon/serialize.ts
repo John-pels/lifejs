@@ -40,6 +40,17 @@ superjson.registerCustom<Error, any>(
   "Error",
 );
 
+// Register custom transformer OperationResult tuples
+// biome-ignore lint/suspicious/noExplicitAny: serialize-error output is complex but serializable
+superjson.registerCustom<op.OperationResult<unknown>, any>(
+  {
+    isApplicable: (v): v is op.OperationResult<unknown> => op.isResult(v),
+    serialize: (result) => op.serializeResult(result),
+    deserialize: (result) => op.deserializeResult(result),
+  },
+  "OperationResult",
+);
+
 // - Primitive types
 const serializablePrimitivesSchema = z.union([
   z.string(),
