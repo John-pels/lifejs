@@ -1,5 +1,19 @@
 # life
 
+## 0.17.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — More telemetry, everywhere
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — The Life Server now also exposes a WebSocket API
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — Simplified runtime-agnostic createConfig() helper
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — Huge stability and consistency refactoring, usage of operation and LifeError everywhere
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — New fully typesafe API client to interact with both the HTTP and WebSocket endpoints
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [32f0cb7](https://github.com/lifejs/lifejs/commit/32f0cb7bfb84c7041337bb59755c146dcc473986) — Telemetry scope simplified, and now support required attributes with Zod schema
+
 ## 0.16.0
 
 ### Minor Changes
