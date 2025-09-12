@@ -12,14 +12,16 @@ const SAMPLE_RATE = 16_000n;
 
 // Config
 export const sileroVADConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("silero"),
   }),
-  clientSchema: z.object({}),
+  toTelemetryAttribute: (config) => {
+    return config;
+  },
 });
 
 // Model
-export class SileroVAD extends VADBase<typeof sileroVADConfig.serverSchema> {
+export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
   #_session: InferenceSession | null = null;
   // RNN latent state (2 × 1 × 128). Re‑used between calls.
   readonly #rnnState = new Float32Array(2 * 1 * 128);
@@ -32,8 +34,8 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.serverSchema> {
   // Holds residual samples from previous calls
   #residual = new Float32Array(0);
 
-  constructor(config: z.input<typeof sileroVADConfig.serverSchema>) {
-    super(sileroVADConfig.serverSchema, config);
+  constructor(config: z.input<typeof sileroVADConfig.schema>) {
+    super(sileroVADConfig.schema, config);
   }
 
   // Get or create the ONNX inference session

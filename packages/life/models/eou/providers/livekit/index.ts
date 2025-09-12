@@ -10,7 +10,7 @@ const transformers = import("@huggingface/transformers");
 
 // Config
 export const livekitEOUConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("livekit"),
     quantized: z.boolean().default(true),
     /**
@@ -22,17 +22,16 @@ export const livekitEOUConfig = createConfig({
     maxMessages: z.number().default(3),
     maxTokens: z.number().default(512),
   }),
-  clientSchema: z.object({}),
 });
 
 // Model
 type PreTrainedTokenizer = InstanceType<Awaited<typeof transformers>["PreTrainedTokenizer"]>;
-export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.serverSchema> {
+export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.schema> {
   #_tokenizer?: PreTrainedTokenizer;
   #_session?: InferenceSession;
 
-  constructor(config: z.input<typeof livekitEOUConfig.serverSchema>) {
-    super(livekitEOUConfig.serverSchema, config);
+  constructor(config: z.input<typeof livekitEOUConfig.schema>) {
+    super(livekitEOUConfig.schema, config);
   }
 
   // Get or create the ONNX inference session

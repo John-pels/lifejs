@@ -25,7 +25,7 @@ type MistralMessage =
 
 // Config
 export const mistralLLMConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("mistral"),
     apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
     model: z
@@ -52,15 +52,20 @@ export const mistralLLMConfig = createConfig({
       .default("mistral-small-latest"),
     temperature: z.number().min(0).max(1).default(0.5),
   }),
-  clientSchema: z.object({}),
+  toTelemetryAttribute: (config) => {
+    // Redact sensitive fields
+    config.apiKey = "redacted" as never;
+
+    return config;
+  },
 });
 
 // Model
-export class MistralLLM extends LLMBase<typeof mistralLLMConfig.serverSchema> {
+export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
   readonly #client: Mistral;
 
-  constructor(config: z.input<typeof mistralLLMConfig.serverSchema>) {
-    super(mistralLLMConfig.serverSchema, config);
+  constructor(config: z.input<typeof mistralLLMConfig.schema>) {
+    super(mistralLLMConfig.schema, config);
     if (!config.apiKey)
       throw new Error(
         "MISTRAL_API_KEY environment variable or config.apiKey must be provided to use this model.",

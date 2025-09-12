@@ -8,7 +8,7 @@ const mode = String("LIFE_BUILD_MODE");
 const path = "LIFE_CLIENT_BUILD_PATH";
 // @ts-expect-error - This will be replaced at build time
 type ActualClientBuild = typeof import("LIFE_CLIENT_BUILD_PATH");
-const defaultBuild = { "Run `life dev` to see your agents here.": { definition: {} as AgentClientDefinition, plugins: {} as AgentClientPluginsMapping } } as const;
+const defaultBuild = { "Run `life dev` to see your agents here.": { definition: {} as AgentClientDefinition, plugins: {} as AgentClientPluginsMapping, sha: "" } } as const;
 export type ClientBuild = Mode extends "production" 
   ? Awaited<ActualClientBuild>["default"] extends never 
   ? Awaited<ActualClientBuild>

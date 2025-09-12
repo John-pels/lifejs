@@ -7,7 +7,7 @@ import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 export const xaiLLMConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("xai"),
     apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
     model: z
@@ -24,14 +24,19 @@ export const xaiLLMConfig = createConfig({
       .default("grok-3-mini"),
     temperature: z.number().min(0).max(2).default(0.5),
   }),
-  clientSchema: z.object({}),
+  toTelemetryAttribute: (config) => {
+    // Redact sensitive fields
+    config.apiKey = "redacted" as never;
+
+    return config;
+  },
 });
 
-export class XaiLLM extends LLMBase<typeof xaiLLMConfig.serverSchema> {
+export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
   readonly #client: OpenAI;
 
-  constructor(config: z.input<typeof xaiLLMConfig.serverSchema>) {
-    super(xaiLLMConfig.serverSchema, config);
+  constructor(config: z.input<typeof xaiLLMConfig.schema>) {
+    super(xaiLLMConfig.schema, config);
     if (!config.apiKey)
       throw new Error(
         "XAI_API_KEY environment variable or config.apiKey must be provided to use this model.",

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
 import { canon } from "@/shared/canon";
 import { History } from "@/shared/history";
+import * as op from "@/shared/operation";
 import {
   createMessageInputSchema,
   messageSchema,
@@ -15,44 +16,51 @@ import { RollingBuffer } from "@/shared/rolling-buffer";
 import { definePlugin } from "../../server/define";
 import { GenerationOrchestrator } from "./orchestrator";
 
+const configSchema = z.object({
+  tools: z.array(toolSchema),
+  voiceDetection: z
+    .object({
+      scoreInThreshold: z.number().default(0.5),
+      scoreOutThreshold: z.number().default(0.25),
+      prePaddingChunks: z.number().default(50),
+      /**
+       * Many STT models listen at silent chunks after voice chunks before returning
+       * their final transcription result. Deepgram for example, even with `endpointing: 0` and
+       * `no_delay: true`, still seems to require a good amount of silent post padding chunks to
+       * return a transcript. 50 post-padding chunks wasn't enough and was leading to Deepgram getting
+       * stuck sometimes (i.e., never returning transcript). Note that this value could impact
+       * latency, since the user's end of turn won't be considered until user voice end is observed,
+       * which is delayed by the post-padding chunks. Still, since the pipeline also have to awaits
+       * for the STT model, if this value is lower than the latency of the STT model, it will have
+       * no impact on latency. For now this value is set at 200 by default, which as been found to
+       * be a good balance between latency and stability with most STT providers.
+       *
+       * You could considering lowering this value to 50 depending on how your STT provider behaves.
+       * As always, benchmark carefully the change.
+       */
+      postPaddingChunks: z.number().default(200),
+      interruptMinDurationMs: z.number().default(50),
+    })
+    .default({}),
+  endOfTurnDetection: z
+    .object({
+      threshold: z.number().default(0.6),
+      minTimeoutMs: z.number().default(300),
+      maxTimeoutMs: z.number().default(5000),
+    })
+    .default({}),
+});
+
 export const generationPlugin = definePlugin("generation")
-  .config(
-    z.object({
-      collections: z.array(z.string()),
-      tools: z.array(toolSchema),
-      voiceDetection: z
-        .object({
-          scoreInThreshold: z.number().default(0.5),
-          scoreOutThreshold: z.number().default(0.25),
-          prePaddingChunks: z.number().default(50),
-          /**
-           * Many STT models listen at silent chunks after voice chunks before returning
-           * their final transcription result. Deepgram for example, even with `endpointing: 0` and
-           * `no_delay: true`, still seems to require a good amount of silent post padding chunks to
-           * return a transcript. 50 post-padding chunks wasn't enough and was leading to Deepgram getting
-           * stuck sometimes (i.e., never returning transcript). Note that this value could impact
-           * latency, since the user's end of turn won't be considered until user voice end is observed,
-           * which is delayed by the post-padding chunks. Still, since the pipeline also have to awaits
-           * for the STT model, if this value is lower than the latency of the STT model, it will have
-           * no impact on latency. For now this value is set at 200 by default, which as been found to
-           * be a good balance between latency and stability with most STT providers.
-           *
-           * You could considering lowering this value to 50 depending on how your STT provider behaves.
-           * As always, benchmark carefully the change.
-           */
-          postPaddingChunks: z.number().default(200),
-          interruptMinDurationMs: z.number().default(50),
-        })
-        .default({}),
-      endOfTurnDetection: z
-        .object({
-          threshold: z.number().default(0.6),
-          minTimeoutMs: z.number().default(300),
-          maxTimeoutMs: z.number().default(5000),
-        })
-        .default({}),
-    }),
-  )
+  .config({
+    schema: configSchema,
+    toTelemetryAttribute: (config) => {
+      // Redact tools as they contain hard to serialize and potentially sensitive data
+      config.tools = "redacted" as never;
+
+      return config;
+    },
+  })
   .events({
     "messages.create": { dataSchema: createMessageInputSchema },
     "messages.update": { dataSchema: updateMessageInputSchema },
@@ -149,25 +157,41 @@ export const generationPlugin = definePlugin("generation")
         input: z.object({}),
         output: z.object({ messages: z.array(messageSchema) }),
       },
-      run: ({ context }) => ({ messages: context.get().messages }),
+      run: ({ context }) => {
+        const [err, contextValue] = context.safe.get();
+        if (err) return op.failure(err);
+        return op.success({ messages: contextValue.messages });
+      },
     },
     createMessage: {
       schema: {
         input: z.object({ message: createMessageInputSchema }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, { message }) => ({
-        eventId: events.emit({ type: "messages.create", data: message, urgent: true }),
-      }),
+      run: ({ events }, { message }) => {
+        const [err, eventId] = events.safe.emit({
+          type: "messages.create",
+          data: message,
+          urgent: true,
+        });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
     updateMessage: {
       schema: {
         input: z.object({ message: updateMessageInputSchema }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, { message }) => ({
-        eventId: events.emit({ type: "messages.update", data: message, urgent: true }),
-      }),
+      run: ({ events }, { message }) => {
+        const [err, eventId] = events.safe.emit({
+          type: "messages.update",
+          data: message,
+          urgent: true,
+        });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
     continue: {
       schema: {
@@ -177,9 +201,15 @@ export const generationPlugin = definePlugin("generation")
         }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, params) => ({
-        eventId: events.emit({ type: "agent.continue", data: params, urgent: true }),
-      }),
+      run: ({ events }, input) => {
+        const [err, eventId] = events.safe.emit({
+          type: "agent.continue",
+          data: input,
+          urgent: true,
+        });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
     decide: {
       schema: {
@@ -190,9 +220,15 @@ export const generationPlugin = definePlugin("generation")
         }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, params) => ({
-        eventId: events.emit({ type: "agent.decide", data: params, urgent: true }),
-      }),
+      run: ({ events }, input) => {
+        const [err, eventId] = events.safe.emit({
+          type: "agent.decide",
+          data: input,
+          urgent: true,
+        });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
     say: {
       schema: {
@@ -203,9 +239,11 @@ export const generationPlugin = definePlugin("generation")
         }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, params) => ({
-        eventId: events.emit({ type: "agent.say", data: params, urgent: true }),
-      }),
+      run: ({ events }, params) => {
+        const [err, eventId] = events.safe.emit({ type: "agent.say", data: params, urgent: true });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
     interrupt: {
       schema: {
@@ -216,9 +254,15 @@ export const generationPlugin = definePlugin("generation")
         }),
         output: z.object({ eventId: z.string() }),
       },
-      run: ({ events }, params) => ({
-        eventId: events.emit({ type: "agent.interrupt", data: params, urgent: true }),
-      }),
+      run: ({ events }, params) => {
+        const [err, eventId] = events.safe.emit({
+          type: "agent.interrupt",
+          data: params,
+          urgent: true,
+        });
+        if (err) return op.failure(err);
+        return op.success({ eventId });
+      },
     },
   })
   .lifecycle({
@@ -232,26 +276,35 @@ export const generationPlugin = definePlugin("generation")
       // Log messages changes
       context.onChange(
         (ctx) => ctx.messages,
-        (newMessages) => telemetry.log.info({ message: `💬 ${newMessages}` }),
+        (ctx) => telemetry.log.info({ message: `💬 ${ctx.messages}` }),
       );
 
       // Emit messages changed event
       context.onChange(
         (ctx) => ctx.messages,
-        (newMessages) => events.emit({ type: "messages.changed", data: newMessages }),
+        (ctx) => events.emit({ type: "messages.changed", data: ctx.messages }),
       );
     },
   })
   // 1. Handle agent' status changes
   .addEffect("handle-status", ({ event, context }) => {
     if (event.type === "agent.thinking-start") {
-      context.set("status", (prev) => ({ ...prev, listening: false, thinking: true }));
+      context.set((ctx) => ({
+        ...ctx,
+        status: { ...ctx.status, listening: false, thinking: true },
+      }));
     } else if (event.type === "agent.thinking-end") {
-      context.set("status", (prev) => ({ ...prev, thinking: false }));
+      context.set((ctx) => ({ ...ctx, status: { ...ctx.status, thinking: false } }));
     } else if (event.type === "agent.speaking-end")
-      context.set("status", { listening: true, thinking: false, speaking: false });
+      context.set((ctx) => ({
+        ...ctx,
+        status: { listening: true, thinking: false, speaking: false },
+      }));
     else if (event.type === "agent.speaking-start") {
-      context.set("status", (prev) => ({ ...prev, listening: false, speaking: true }));
+      context.set((ctx) => ({
+        ...ctx,
+        status: { ...ctx.status, listening: false, speaking: true },
+      }));
     }
   })
   // 2. Maintain messages history
@@ -320,7 +373,7 @@ export const generationPlugin = definePlugin("generation")
     }
 
     // Save the modified messages array
-    context.set("messages", history.getMessages());
+    context.set((ctx) => ({ ...ctx, messages: history.getMessages() }));
   })
   // 3. Listen for incoming audio chunks coming from the WebRTC room
   .addService("incoming-audio", ({ agent, events }) => {
@@ -564,13 +617,29 @@ export const generationPlugin = definePlugin("generation")
             urgent: true,
           });
         } catch (error) {
+          const [toolError, errorString] = canon.stringify(error as Error);
+          if (toolError) {
+            // TODO: Log error
+            events.emit({
+              type: "agent.tool-response",
+              data: {
+                result: {
+                  toolId: request.id,
+                  toolSuccess: false,
+                  toolError: "Failed to serialize error.",
+                },
+              },
+              urgent: true,
+            });
+            return;
+          }
           events.emit({
             type: "agent.tool-response",
             data: {
               result: {
                 toolId: request.id,
                 toolSuccess: false,
-                toolError: canon.stringify(error as Error),
+                toolError: errorString,
               },
             },
             urgent: true,

@@ -2,7 +2,10 @@ import type z from "zod";
 import type { AgentServer } from "@/agent/server/class";
 import type { AsyncQueue } from "@/shared/async-queue";
 import type { SerializableValue } from "@/shared/canon";
-import type { TelemetryClient } from "@/telemetry/types";
+import type { Config } from "@/shared/config";
+import type * as op from "@/shared/operation";
+import type { MaybePromise } from "@/shared/types";
+import type { TelemetryClient } from "@/telemetry/base";
 
 // - Dependencies
 export type PluginDependencyDefinition = Pick<
@@ -15,19 +18,21 @@ export type PluginDependencies<Definition extends PluginDependenciesDefinition> 
     name: Definition[K]["name"];
     definition: Definition[K];
     config: PluginConfig<Definition[K]["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition[K]["context"], "output">, "read">;
-    events: PluginEventsHandler<Definition[K]["events"]>;
-    methods: PluginMethods<Definition[K]["methods"]>;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition[K]["context"], "output">, "read">
+    >;
+    events: op.ToPublic<PluginEventsHandler<Definition[K]["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition[K]["methods"]>>;
   };
 };
 
 // - Config
-export type PluginConfigDefinition = z.AnyZodObject;
+export type PluginConfigDefinition = Config<z.AnyZodObject>;
 
 export type PluginConfig<
-  Schema extends PluginConfigDefinition,
+  ConfigDef extends PluginConfigDefinition,
   T extends "input" | "output",
-> = T extends "input" ? z.input<Schema> : z.output<Schema>;
+> = T extends "input" ? z.input<ConfigDef["schema"]> : z.output<ConfigDef["schema"]>;
 
 // - Context
 export type PluginContextDefinition = z.AnyZodObject;
@@ -42,19 +47,16 @@ export type PluginContextHandler<
   Mode extends "read" | "write",
 > = {
   /** Subscribe to changes in the context. Returns a function to unsubscribe. */
-  onChange<R extends SerializableValue>(
-    selector: (context: Context) => R,
-    callback: (newValue: R, oldValue: R) => void,
-  ): () => void;
+  onChange(
+    selector: (context: Context) => SerializableValue,
+    callback: (newContext: Context, oldContext: Context) => void,
+  ): op.OperationResult<() => void>;
   /** Returns a cloned snapshot of the context. */
-  get(): Context;
+  get(): op.OperationResult<Context>;
 } & (Mode extends "write"
   ? {
       /** Set a value in the context. */
-      set<K extends keyof Context>(
-        key: K,
-        valueOrUpdater: Context[K] | ((prev: Context[K]) => Context[K]),
-      ): void;
+      set(valueOrUpdater: Context | ((ctx: Context) => Context)): op.OperationResult<void>;
     }
   : // biome-ignore lint/complexity/noBannedTypes: empty object type needed for conditional
     {});
@@ -116,20 +118,40 @@ export interface PluginEventsHandler<EventsDef extends PluginEventsDefinition> {
   on: <const Selector extends PluginEventsSelector<keyof EventsDef>>(
     selector: Selector,
     callback: (event: PluginEventsSelection<EventsDef, Selector>) => void | Promise<void>,
-  ) => () => void;
+  ) => op.OperationResult<() => void>;
   once: <const Selector extends PluginEventsSelector<keyof EventsDef>>(
     selector: Selector,
     callback: (event: PluginEventsSelection<EventsDef, Selector>) => void | Promise<void>,
-  ) => () => void;
-  emit: (event: PluginEvent<EventsDef, "input">) => string;
+  ) => op.OperationResult<() => void>;
+  emit: (event: PluginEvent<EventsDef, "input">) => op.OperationResult<string>;
 }
 
 // - Methods
+export type PluginMethodSchemas = { input: z.AnyZodObject; output: z.AnyZodObject };
+export type PluginMethodDefinition<
+  Definition extends PluginDefinition,
+  Schemas extends PluginMethodSchemas,
+> = {
+  schema: Schemas;
+  run: Schemas["input"] extends z.AnyZodObject
+    ? (
+        params: {
+          config: PluginConfig<Definition["config"], "output">;
+          context: op.ToPublic<
+            PluginContextHandler<PluginContext<Definition["context"], "output">, "read">
+          >;
+          events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+          telemetry: TelemetryClient;
+        },
+        input: z.infer<Schemas["input"]>,
+      ) => MaybePromise<z.infer<Schemas["output"]> | op.OperationResult<z.infer<Schemas["output"]>>>
+    : never;
+};
 // Type for method schemas definition (consistent with tools definition)
 export type PluginMethodsDefinition = Record<
   string,
   {
-    schema: { input: z.AnyZodObject; output: z.AnyZodObject };
+    schema: PluginMethodSchemas;
     // biome-ignore lint/suspicious/noExplicitAny: Required for flexible function signatures
     run: (...args: any[]) => any;
   }
@@ -139,37 +161,45 @@ export type PluginMethodsDefinition = Record<
 export type PluginMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
     input: z.infer<MethodsDefinition[K]["schema"]["input"]>,
-  ) => z.infer<MethodsDefinition[K]["schema"]["output"]>;
+  ) => op.OperationResult<z.infer<MethodsDefinition[K]["schema"]["output"]>>;
 };
 
 // - Lifecycle
 export type PluginLifecycle<Definition extends PluginDefinition = PluginDefinition> = {
   onStart?: (params: {
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "write">
+    >;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
   onStop?: (params: {
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "write">
+    >;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
   onRestart?: (params: {
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "write">
+    >;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
   onError?: (params: {
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "write">
+    >;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     error: unknown;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
@@ -179,12 +209,14 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
 export type PluginEffectFunction<Definition extends PluginDefinition = PluginDefinition> =
   (params: {
     event: PluginEvent<Definition["events"], "output">;
-    agent: AgentServer;
+    agent: op.ToPublic<AgentServer>;
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "write">;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "write">
+    >;
     dependencies: PluginDependencies<Definition["dependencies"]>;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
 export type PluginEffectsDefinition<Definition extends PluginDefinition = PluginDefinition> =
@@ -194,12 +226,14 @@ export type PluginEffectsDefinition<Definition extends PluginDefinition = Plugin
 export type PluginServiceFunction<Definition extends PluginDefinition = PluginDefinition> =
   (params: {
     queue: AsyncQueue<PluginEvent<Definition["events"], "output">>;
-    agent: AgentServer;
+    agent: op.ToPublic<AgentServer>;
     config: PluginConfig<Definition["config"], "output">;
-    context: PluginContextHandler<PluginContext<Definition["context"], "output">, "read">;
+    context: op.ToPublic<
+      PluginContextHandler<PluginContext<Definition["context"], "output">, "read">
+    >;
     dependencies: PluginDependencies<Definition["dependencies"]>;
-    events: PluginEventsHandler<Definition["events"]>;
-    methods: PluginMethods<Definition["methods"]>;
+    events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+    methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     telemetry: TelemetryClient;
   }) => void | Promise<void>;
 export type PluginServicesDefinition<Definition extends PluginDefinition = PluginDefinition> =
@@ -227,8 +261,10 @@ export type PluginInterceptorFunction<Definition extends PluginDefinition = Plug
       name: keyof Definition["dependencies"];
     };
     current: {
-      events: PluginEventsHandler<Definition["events"]>;
-      context: PluginContextHandler<PluginContext<Definition["context"], "output">, "read">;
+      events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+      context: op.ToPublic<
+        PluginContextHandler<PluginContext<Definition["context"], "output">, "read">
+      >;
       config: PluginConfig<Definition["config"], "output">;
     };
     telemetry: TelemetryClient;

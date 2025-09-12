@@ -1,3 +1,4 @@
+import * as op from "@/shared/operation";
 import type { SerializableValue } from "./serialize";
 import { stringify } from "./stringify";
 
@@ -10,9 +11,9 @@ import { stringify } from "./stringify";
  * the resulting serialized forms are identical.
  *
  * @template T - A value that can be serialized by `canon.stringify` (i.e. SuperJSON‑compatible).
- * @param {T} a - The first value to compare.
- * @param {T} b - The second value to compare.
- * @returns {boolean} `true` if  `a` and `b` are identical; otherwise returns `false`.
+ * @param a - The first value to compare.
+ * @param b - The second value to compare.
+ * @returns `true` if  `a` and `b` are identical; otherwise returns `false`.
  *
  * @example
  * ```ts
@@ -26,6 +27,10 @@ import { stringify } from "./stringify";
  * canon.equal(new Date("2021-08-01"), "2021-08-01");      // → true
  * ```
  */
-export const equal = <T extends SerializableValue>(a: T, b: T): boolean => {
-  return stringify(a) === stringify(b);
+export const equal = <T extends SerializableValue>(a: T, b: T) => {
+  const [err1, data1] = op.attempt(() => stringify(a));
+  if (err1) return op.failure(err1);
+  const [err2, data2] = op.attempt(() => stringify(b));
+  if (err2) return op.failure(err2);
+  return op.success(data1 === data2);
 };

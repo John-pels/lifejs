@@ -1,32 +1,19 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { AsyncQueue } from "@/shared/async-queue";
-import { Telemetry } from "../client";
+import { createTelemetryClient } from "../node";
 import type { TelemetryConsumer, TelemetryMetric, TelemetrySignal } from "../types";
 
 describe("TelemetryClient - metric methods", () => {
-  // Helper to create a test telemetry client with a mock consumer
   function createTestClient() {
-    const client = new Telemetry({
-      resource: {
-        name: "test",
-        version: "1.0.0",
-        environment: "testing",
-        isCi: false,
-        nodeVersion: process.version,
-        osName: "test",
-        osVersion: "1.0",
-        cpuCount: 1,
-        cpuArchitecture: "x64",
-      },
-      scope: ["test"],
+    const client = createTelemetryClient("cli", {
+      command: "dev",
+      args: [],
     });
 
     const capturedMetrics: TelemetryMetric[] = [];
 
-    // Create a mock consumer that captures metrics
     const mockConsumer: TelemetryConsumer = {
       start: mock((queue: AsyncQueue<TelemetrySignal>) => {
-        // Override the queue push to capture signals
         const originalPush = queue.push.bind(queue);
         queue.push = mock((signal: TelemetrySignal) => {
           if (signal.type === "metric") {
@@ -119,9 +106,8 @@ describe("TelemetryClient - metric methods", () => {
 
       const metric = capturedMetrics[0];
       expect(metric?.id).toBeDefined();
-      // biome-ignore lint/performance/useTopLevelRegex: Test-specific regex
-      expect(metric?.id).toMatch(/^[0-9a-f]{32}$/); // 16 bytes = 32 hex chars
-      // Metrics don't have timestamps in the current implementation
+      // biome-ignore lint/performance/useTopLevelRegex: test-specific regex
+      expect(metric?.id).toMatch(/^[0-9a-f]{32}$/);
     });
 
     it("should include resource and scope", () => {
@@ -131,9 +117,9 @@ describe("TelemetryClient - metric methods", () => {
       counter.increment();
 
       const metric = capturedMetrics[0];
-      expect(metric?.resource.name).toBe("test");
-      expect(metric?.resource.version).toBe("1.0.0");
-      expect(metric?.scope).toEqual(["test"]);
+      expect(metric?.resource.platform).toBe("node");
+      expect(metric?.resource.environment).toBeDefined();
+      expect(metric?.scope).toBe("cli");
     });
 
     it("should handle multiple counters independently", () => {
@@ -190,8 +176,8 @@ describe("TelemetryClient - metric methods", () => {
       const { client, capturedMetrics } = createTestClient();
 
       const gauge = client.updown("memory_usage_bytes");
-      gauge.add(1024 * 1024); // 1MB
-      gauge.remove(512 * 1024); // 512KB
+      gauge.add(1024 * 1024);
+      gauge.remove(512 * 1024);
 
       expect(capturedMetrics).toHaveLength(2);
       if (capturedMetrics[0]?.kind === "updown") {
@@ -229,7 +215,6 @@ describe("TelemetryClient - metric methods", () => {
       const metric2 = capturedMetrics[1];
       if (metric1?.kind === "updown" && metric2?.kind === "updown") {
         expect(metric1.value).toBe(0);
-        // remove(0) results in -0 due to how it's implemented
         expect(Object.is(metric2.value, -0)).toBe(true);
       }
     });
@@ -323,8 +308,8 @@ describe("TelemetryClient - metric methods", () => {
     it("should include global attributes in all metrics", () => {
       const { client, capturedMetrics } = createTestClient();
 
-      client.setGlobalAttribute("service", "api");
-      client.setGlobalAttribute("region", "us-west-2");
+      client.setAttribute("service", "api");
+      client.setAttribute("region", "us-west-2");
 
       const counter = client.counter("requests");
       counter.increment({ path: "/health" });
@@ -348,36 +333,83 @@ describe("TelemetryClient - metric methods", () => {
       }
     });
 
-    it("should work with child telemetry clients", () => {
-      const { client, capturedMetrics } = createTestClient();
+    it("should work with different scope telemetry clients", () => {
+      const client1 = createTelemetryClient("cli", {
+        command: "dev",
+        args: [],
+      });
+      const client2 = createTelemetryClient("server", {
+        watch: true,
+      });
 
-      const childClient = client.child("worker");
-      const counter = childClient.counter("tasks_processed");
-      counter.increment();
+      const capturedMetrics: TelemetryMetric[] = [];
+      const mockConsumer: TelemetryConsumer = {
+        start: mock((queue: AsyncQueue<TelemetrySignal>) => {
+          const originalPush = queue.push.bind(queue);
+          queue.push = mock((signal: TelemetrySignal) => {
+            if (signal.type === "metric") {
+              capturedMetrics.push(signal as TelemetryMetric);
+            }
+            return originalPush(signal);
+          });
+        }),
+        isProcessing: mock(() => false),
+      };
 
-      expect(capturedMetrics).toHaveLength(1);
-      expect(capturedMetrics[0]?.scope).toEqual(["test", "worker"]);
+      client1.registerConsumer(mockConsumer);
+      client2.registerConsumer(mockConsumer);
+
+      const counter1 = client1.counter("tasks_processed");
+      const counter2 = client2.counter("requests_handled");
+      counter1.increment();
+      counter2.increment();
+
+      expect(capturedMetrics).toHaveLength(2);
+      expect(capturedMetrics[0]?.scope).toBe("cli");
+      expect(capturedMetrics[1]?.scope).toBe("server");
     });
 
-    it("should inherit global attributes in child clients", () => {
-      const { client, capturedMetrics } = createTestClient();
+    it("should handle global attributes independently per client", () => {
+      const client1 = createTelemetryClient("cli", {
+        command: "dev",
+        args: [],
+      });
+      const client2 = createTelemetryClient("server", {
+        watch: false,
+      });
 
-      client.setGlobalAttribute("parentAttr", "parentValue");
+      const capturedMetrics: TelemetryMetric[] = [];
+      const mockConsumer: TelemetryConsumer = {
+        start: mock((queue: AsyncQueue<TelemetrySignal>) => {
+          const originalPush = queue.push.bind(queue);
+          queue.push = mock((signal: TelemetrySignal) => {
+            if (signal.type === "metric") {
+              capturedMetrics.push(signal as TelemetryMetric);
+            }
+            return originalPush(signal);
+          });
+        }),
+        isProcessing: mock(() => false),
+      };
 
-      const childClient = client.child("child");
-      childClient.setGlobalAttribute("childAttr", "childValue");
+      client1.registerConsumer(mockConsumer);
+      client2.registerConsumer(mockConsumer);
 
-      const counter = childClient.counter("test");
-      counter.increment();
+      client1.setAttribute("client1Attr", "value1");
+      client2.setAttribute("client2Attr", "value2");
 
-      const metric = capturedMetrics[0];
-      expect(metric?.attributes?.parentAttr).toBeDefined();
-      expect(metric?.attributes?.childAttr).toBeDefined();
+      const counter1 = client1.counter("test");
+      const counter2 = client2.counter("test");
+      counter1.increment();
+      counter2.increment();
 
-      if (metric?.attributes?.parentAttr && metric?.attributes?.childAttr) {
-        expect(metric.attributes.parentAttr).toBe("parentValue");
-        expect(metric.attributes.childAttr).toBe("childValue");
-      }
+      const metric1 = capturedMetrics[0];
+      const metric2 = capturedMetrics[1];
+
+      expect(metric1?.attributes?.client1Attr).toBe("value1");
+      expect(metric1?.attributes?.client2Attr).toBeUndefined();
+      expect(metric2?.attributes?.client2Attr).toBe("value2");
+      expect(metric2?.attributes?.client1Attr).toBeUndefined();
     });
   });
 
@@ -442,7 +474,6 @@ describe("TelemetryClient - metric methods", () => {
     it("should handle circular references in attributes", () => {
       const { client, capturedMetrics } = createTestClient();
 
-      // biome-ignore lint/suspicious/noExplicitAny: Testing circular references
       const circular: any = { a: 1 };
       circular.self = circular;
 
@@ -450,7 +481,6 @@ describe("TelemetryClient - metric methods", () => {
       counter.increment({ circular });
 
       expect(capturedMetrics).toHaveLength(1);
-      // Should not throw - serialization should handle circular refs
     });
 
     it("should handle multiple consumers", () => {
@@ -475,7 +505,6 @@ describe("TelemetryClient - metric methods", () => {
       const counter = client.counter("test");
       counter.increment();
 
-      // Both consumers should receive the metric
       expect(capturedMetrics).toHaveLength(1);
       expect(secondCapturedMetrics).toHaveLength(1);
       expect(capturedMetrics[0]?.name).toBe("test");
@@ -491,10 +520,8 @@ describe("TelemetryClient - metric methods", () => {
       counter.increment();
       expect(capturedMetrics).toHaveLength(1);
 
-      // Unregister the consumer
       unregister();
 
-      // This metric should not be captured
       counter.increment();
       expect(capturedMetrics).toHaveLength(1);
     });
@@ -510,7 +537,6 @@ describe("TelemetryClient - metric methods", () => {
       await Promise.all(promises);
 
       expect(capturedMetrics).toHaveLength(100);
-      // Verify all metrics were captured
       const indices = capturedMetrics
         .map((m) => (m.attributes?.index !== undefined ? Number(m.attributes.index) : null))
         .filter((i) => i !== null)
@@ -560,7 +586,6 @@ describe("TelemetryClient - metric methods", () => {
     it("should maintain metric isolation between different types", () => {
       const { client, capturedMetrics } = createTestClient();
 
-      // Same name for different metric types
       const counter = client.counter("metric_name");
       const updown = client.updown("metric_name");
       const histogram = client.histogram("metric_name");

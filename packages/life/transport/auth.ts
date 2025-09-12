@@ -1,22 +1,16 @@
-import type { serverTransportProviders } from "./server.js";
+import type * as op from "@/shared/operation";
+import type { nodeTransportProviders } from "./client/node";
+import { getToken } from "./providers/livekit/auth";
 
-export type GetTokenFunction<ProviderId extends keyof typeof serverTransportProviders> = (
-  config: ConstructorParameters<(typeof serverTransportProviders)[ProviderId]>[0],
+export type GetTokenFunction<ProviderId extends keyof typeof nodeTransportProviders> = (
+  config: ConstructorParameters<(typeof nodeTransportProviders)[ProviderId]>[0],
   roomName: string,
   participantId: string,
-) => Promise<string>;
+) => Promise<op.OperationResult<string>>;
 
-export const getToken = async <ProviderId extends keyof typeof serverTransportProviders>(
-  provider: ProviderId,
-  config: ConstructorParameters<(typeof serverTransportProviders)[ProviderId]>[0],
-  roomName: string,
-  participantId: string,
-) => {
-  let getTokenFunction: GetTokenFunction<ProviderId>;
-  if (provider === "livekit")
-    getTokenFunction = (await import("./providers/livekit/auth.js")).getToken;
-  // else if (provider === "daily")
-  //   getTokenFunction = (await import("./providers/daily/auth.js")).getToken;
-  else throw new Error(`Invalid transport provider: ${config.provider}`);
-  return getTokenFunction(config, roomName, participantId);
-};
+export const transportProviderGetToken = {
+  livekit: getToken,
+} as const satisfies Record<
+  keyof typeof nodeTransportProviders,
+  GetTokenFunction<keyof typeof nodeTransportProviders>
+>;

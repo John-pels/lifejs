@@ -1,6 +1,8 @@
 import type { WritableAtom } from "nanostores";
 import type z from "zod";
-import type { RPCResponse } from "@/transport/rpc";
+import type { Config } from "@/shared/config";
+import type * as op from "@/shared/operation";
+import type { RPCResponse } from "@/transport/client/rpc";
 import type {
   PluginContext,
   PluginContextDefinition,
@@ -21,29 +23,33 @@ export type PluginClientDependencyDefinition = Pick<
 export type PluginClientDependenciesDefinition = Record<string, PluginClientDependencyDefinition>;
 export type PluginClientDependencies<Definition extends PluginClientDependenciesDefinition> = {
   // @ts-expect-error
-  [K in keyof Definition]: PluginClientInstance<Definition[K]>;
+  [K in keyof Definition]: op.ToPublic<PluginClientInstance<Definition[K]>>;
 };
 
 // - Config
-export type PluginClientConfigDefinition = z.AnyZodObject;
+export type PluginClientConfigDefinition = Config<z.AnyZodObject>;
 
 export type PluginClientConfig<
   Schema extends PluginClientConfigDefinition,
   T extends "input" | "output",
-> = T extends "input" ? z.input<Schema> : z.output<Schema>;
+> = T extends "input" ? z.input<Schema["schema"]> : z.output<Schema["schema"]>;
 
 // - Class
 export type PluginClientClassDefinition = <
-  _ServerConfig extends z.output<PluginDefinition["config"]>,
-  _ClientConfig extends z.output<PluginClientDefinition["config"]>,
-  // biome-ignore lint/suspicious/noExplicitAny: fine for now
+  _ServerConfig extends z.output<PluginDefinition["config"]["schema"]>,
+  _ClientConfig extends z.output<PluginClientDefinition["config"]["schema"]>,
+  // biome-ignore lint/suspicious/noExplicitAny: on purpose
 >() => any;
 
 export type PluginClientClassDefinitionInput<
   ServerDefinition extends PluginDefinition = PluginDefinition,
   ClientDefinition extends PluginClientDefinition = PluginClientDefinition,
-  ServerConfig extends z.output<ServerDefinition["config"]> = z.output<ServerDefinition["config"]>,
-  ClientConfig extends z.output<ClientDefinition["config"]> = z.output<ClientDefinition["config"]>,
+  ServerConfig extends z.output<ServerDefinition["config"]["schema"]> = z.output<
+    ServerDefinition["config"]["schema"]
+  >,
+  ClientConfig extends z.output<ClientDefinition["config"]["schema"]> = z.output<
+    ClientDefinition["config"]["schema"]
+  >,
 > = (
   $Types: {
     ServerDefinition: ServerDefinition;
@@ -63,7 +69,7 @@ export type PluginClientAtomsDefinition<
 > = (params: {
   config: PluginClientConfig<ClientDefinition["config"], "output">;
   dependencies: PluginClientDependencies<ClientDefinition["dependencies"]>;
-  server: PluginClientServer<ClientDefinition["$serverDef"]>;
+  server: PluginClientServer<ClientDefinition["$serverDef"], "public">;
 }) => Record<string, WritableAtom | unknown>;
 
 export type PluginClientAtoms<Definition extends PluginClientAtomsDefinition> =
@@ -74,7 +80,9 @@ export type PluginClientEventsHandler<EventsDef extends PluginEventsDefinition> 
   PluginEventsHandler<EventsDef>,
   "emit"
 > & {
-  emit: (event: PluginEvent<EventsDef, "input">) => Promise<RPCResponse<string>>;
+  emit: (
+    event: PluginEvent<EventsDef, "input">,
+  ) => Promise<op.OperationResult<RPCResponse<string>>>;
 };
 
 // - Context
@@ -85,15 +93,24 @@ export type PluginClientContextHandler<
 // - Methods
 export type PluginClientMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
-    input: z.infer<MethodsDefinition[K]["schema"]["input"]>
-  ) => Promise<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["output"]>>>;
+    input: z.infer<MethodsDefinition[K]["schema"]["input"]>,
+  ) => Promise<op.OperationResult<RPCResponse<z.infer<MethodsDefinition[K]["schema"]["output"]>>>>;
 };
 
 // - Server
-export type PluginClientServer<ServerDefinition extends PluginDefinition> = {
-  methods: PluginClientMethods<ServerDefinition["methods"]>;
-  context: PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>;
-  events: PluginClientEventsHandler<ServerDefinition["events"]>;
+export type PluginClientServer<
+  ServerDefinition extends PluginDefinition,
+  Visibility extends "internal" | "public",
+> = {
+  methods: Visibility extends "internal"
+    ? PluginClientMethods<ServerDefinition["methods"]>
+    : op.ToPublic<PluginClientMethods<ServerDefinition["methods"]>>;
+  context: Visibility extends "internal"
+    ? PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>
+    : op.ToPublic<PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>>;
+  events: Visibility extends "internal"
+    ? PluginClientEventsHandler<ServerDefinition["events"]>
+    : op.ToPublic<PluginClientEventsHandler<ServerDefinition["events"]>>;
 };
 
 // - Definition

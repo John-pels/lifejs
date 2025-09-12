@@ -1,11 +1,9 @@
 import { randomBytes } from "node:crypto";
 import chalk from "chalk";
-import { cliTelemetry } from "@/cli/telemetry";
-import { formatTelemetryLog } from "@/cli/utils/format-telemetry-log";
 import { generateHeader } from "@/cli/utils/header";
 import { loadEnvVars } from "@/cli/utils/load-env-vars";
 import { LifeServer } from "@/server";
-import { Telemetry } from "@/telemetry/client";
+import type { TelemetryClient } from "@/telemetry/base";
 
 export interface StartOptions {
   root: string;
@@ -16,57 +14,38 @@ export interface StartOptions {
   token?: string;
 }
 
-export const executeStart = async (options: StartOptions) => {
-  // Print header
-  console.log(await generateHeader("Server"));
+const errorMessage = "An error occurred while starting the server.";
 
-  // Load environment vars
-  loadEnvVars(options.root);
+export const executeStart = async (telemetry: TelemetryClient, options: StartOptions) => {
+  try {
+    // Print header
+    console.log(await generateHeader("Server"));
 
-  // Retrieve server token from options or environment variable
-  const serverToken = options.token ?? process.env.LIFE_SERVER_TOKEN;
-  if (!serverToken) {
-    cliTelemetry.log.error({
-      message: `Server token is required. Please provide it via --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
+    // Load environment vars
+    loadEnvVars(options.root);
+
+    // Retrieve server token from options or environment variable
+    const serverToken = options.token ?? process.env.LIFE_SERVER_TOKEN;
+    if (!serverToken) {
+      telemetry.log.error({
+        message: `Server token is required. Please provide it via --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
+      });
+      return;
+    }
+
+    // Initialize server
+    const server = new LifeServer({
+      projectDirectory: options.root,
+      token: serverToken,
+      watch: options.watch,
+      host: options.host,
+      port: options.port,
     });
-    return;
+
+    // Start server
+    const [errStart] = await server.start();
+    if (errStart) telemetry.log.error({ message: errorMessage, error: errStart });
+  } catch (error) {
+    telemetry.log.error({ message: errorMessage, error });
   }
-
-  // Initialize server
-  const server = new LifeServer({
-    projectDirectory: options.root,
-    token: serverToken,
-    watch: options.watch,
-    host: options.host,
-    port: options.port,
-  });
-
-  // Retrieve log level
-  const logLevel = Telemetry.parseLogLevel(
-    options.debug ? "debug" : (process.env.LOG_LEVEL ?? "info"),
-  );
-
-  // Subscribe to telemetry logs and print them after formatting
-  server.telemetry.registerConsumer({
-    async start(queue) {
-      for await (const item of queue) {
-        if (item.type === "log") {
-          // Ignore logs lower than the requested log level
-          if (Telemetry.logLevelPriority(item.level) < Telemetry.logLevelPriority(logLevel))
-            continue;
-
-          // Format and print the log
-          try {
-            console.log(await formatTelemetryLog(item));
-          } catch {
-            // Fallback to raw output if formatting fails
-            console.log(item.message);
-          }
-        }
-      }
-    },
-  });
-
-  // Start server
-  await server.start();
 };

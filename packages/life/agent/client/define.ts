@@ -72,12 +72,14 @@ export class AgentClientBuilder<
     plugin: PluginClientDependencyDefinition,
     plugins: PluginClientDependenciesDefinition,
   ) {
-    return <const C extends z.input<PluginClientDefinition["config"]>>(config: C): unknown => {
+    return <const C extends z.input<PluginClientDefinition["config"]["schema"]>>(
+      config: C,
+    ): unknown => {
       const builder = new AgentClientBuilder({
         ...this._definition,
         pluginConfigs: {
           ...((this._definition as Definition).pluginConfigs ?? {}),
-          [plugin.name]: plugin.config.parse(config),
+          [plugin.name]: plugin.config.schema.parse(config),
         },
       });
       return this.#withPluginsMethods(builder, plugins) as Omit<

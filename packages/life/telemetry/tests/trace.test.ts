@@ -1,33 +1,20 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { AsyncQueue } from "@/shared/async-queue";
-import { Telemetry } from "../client";
+import { createTelemetryClient } from "../node";
 import type { TelemetryConsumer, TelemetryLog, TelemetrySignal, TelemetrySpan } from "../types";
 
 describe("TelemetryClient - trace() and traceSync()", () => {
-  // Helper to create a test telemetry client with a mock consumer
   function createTestClient() {
-    const client = new Telemetry({
-      resource: {
-        name: "test",
-        version: "1.0.0",
-        environment: "testing",
-        isCi: false,
-        nodeVersion: process.version,
-        osName: "test",
-        osVersion: "1.0",
-        cpuCount: 1,
-        cpuArchitecture: "x64",
-      },
-      scope: ["test"],
+    const client = createTelemetryClient("cli", {
+      command: "dev",
+      args: [],
     });
 
     const capturedSpans: TelemetrySpan[] = [];
     const capturedLogs: TelemetryLog[] = [];
 
-    // Create a mock consumer that captures signals
     const mockConsumer: TelemetryConsumer = {
       start: mock((queue: AsyncQueue<TelemetrySignal>) => {
-        // Override the queue push to capture signals
         const originalPush = queue.push.bind(queue);
         queue.push = mock((signal: TelemetrySignal) => {
           if (signal.type === "span") {
@@ -51,12 +38,10 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const { client, capturedSpans } = createTestClient();
 
       using span = (await client.trace("test-span")).start();
-      expect(client.getSpan()?.name).toBe("test-span");
+      expect(client.getCurrentSpan()?.getData().name).toBe("test-span");
 
-      // Span should end when using block exits
-      expect(capturedSpans).toHaveLength(0); // Not ended yet
+      expect(capturedSpans).toHaveLength(0);
 
-      // Force end by exiting the using block
       span.end();
       expect(capturedSpans).toHaveLength(1);
       const firstSpan = capturedSpans[0];
@@ -75,7 +60,7 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       using span5 = (await client.trace("span5")).start();
 
       // Verify parent-child relationships
-      const currentSpan = client.getSpan();
+      const currentSpan = client.getCurrentSpan()?.getData();
       expect(currentSpan?.name).toBe("span5");
       expect(currentSpan?.parentSpanId).toBeDefined();
 
@@ -156,17 +141,17 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       using span2 = builder2.start();
 
       // Verify current hierarchy
-      expect(client.getSpan()?.name).toBe("span2");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span2");
 
       span2.end();
 
       // After span2 ends, context should restore to span1
-      expect(client.getSpan()?.name).toBe("span1");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span1");
 
       using span4 = builder4.start();
 
       // span4 should be child of span1 (current context)
-      expect(client.getSpan()?.name).toBe("span4");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span4");
 
       span4.end();
       span1.end();
@@ -192,31 +177,31 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       // Test sync block
       {
         using _span1 = (await client.trace("span1")).start();
-        expect(client.getSpan()?.name).toBe("span1");
+        expect(client.getCurrentSpan()?.getData().name).toBe("span1");
       }
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
 
       // Test async block
       await (async () => {
         using _span2 = (await client.trace("span2")).start();
-        expect(client.getSpan()?.name).toBe("span2");
+        expect(client.getCurrentSpan()?.getData().name).toBe("span2");
       })();
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
 
       // Test early end
       using span3 = (await client.trace("span3")).start();
-      expect(client.getSpan()?.name).toBe("span3");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span3");
       span3.end();
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
 
       // Test nested early end
       using span4 = (await client.trace("span4")).start();
       using span5 = (await client.trace("span5")).start();
-      expect(client.getSpan()?.name).toBe("span5");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span5");
       span5.end();
-      expect(client.getSpan()?.name).toBe("span4");
+      expect(client.getCurrentSpan()?.getData().name).toBe("span4");
       span4.end();
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
 
     it("should handle attributes correctly", async () => {
@@ -322,10 +307,10 @@ describe("TelemetryClient - trace() and traceSync()", () => {
 
       {
         using _span = (await client.trace("test")).start();
-        expect(client.getSpan()?.name).toBe("test");
+        expect(client.getCurrentSpan()?.getData().name).toBe("test");
       } // Symbol.dispose should be called here
 
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
       expect(capturedSpans).toHaveLength(1);
       expect(capturedSpans[0]?.endTimestamp).toBeDefined();
     });
@@ -335,26 +320,26 @@ describe("TelemetryClient - trace() and traceSync()", () => {
 
       // Nested async/await with context preservation
       using span1 = (await client.trace("outer")).start();
-      expect(client.getSpan()?.name).toBe("outer");
+      expect(client.getCurrentSpan()?.getData().name).toBe("outer");
 
       await Promise.all([
         (async () => {
           using _span2 = (await client.trace("inner1")).start();
-          expect(client.getSpan()?.name).toBe("inner1");
+          expect(client.getCurrentSpan()?.getData().name).toBe("inner1");
           await new Promise((resolve) => setTimeout(resolve, 10));
-          expect(client.getSpan()?.name).toBe("inner1");
+          expect(client.getCurrentSpan()?.getData().name).toBe("inner1");
         })(),
         (async () => {
           using _span3 = (await client.trace("inner2")).start();
-          expect(client.getSpan()?.name).toBe("inner2");
+          expect(client.getCurrentSpan()?.getData().name).toBe("inner2");
           await new Promise((resolve) => setTimeout(resolve, 5));
-          expect(client.getSpan()?.name).toBe("inner2");
+          expect(client.getCurrentSpan()?.getData().name).toBe("inner2");
         })(),
       ]);
 
-      expect(client.getSpan()?.name).toBe("outer");
+      expect(client.getCurrentSpan()?.getData().name).toBe("outer");
       span1.end();
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
   });
 
@@ -382,18 +367,18 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const { client, capturedSpans } = createTestClient();
 
       client.traceSync("outer", () => {
-        expect(client.getSpan()?.name).toBe("outer");
+        expect(client.getCurrentSpan()?.getData().name).toBe("outer");
 
         const inner = client.traceSync("inner", () => {
-          expect(client.getSpan()?.name).toBe("inner");
+          expect(client.getCurrentSpan()?.getData().name).toBe("inner");
           return "nested";
         });
 
         expect(inner).toBe("nested");
-        expect(client.getSpan()?.name).toBe("outer");
+        expect(client.getCurrentSpan()?.getData().name).toBe("outer");
       });
 
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
       expect(capturedSpans).toHaveLength(2);
 
       const innerSpan = capturedSpans.find((s) => s.name === "inner");
@@ -413,16 +398,16 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       // Span should still be ended even on error
       expect(capturedSpans).toHaveLength(1);
       expect(capturedSpans[0]?.endTimestamp).toBeDefined();
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
 
     it("should support early end in traceSync", () => {
       const { client, capturedSpans } = createTestClient();
 
       client.traceSync("test", ({ end }) => {
-        expect(client.getSpan()?.name).toBe("test");
+        expect(client.getCurrentSpan()?.getData().name).toBe("test");
         end();
-        expect(client.getSpan()).toBeUndefined();
+        expect(client.getCurrentSpan()).toBeUndefined();
 
         // Can still do work after end
         return "done";
@@ -449,23 +434,23 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       let asyncContextName: string | undefined;
 
       client.traceSync("sync", () => {
-        expect(client.getSpan()?.name).toBe("sync");
+        expect(client.getCurrentSpan()?.getData().name).toBe("sync");
 
         // Spawn async operation
         (async () => {
           using _span = (await client.trace("async-child")).start();
-          asyncContextName = client.getSpan()?.name;
+          asyncContextName = client.getCurrentSpan()?.getData().name;
         })();
 
         // Sync context should remain
-        expect(client.getSpan()?.name).toBe("sync");
+        expect(client.getCurrentSpan()?.getData().name).toBe("sync");
       });
 
       // Wait for async operation
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(asyncContextName).toBe("async-child");
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
 
     it("should preserve return type", () => {
@@ -489,10 +474,10 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       using asyncSpan = (await client.trace("async-outer")).start();
 
       client.traceSync("sync-inner", () => {
-        expect(client.getSpan()?.name).toBe("sync-inner");
+        expect(client.getCurrentSpan()?.getData().name).toBe("sync-inner");
       });
 
-      expect(client.getSpan()?.name).toBe("async-outer");
+      expect(client.getCurrentSpan()?.getData().name).toBe("async-outer");
 
       asyncSpan.end();
 
@@ -507,12 +492,12 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       using _span = (await client.trace("async")).start();
 
       const syncResult = client.traceSync("sync", () => {
-        expect(client.getSpan()?.name).toBe("sync");
-        return client.getSpan()?.parentSpanId;
+        expect(client.getCurrentSpan()?.getData().name).toBe("sync");
+        return client.getCurrentSpan()?.getData().parentSpanId;
       });
 
       expect(syncResult).toBeDefined();
-      expect(client.getSpan()?.name).toBe("async");
+      expect(client.getCurrentSpan()?.getData().name).toBe("async");
     });
   });
 
@@ -527,13 +512,12 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       }
 
       expect(capturedSpans).toHaveLength(100);
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
 
     it("should handle deeply nested spans", async () => {
       const { client, capturedSpans } = createTestClient();
       const depth = 50;
-      // biome-ignore lint/suspicious/noExplicitAny: reason
       const handles: any[] = [];
 
       // Create deeply nested spans
@@ -549,7 +533,7 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       }
 
       expect(capturedSpans).toHaveLength(depth);
-      expect(client.getSpan()).toBeUndefined();
+      expect(client.getCurrentSpan()).toBeUndefined();
     });
 
     it("should handle concurrent trace() calls", async () => {
@@ -566,7 +550,7 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const spans = builders.map((b) => b.start());
 
       // They should all exist
-      expect(client.getSpan()?.name).toBe("span3"); // Last started
+      expect(client.getCurrentSpan()?.getData().name).toBe("span3"); // Last started
 
       // Clean up
       for (const span of spans) {
@@ -578,8 +562,8 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const { client, capturedSpans } = createTestClient();
 
       using root = (await client.trace("root")).start();
-      const rootSpan = client.getSpan();
-      const traceId = rootSpan?.parentTraceId;
+      const rootSpan = client.getCurrentSpan()?.getData();
+      const traceId = rootSpan?.traceId;
 
       using child1 = (await client.trace("child1")).start();
       using child2 = (await client.trace("child2")).start();
@@ -589,7 +573,7 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       root.end();
 
       // All spans should share the same trace ID
-      expect(capturedSpans.every((s) => s.parentTraceId === traceId)).toBe(true);
+      expect(capturedSpans.every((s) => s.traceId === traceId)).toBe(true);
     });
 
     it("should handle span ending after parent already ended gracefully", async () => {
@@ -639,7 +623,6 @@ describe("TelemetryClient - trace() and traceSync()", () => {
     it("should handle circular references in attributes", async () => {
       const { client, capturedSpans } = createTestClient();
 
-      // biome-ignore lint/suspicious/noExplicitAny: reason
       const circular: any = { a: 1 };
       circular.self = circular;
 
@@ -673,8 +656,8 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const promise = new Promise<string>((resolve) => {
         setTimeout(() => {
           // Context should still be span1
-          expect(client.getSpan()?.name).toBe("span1");
-          resolve(client.getSpan()?.name || "none");
+          expect(client.getCurrentSpan()?.getData().name).toBe("span1");
+          resolve(client.getCurrentSpan()?.getData().name || "none");
         }, 10);
       });
 
@@ -687,7 +670,6 @@ describe("TelemetryClient - trace() and traceSync()", () => {
       const { client, capturedSpans } = createTestClient();
 
       const { start } = await client.trace("test");
-      // biome-ignore lint/suspicious/noExplicitAny: reason
       let spanHandle: any;
 
       // Start span in one async context

@@ -1,33 +1,20 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { AsyncQueue } from "@/shared/async-queue";
 import { ns } from "@/shared/nanoseconds";
-import { Telemetry } from "../client";
+import { createTelemetryClient } from "../node";
 import type { TelemetryConsumer, TelemetryLog, TelemetrySignal } from "../types";
 
 describe("TelemetryClient - log methods", () => {
-  // Helper to create a test telemetry client with a mock consumer
   function createTestClient() {
-    const client = new Telemetry({
-      resource: {
-        name: "test",
-        version: "1.0.0",
-        environment: "testing",
-        isCi: false,
-        nodeVersion: process.version,
-        osName: "test",
-        osVersion: "1.0",
-        cpuCount: 1,
-        cpuArchitecture: "x64",
-      },
-      scope: ["test"],
+    const client = createTelemetryClient("cli", {
+      command: "dev",
+      args: [],
     });
 
     const capturedLogs: TelemetryLog[] = [];
 
-    // Create a mock consumer that captures logs
     const mockConsumer: TelemetryConsumer = {
       start: mock((queue: AsyncQueue<TelemetrySignal>) => {
-        // Override the queue push to capture signals
         const originalPush = queue.push.bind(queue);
         queue.push = mock((signal: TelemetrySignal) => {
           if (signal.type === "log") {
@@ -130,8 +117,8 @@ describe("TelemetryClient - log methods", () => {
 
       const log = capturedLogs[0];
       expect(log?.id).toBeDefined();
-      // biome-ignore lint/performance/useTopLevelRegex: reason
-      expect(log?.id).toMatch(/^[0-9a-f]{32}$/); // 16 bytes = 32 hex chars
+      // biome-ignore lint/performance/useTopLevelRegex: test-specific regex
+      expect(log?.id).toMatch(/^[0-9a-f]{32}$/);
       expect(log?.timestamp).toBeGreaterThanOrEqual(beforeTime);
       expect(log?.timestamp).toBeLessThanOrEqual(afterTime);
     });
@@ -142,16 +129,16 @@ describe("TelemetryClient - log methods", () => {
       client.log.info({ message: "Test" });
 
       const log = capturedLogs[0];
-      expect(log?.resource.name).toBe("test");
-      expect(log?.resource.version).toBe("1.0.0");
-      expect(log?.scope).toEqual(["test"]);
+      expect(log?.resource.platform).toBe("node");
+      expect(log?.resource.environment).toBeDefined();
+      expect(log?.scope).toBe("cli");
     });
 
     it("should include global attributes", () => {
       const { client, capturedLogs } = createTestClient();
 
-      client.setGlobalAttribute("service", "api");
-      client.setGlobalAttribute("region", "us-west-2");
+      client.setAttribute("service", "api");
+      client.setAttribute("region", "us-west-2");
 
       client.log.info({ message: "Test", attributes: { requestId: "abc123" } });
 
@@ -183,8 +170,8 @@ describe("TelemetryClient - log methods", () => {
       client.log.info({ message: "Test" });
 
       const log = capturedLogs[0];
-      expect(log?.parentTraceId).toBeUndefined();
-      expect(log?.parentSpanId).toBeUndefined();
+      expect(log?.traceId).toBeUndefined();
+      expect(log?.spanId).toBeUndefined();
     });
   });
 
@@ -203,30 +190,32 @@ describe("TelemetryClient - log methods", () => {
       expect(capturedLogs).toHaveLength(5);
 
       // Access the span to check logs are attached
-      const currentSpan = client.getSpan();
-      expect(currentSpan?.logs).toHaveLength(5);
-      expect(currentSpan?.logs[0]?.message).toBe("Operation started");
-      expect(currentSpan?.logs[1]?.message).toBe("Debug info");
-      expect(currentSpan?.logs[2]?.message).toBe("Warning during operation");
-      expect(currentSpan?.logs[3]?.message).toBe("Operation error");
-      expect(currentSpan?.logs[4]?.message).toBe("Fatal error");
+      const currentSpanHandle = client.getCurrentSpan();
+      const spanData = currentSpanHandle?.getData();
+      expect(spanData?.logs).toHaveLength(5);
+      expect(spanData?.logs[0]?.message).toBe("Operation started");
+      expect(spanData?.logs[1]?.message).toBe("Debug info");
+      expect(spanData?.logs[2]?.message).toBe("Warning during operation");
+      expect(spanData?.logs[3]?.message).toBe("Operation error");
+      expect(spanData?.logs[4]?.message).toBe("Fatal error");
     });
 
     it("should include parent span context in logs", async () => {
       const { client } = createTestClient();
 
       using span = (await client.trace("test-span")).start();
-      const currentSpan = client.getSpan();
+      const currentSpanHandle = client.getCurrentSpan();
 
       span.log.info({ message: "Test log" });
 
-      const firstLog = currentSpan?.logs[0];
+      const spanData = currentSpanHandle?.getData();
+      const firstLog = spanData?.logs[0];
       expect(firstLog).toBeDefined();
       if (firstLog && "parentTraceId" in firstLog) {
-        expect(firstLog.parentTraceId).toBe(currentSpan?.parentTraceId);
+        expect(firstLog.parentTraceId).toBe(spanData?.traceId);
       }
       if (firstLog && "parentSpanId" in firstLog) {
-        expect(firstLog.parentSpanId).toBe(currentSpan?.id);
+        expect(firstLog.parentSpanId).toBe(spanData?.id);
       }
     });
 
@@ -239,11 +228,12 @@ describe("TelemetryClient - log methods", () => {
       using child = (await client.trace("child")).start();
       child.log.info({ message: "Child log" });
 
-      const parentSpan = client.getSpan();
+      const currentSpanHandle = client.getCurrentSpan();
+      const spanData = currentSpanHandle?.getData();
       // Current span should be child
-      expect(parentSpan?.name).toBe("child");
-      expect(parentSpan?.logs).toHaveLength(1);
-      expect(parentSpan?.logs[0]?.message).toBe("Child log");
+      expect(spanData?.name).toBe("child");
+      expect(spanData?.logs).toHaveLength(1);
+      expect(spanData?.logs[0]?.message).toBe("Child log");
     });
 
     it("should prevent logging after span ends", async () => {
@@ -290,7 +280,7 @@ describe("TelemetryClient - log methods", () => {
       const { client, capturedLogs } = createTestClient();
 
       const errorWithoutStack = new Error("No stack");
-      // biome-ignore lint/performance/noDelete: Testing edge case
+      // biome-ignore lint/performance/noDelete: testing edge case
       delete errorWithoutStack.stack;
 
       client.log.error({ error: errorWithoutStack });
@@ -298,7 +288,6 @@ describe("TelemetryClient - log methods", () => {
       expect(capturedLogs).toHaveLength(1);
       expect(capturedLogs[0]?.message).toBe("No stack");
       expect(capturedLogs[0]?.stack).toBeDefined();
-      // Should have a fallback stack from new Error(".")
     });
 
     it("should handle logs from multiple consumers", () => {
@@ -322,7 +311,6 @@ describe("TelemetryClient - log methods", () => {
 
       client.log.info({ message: "Test" });
 
-      // Both consumers should receive the log
       expect(capturedLogs).toHaveLength(1);
       expect(secondCapturedLogs).toHaveLength(1);
       expect(capturedLogs[0]?.message).toBe("Test");
@@ -337,10 +325,8 @@ describe("TelemetryClient - log methods", () => {
       client.log.info({ message: "Before unregister" });
       expect(capturedLogs).toHaveLength(1);
 
-      // Unregister the consumer
       unregister();
 
-      // This log should not be captured
       client.log.info({ message: "After unregister" });
       expect(capturedLogs).toHaveLength(1);
     });
@@ -378,7 +364,6 @@ describe("TelemetryClient - log methods", () => {
       });
 
       expect(capturedLogs).toHaveLength(1);
-      // Should not throw - serialization should handle BigInt
     });
     it("should handle null and undefined values in attributes", () => {
       const { client, capturedLogs } = createTestClient();
@@ -402,11 +387,9 @@ describe("TelemetryClient - log methods", () => {
     it("should handle circular references in attributes", () => {
       const { client, capturedLogs } = createTestClient();
 
-      // biome-ignore lint/suspicious/noExplicitAny: Testing circular references
       const circular: any = { a: 1 };
       circular.self = circular;
 
-      // Should not throw
       client.log.info({
         message: "Test",
         attributes: { circular },
@@ -436,21 +419,15 @@ describe("TelemetryClient - log methods", () => {
     it("should handle missing message and error", () => {
       const { client, capturedLogs } = createTestClient();
 
-      // Log with no message or error
-      // biome-ignore lint/suspicious/noExplicitAny: Testing invalid input
       client.log.info({} as any);
 
-      // The actual implementation logs the error message itself first
-      // Then a "No message provided." log
       expect(capturedLogs).toHaveLength(2);
 
-      // First log is the error about missing message
       expect(capturedLogs[0]?.message).toBe(
         "No message provided in log input or error. This is unexpected and must be fixed.",
       );
       expect(capturedLogs[0]?.level).toBe("error");
 
-      // Second log is the actual info log with default message
       expect(capturedLogs[1]?.message).toBe("No message provided.");
       expect(capturedLogs[1]?.level).toBe("info");
     });
@@ -458,7 +435,6 @@ describe("TelemetryClient - log methods", () => {
     it("should extract message from error when no message provided", () => {
       const { client, capturedLogs } = createTestClient();
 
-      // biome-ignore lint/suspicious/noExplicitAny: Testing missing message field
       client.log.error({ error: new Error("Error message only") } as any);
 
       expect(capturedLogs).toHaveLength(1);
@@ -470,7 +446,6 @@ describe("TelemetryClient - log methods", () => {
 
       client.log.error({
         message: "String error",
-        // biome-ignore lint/suspicious/noExplicitAny: Testing non-Error object
         error: "This is a string error" as any,
       });
 
@@ -489,7 +464,6 @@ describe("TelemetryClient - log methods", () => {
       await Promise.all(promises);
 
       expect(capturedLogs).toHaveLength(100);
-      // Verify all logs were captured
       const messages = capturedLogs.map((l) => l.message).sort();
       expect(messages[0]).toBe("Log 0");
       expect(messages[99]).toBe("Log 99");
@@ -503,17 +477,19 @@ describe("TelemetryClient - log methods", () => {
           using span = (await client.trace("op1")).start();
           span.log.info({ message: "Op1 log" });
           await new Promise((resolve) => setTimeout(resolve, 10));
-          const currentSpan = client.getSpan();
-          expect(currentSpan?.name).toBe("op1");
-          expect(currentSpan?.logs[0]?.message).toBe("Op1 log");
+          const currentSpanHandle = client.getCurrentSpan();
+          const spanData = currentSpanHandle?.getData();
+          expect(spanData?.name).toBe("op1");
+          expect(spanData?.logs[0]?.message).toBe("Op1 log");
         })(),
         (async () => {
           using span = (await client.trace("op2")).start();
           span.log.info({ message: "Op2 log" });
           await new Promise((resolve) => setTimeout(resolve, 5));
-          const currentSpan = client.getSpan();
-          expect(currentSpan?.name).toBe("op2");
-          expect(currentSpan?.logs[0]?.message).toBe("Op2 log");
+          const currentSpanHandle = client.getCurrentSpan();
+          const spanData = currentSpanHandle?.getData();
+          expect(spanData?.name).toBe("op2");
+          expect(spanData?.logs[0]?.message).toBe("Op2 log");
         })(),
       ]);
     });
@@ -527,10 +503,11 @@ describe("TelemetryClient - log methods", () => {
         span.log.info({ message: `Log ${i}` });
       }
 
-      const currentSpan = client.getSpan();
-      expect(currentSpan?.logs).toHaveLength(10);
+      const currentSpanHandle = client.getCurrentSpan();
+      const spanData = currentSpanHandle?.getData();
+      expect(spanData?.logs).toHaveLength(10);
       for (let i = 0; i < 10; i++) {
-        expect(currentSpan?.logs[i]?.message).toBe(`Log ${i}`);
+        expect(spanData?.logs[i]?.message).toBe(`Log ${i}`);
       }
     });
 
@@ -550,37 +527,86 @@ describe("TelemetryClient - log methods", () => {
       });
 
       expect(capturedLogs).toHaveLength(1);
-      // Should not throw - serialization should handle these gracefully
     });
 
-    it("should handle logs in child telemetry clients", () => {
-      const { client, capturedLogs } = createTestClient();
+    it("should handle logs from different scope clients", () => {
+      const client1 = createTelemetryClient("cli", {
+        command: "dev",
+        args: [],
+      });
+      const client2 = createTelemetryClient("server", {
+        watch: true,
+      });
 
-      const childClient = client.child("child-scope");
-      childClient.log.info({ message: "From child" });
+      const capturedLogs: TelemetryLog[] = [];
+      const mockConsumer: TelemetryConsumer = {
+        start: mock((queue: AsyncQueue<TelemetrySignal>) => {
+          const originalPush = queue.push.bind(queue);
+          queue.push = mock((signal: TelemetrySignal) => {
+            if (signal.type === "log") {
+              capturedLogs.push(signal as TelemetryLog);
+            }
+            return originalPush(signal);
+          });
+        }),
+        isProcessing: mock(() => false),
+      };
 
-      expect(capturedLogs).toHaveLength(1);
-      expect(capturedLogs[0]?.scope).toEqual(["test", "child-scope"]);
-      expect(capturedLogs[0]?.message).toBe("From child");
+      const unregister1 = client1.registerConsumer(mockConsumer);
+      const unregister2 = client2.registerConsumer(mockConsumer);
+
+      client1.log.info({ message: "From CLI" });
+      client2.log.info({ message: "From Server" });
+
+      expect(capturedLogs).toHaveLength(2);
+      expect(capturedLogs[0]?.scope).toBe("cli");
+      expect(capturedLogs[0]?.message).toBe("From CLI");
+      expect(capturedLogs[1]?.scope).toBe("server");
+      expect(capturedLogs[1]?.message).toBe("From Server");
+
+      unregister1();
+      unregister2();
     });
 
-    it("should inherit global attributes in child clients", () => {
-      const { client, capturedLogs } = createTestClient();
+    it("should handle global attributes independently per client", () => {
+      const client1 = createTelemetryClient("cli", {
+        command: "dev",
+        args: [],
+      });
+      const client2 = createTelemetryClient("server", {
+        watch: false,
+      });
 
-      client.setGlobalAttribute("parentAttr", "parentValue");
+      const capturedLogs: TelemetryLog[] = [];
+      const mockConsumer: TelemetryConsumer = {
+        start: mock((queue: AsyncQueue<TelemetrySignal>) => {
+          const originalPush = queue.push.bind(queue);
+          queue.push = mock((signal: TelemetrySignal) => {
+            if (signal.type === "log") {
+              capturedLogs.push(signal as TelemetryLog);
+            }
+            return originalPush(signal);
+          });
+        }),
+        isProcessing: mock(() => false),
+      };
 
-      const childClient = client.child("child");
-      childClient.setGlobalAttribute("childAttr", "childValue");
-      childClient.log.info({ message: "Test" });
+      client1.registerConsumer(mockConsumer);
+      client2.registerConsumer(mockConsumer);
 
-      const log = capturedLogs[0];
-      expect(log?.attributes?.parentAttr).toBeDefined();
-      expect(log?.attributes?.childAttr).toBeDefined();
+      client1.setAttribute("client1Attr", "value1");
+      client2.setAttribute("client2Attr", "value2");
 
-      if (log?.attributes?.parentAttr && log?.attributes?.childAttr) {
-        expect(log.attributes.parentAttr).toBe("parentValue");
-        expect(log.attributes.childAttr).toBe("childValue");
-      }
+      client1.log.info({ message: "Test1" });
+      client2.log.info({ message: "Test2" });
+
+      const log1 = capturedLogs[0];
+      const log2 = capturedLogs[1];
+
+      expect(log1?.attributes?.client1Attr).toBe("value1");
+      expect(log1?.attributes?.client2Attr).toBeUndefined();
+      expect(log2?.attributes?.client2Attr).toBe("value2");
+      expect(log2?.attributes?.client1Attr).toBeUndefined();
     });
   });
 });

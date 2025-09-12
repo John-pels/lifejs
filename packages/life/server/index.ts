@@ -4,26 +4,28 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import chalk from "chalk";
 import chokidar, { type FSWatcher } from "chokidar";
-import { agentConfig } from "@/agent/config";
+import { agentClientConfig, agentServerConfig } from "@/agent/config";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { ns } from "@/shared/nanoseconds";
+import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import { ProcessStats } from "@/shared/process-stats";
-import { lifeTelemetry } from "@/telemetry/client";
-import { getToken } from "@/transport/auth";
+import type { TelemetryClient } from "@/telemetry/base";
+import { createTelemetryClient } from "@/telemetry/node";
+import { transportProviderGetToken } from "@/transport/auth";
 import packageJson from "../package.json" with { type: "json" };
 import { AgentProcess } from "./agent-process/parent";
-import { LifeServerApi } from "./api";
+import { LifeApi } from "./api";
 import { type ServerOptions, serverOptionsSchema } from "./options";
 
 const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
 
 export class LifeServer {
   options: ServerOptions<"output">;
-  telemetry = lifeTelemetry.child("server");
+  telemetry: TelemetryClient;
   watcher: FSWatcher | null = null;
-  api: LifeServerApi;
+  api: LifeApi;
   readonly #agentProcesses = new Map<string, AgentProcess>();
   readonly #processStats = new ProcessStats();
   readonly #fileHashes = new Map<string, string>();
@@ -31,262 +33,302 @@ export class LifeServer {
 
   constructor(options: ServerOptions<"input">) {
     this.options = serverOptionsSchema.parse(options);
-    this.api = new LifeServerApi(this);
+    this.api = new LifeApi(this);
+
+    this.telemetry = createTelemetryClient("server", {
+      watch: this.options.watch,
+    });
   }
 
   async start() {
-    // Telemetry
     using h0 = (await this.telemetry.trace("start()")).start();
-    h0.log.info({ message: "Starting server." });
-    h0.log.debug({ message: `Project directory: ${this.options.projectDirectory}` });
-    h0.log.debug({ message: `Watch: ${this.options.watch}` });
-    h0.log.debug({ message: `Host: ${this.options.host}` });
-    h0.log.debug({ message: `Port: ${this.options.port}` });
 
-    // 1. Ensure a valid build directory exists
-    if (!(await this.ensureBuildDirectory())) return;
+    try {
+      h0.log.info({ message: "Starting server." });
+      h0.log.debug({ message: `Project directory: ${this.options.projectDirectory}` });
+      h0.log.debug({ message: `Watch: ${this.options.watch}` });
+      h0.log.debug({ message: `Host: ${this.options.host}` });
+      h0.log.debug({ message: `Port: ${this.options.port}` });
 
-    // 2. Start the API
-    await this.api.start();
+      // 1. Ensure a valid build directory exists
+      const [errDir] = await this.ensureBuildDirectory();
+      if (errDir) return op.failure(errDir);
 
-    // 3. Start watching build directory if in watch mode
-    if (this.options.watch) {
-      await this.watchBuildDirectory();
+      // 2. Start the API
+      const [errApi] = await this.api.start();
+      if (errApi) return op.failure(errApi);
+      this.#startedAt = Date.now();
+
+      // 3. Start watching build directory if in watch mode
+      const [errWatch] = await this.watchBuildDirectory();
+      if (errWatch) return op.failure(errWatch);
+
+      // 4. Listen for SIGINT and SIGTERM to gracefully stop the server
+      const handleShutdown = async (signal: string) => {
+        console.log(""); // new line for readability
+        this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
+        await this.stop();
+      };
+      process.once("SIGINT", () => handleShutdown("SIGINT"));
+      process.once("SIGTERM", () => handleShutdown("SIGTERM"));
+
+      // Count the server starts
+      this.telemetry.counter("server_started").increment();
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
-
-    // 4. Listen for SIGINT and SIGTERM to gracefully stop the server
-    const handleShutdown = async (signal: string) => {
-      console.log(""); // new line for readability
-      this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
-      await this.stop();
-    };
-    process.once("SIGINT", () => handleShutdown("SIGINT"));
-    process.once("SIGTERM", () => handleShutdown("SIGTERM"));
-
-    // Set started at
-    this.#startedAt = Date.now();
-
-    // Telemetry
-    this.telemetry.counter("server_started").increment();
   }
 
   #stopStarted = false;
   async stop() {
-    if (this.#stopStarted) return;
-    this.#stopStarted = true;
+    try {
+      if (this.#stopStarted) return;
+      this.#stopStarted = true;
 
-    using h0 = (await this.telemetry.trace("stop()")).start();
-    h0.log.info({ message: "Stopping server." });
+      using h0 = (await this.telemetry.trace("stop()")).start();
+      h0.log.info({ message: "Stopping server." });
 
-    // Stop the API
-    await this.api.stop();
+      // Stop the API
+      const [errApi] = await this.api.stop();
+      if (errApi) return op.failure(errApi);
 
-    // Stop the watcher
-    this.watcher?.close();
-    this.watcher = null;
+      // Stop the watcher
+      await this.watcher?.close();
+      this.watcher = null;
 
-    // Stop the agent processes
-    await Promise.all(
-      Array.from(this.#agentProcesses.values()).map((process) =>
-        this.stopAgentProcess(process.id, process.sessionToken),
-      ),
-    );
+      // Stop the agent processes
+      const results = await Promise.all(
+        Array.from(this.#agentProcesses.values()).map((process) =>
+          this.stopAgentProcess(process.id, process.sessionToken),
+        ),
+      );
+      const err = results.find((result) => result[0])?.[0];
+      if (err) return op.failure(err);
 
-    // Ensure telemetry consumers have finished processing
-    await this.telemetry.flush();
+      // Ensure telemetry consumers have finished processing
+      await this.telemetry.flushConsumers();
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
-  async ensureBuildDirectory(): Promise<boolean> {
+  async ensureBuildDirectory() {
     using h0 = (await this.telemetry.trace("ensureBuildDirectory()")).start();
 
-    // Check if project directory exists
-    if (!existsSync(this.options.projectDirectory)) {
-      h0.log.error({
-        message: `Provided project directory not found: ${this.options.projectDirectory}`,
+    try {
+      // Check if project directory exists
+      if (!existsSync(this.options.projectDirectory)) {
+        return op.failure({
+          code: "NotFound",
+          message: `Provided project directory not found: ${this.options.projectDirectory}`,
+        });
+      }
+
+      // Check if .life directory exists
+      const buildDir = join(this.options.projectDirectory, ".life");
+      if (!existsSync(buildDir)) {
+        return op.failure({
+          code: "NotFound",
+          message: `The .life/ build directory not found at: ${buildDir}. Run 'life build' first.`,
+        });
+      }
+
+      // Check if client index exists
+      const clientIndex = join(buildDir, "client", "index.ts");
+      if (!existsSync(clientIndex)) {
+        return op.failure({
+          code: "NotFound",
+          message: `The .life/ build directory appears to be incomplete. Run 'life build' again.`,
+        });
+      }
+
+      // Check if server dist index exists
+      const serverIndex = join(buildDir, "server", "dist", "index.js");
+      if (!existsSync(serverIndex)) {
+        return op.failure({
+          code: "NotFound",
+          message: `The .life/ build directory appears to be incomplete. Run 'life build' again.`,
+        });
+      }
+
+      h0.log.debug({
+        message: "Valid .life/ build directory found.",
+        attributes: {
+          projectDirectory: this.options.projectDirectory,
+          buildDirectory: buildDir,
+        },
       });
-      return false;
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
-
-    // Check if .life directory exists
-    const buildDir = join(this.options.projectDirectory, ".life");
-    if (!existsSync(buildDir)) {
-      h0.log.error({
-        message: `The .life/ build directory not found at: ${buildDir}. Run 'life build' first.`,
-      });
-      return false;
-    }
-
-    // Check if client index exists
-    const clientIndex = join(buildDir, "client", "index.ts");
-    if (!existsSync(clientIndex)) {
-      h0.log.error({
-        message: `The .life/ build directory appears to be incomplete. Run 'life build' again.`,
-      });
-      return false;
-    }
-
-    // Check if server dist index exists
-    const serverIndex = join(buildDir, "server", "dist", "index.js");
-    if (!existsSync(serverIndex)) {
-      h0.log.error({
-        message: `The .life/ build directory appears to be incomplete. Run 'life build' again.`,
-      });
-      return false;
-    }
-
-    h0.log.debug({
-      message: "Valid .life/ build directory found.",
-      attributes: {
-        projectDirectory: this.options.projectDirectory,
-        buildDirectory: buildDir,
-      },
-    });
-
-    return true;
   }
 
   async watchBuildDirectory() {
     using _ = (await this.telemetry.trace("watchBuildDirectory()")).start();
 
-    // Get the raw server directory
-    const buildDir = join(this.options.projectDirectory, ".life");
-    const rawServerDir = join(buildDir, "server", "raw");
+    try {
+      // Get the raw server directory
+      const buildDir = join(this.options.projectDirectory, ".life");
+      const rawServerDir = join(buildDir, "server", "raw");
 
-    // Initialize content hashes for existing agent files to track actual changes
-    const { readdirSync } = await import("node:fs");
-    const files = readdirSync(rawServerDir).filter(
-      (file) => file.endsWith(".ts") && file !== "index.ts",
-    );
+      // Initialize content hashes for existing agent files to track actual changes
+      const { readdirSync } = await import("node:fs");
+      const files = readdirSync(rawServerDir).filter(
+        (file) => file.endsWith(".ts") && file !== "index.ts",
+      );
 
-    // Read all files in parallel to avoid await-in-loop issue
-    await Promise.all(
-      files.map(async (file) => {
-        const filePath = join(rawServerDir, file);
-        try {
-          const content = await readFile(filePath, "utf-8");
-          const hash = createHash("md5").update(content).digest("hex");
-          this.#fileHashes.set(filePath, hash);
-        } catch (error) {
-          this.telemetry.log.debug({
-            message: "Failed to initialize hash for file",
-            error,
-            attributes: { path: filePath },
-          });
-        }
-      }),
-    );
-
-    // Watch for changes to agent build files
-    this.watcher = chokidar.watch(".", {
-      cwd: rawServerDir,
-      ignoreInitial: true,
-      ignored: ["index.ts", ...EXCLUDED_DEFAULTS],
-      awaitWriteFinish: {
-        stabilityThreshold: 50,
-        pollInterval: 5,
-      },
-    });
-
-    const processWatchEvent = async (action: "change", relPath: string) => {
-      using h0 = (await this.telemetry.trace("processWatchEvent()", { action, relPath })).start();
-
-      try {
-        const absPath = join(rawServerDir, relPath);
-
-        // Only process change events (add/unlink ignored for now)
-        if (action !== "change") return;
-
-        // Check if file content has actually changed using hash comparison
-        const content = await readFile(absPath, "utf-8");
-        const newHash = createHash("md5").update(content).digest("hex");
-        const oldHash = this.#fileHashes.get(absPath);
-        if (oldHash === newHash) return;
-
-        // Update stored hash
-        this.#fileHashes.set(absPath, newHash);
-
-        // Extract agent name from filename
-        const agentName = basename(relPath, ".ts");
-
-        h0.log.debug({
-          message: `Detected change in agent '${agentName}', restarting affected processes.`,
-          attributes: { agentName, path: absPath },
-        });
-
-        // Find all running processes for this agent
-        const processesToRestart: AgentProcess[] = [];
-        for (const [, process] of this.#agentProcesses) {
-          if (process.name === agentName && process.status === "running") {
-            processesToRestart.push(process);
-          }
-        }
-
-        if (processesToRestart.length === 0) {
-          h0.log.debug({
-            message: `No running processes found for agent '${agentName}'.`,
-            attributes: { agentName },
-          });
-          return;
-        }
-
-        // Restart affected processes in parallel and track timing
-        using h1 = (
-          await this.telemetry.trace("restart-agent-processes", {
-            agentName,
-            count: processesToRestart.length,
-          })
-        ).start();
-
-        await Promise.all(
-          processesToRestart.map(async (process) => {
-            h0.log.debug({
-              message: `Restarting process '${process.id}' for agent '${agentName}'.`,
-              attributes: { processId: process.id, agentName },
+      // Read all files in parallel to avoid await-in-loop issue
+      await Promise.all(
+        files.map(async (file) => {
+          const filePath = join(rawServerDir, file);
+          try {
+            const content = await readFile(filePath, "utf-8");
+            const hash = createHash("md5").update(content).digest("hex");
+            this.#fileHashes.set(filePath, hash);
+          } catch (error) {
+            this.telemetry.log.debug({
+              message: "Failed to initialize hash for file",
+              error,
+              attributes: { path: filePath },
             });
-            await process.restart();
-          }),
-        );
+          }
+        }),
+      );
 
-        h1.end();
+      // Watch for changes to agent build files
+      this.watcher = chokidar.watch(".", {
+        cwd: rawServerDir,
+        ignoreInitial: true,
+        ignored: ["index.ts", ...EXCLUDED_DEFAULTS],
+        awaitWriteFinish: {
+          stabilityThreshold: 50,
+          pollInterval: 5,
+        },
+      });
 
-        // Log with timing similar to compiler
-        const instanceCount = processesToRestart.length;
-        const formattedName = chalk.bold.italic(agentName);
-        h0.log.info({
-          message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
-          attributes: { agentName, instanceCount },
-        });
-      } catch (error) {
-        h0.log.error({
-          message: "Failed to process watch event",
-          error,
-          attributes: { path: relPath },
-        });
-      }
-    };
+      const processWatchEvent = async (action: "change", relPath: string) => {
+        using h0 = (await this.telemetry.trace("processWatchEvent()", { action, relPath })).start();
 
-    // Listen for file changes
-    this.watcher.on("change", (relPath) => processWatchEvent("change", relPath));
+        try {
+          const absPath = join(rawServerDir, relPath);
+
+          // Only process change events (add/unlink ignored for now)
+          if (action !== "change") return;
+
+          // Check if file content has actually changed using hash comparison
+          const content = await readFile(absPath, "utf-8");
+          const newHash = createHash("md5").update(content).digest("hex");
+          const oldHash = this.#fileHashes.get(absPath);
+          if (oldHash === newHash) return;
+
+          // Update stored hash
+          this.#fileHashes.set(absPath, newHash);
+
+          // Extract agent name from filename
+          const agentName = basename(relPath, ".ts");
+
+          h0.log.debug({
+            message: `Detected change in agent '${agentName}', restarting affected processes.`,
+            attributes: { agentName, path: absPath },
+          });
+
+          // Find all running processes for this agent
+          const processesToRestart: AgentProcess[] = [];
+          for (const [, process] of this.#agentProcesses) {
+            if (process.name === agentName && process.status === "running") {
+              processesToRestart.push(process);
+            }
+          }
+
+          if (processesToRestart.length === 0) {
+            h0.log.debug({
+              message: `No running processes found for agent '${agentName}'.`,
+              attributes: { agentName },
+            });
+            return;
+          }
+
+          // Restart affected processes in parallel and track timing
+          using h1 = (
+            await this.telemetry.trace("restart-agent-processes", {
+              agentName,
+              count: processesToRestart.length,
+            })
+          ).start();
+
+          await Promise.all(
+            processesToRestart.map(async (process) => {
+              h0.log.debug({
+                message: `Restarting process '${process.id}' for agent '${agentName}'.`,
+                attributes: { processId: process.id, agentName },
+              });
+              await process.restart();
+            }),
+          );
+
+          h1.end();
+
+          // Log with timing similar to compiler
+          const instanceCount = processesToRestart.length;
+          const formattedName = chalk.bold.italic(agentName);
+          h0.log.info({
+            message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
+            attributes: { agentName, instanceCount },
+          });
+        } catch (error) {
+          h0.log.error({
+            message: "Failed to process watch event",
+            error,
+            attributes: { path: relPath },
+          });
+        }
+      };
+
+      // Listen for file changes
+      this.watcher.on("change", (relPath) => processWatchEvent("change", relPath));
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   async listAvailableAgents() {
-    const build = await importServerBuild(true);
-    return Object.entries(build).map(([name, { definition }]) => ({
-      name,
-      scopeKeys: definition?.scope?.schema?.shape ? Object.keys(definition.scope.schema.shape) : [],
-    }));
+    try {
+      const [errImport, build] = await op.attempt(async () => await importServerBuild(true));
+      if (errImport) return op.failure(errImport);
+      return op.success(
+        Object.entries(build).map(([name, { definition }]) => ({
+          name,
+          scopeKeys: definition?.scope?.schema?.shape
+            ? Object.keys(definition.scope.schema.shape)
+            : [],
+        })),
+      );
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   listAgentProcesses() {
-    return {
-      success: true,
-      processes: Array.from(this.#agentProcesses.values()).map((process) => ({
-        id: process.id,
-        name: process.name,
-        status: process.status,
-        lastStartedAt: process.lastStartedAt,
-      })),
-    };
+    try {
+      return op.success(
+        Array.from(this.#agentProcesses.values()).map((process) => ({
+          id: process.id,
+          name: process.name,
+          status: process.status,
+          lastStartedAt: process.lastStartedAt,
+        })),
+      );
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   async createAgentProcess({
@@ -298,23 +340,19 @@ export class LifeServer {
     scope: AgentScope;
     request: Request;
   }) {
-    using h0 = (await this.telemetry.trace("createAgentProcess()", { name, scope })).start();
+    using _ = (await this.telemetry.trace("createAgentProcess()", { name, scope })).start();
 
     try {
       // Ensure the request agent exists
       const build = await importServerBuild(true);
       const definition = build[name as keyof typeof build]?.definition;
       if (!definition) {
-        const message = `Definition not found for agent '${name}'.`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({ code: "NotFound", message: `Agent '${name}' not found.` });
       }
 
       // Ensure the request emitter has access to this agent and scope
       if (!(await definition.scope.hasAccess({ request, scope }))) {
-        const message = `Access denied for agent '${name}'.`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({ code: "Forbidden", message: `Access denied for agent '${name}'.` });
       }
 
       // Generate a room name for the WebRTC session
@@ -322,18 +360,20 @@ export class LifeServer {
 
       // Generate transport tokens for both the agent and the user
       const transportProvider = definition.config.transport.provider;
-      const agentToken = await getToken(
-        transportProvider,
+      const transportGetToken =
+        transportProviderGetToken[transportProvider as keyof typeof transportProviderGetToken];
+      const [errAgentToken, agentToken] = await transportGetToken(
         definition.config.transport,
         roomName,
         "agent",
       );
-      const userToken = await getToken(
-        transportProvider,
+      if (errAgentToken) return op.failure(errAgentToken);
+      const [errUserToken, userToken] = await transportGetToken(
         definition.config.transport,
         roomName,
         "user",
       );
+      if (errUserToken) return op.failure(errUserToken);
 
       // Generate a session token to authenticate the user client when talking to the agent
       const sessionToken = randomBytes(32).toString("base64url");
@@ -351,181 +391,196 @@ export class LifeServer {
       this.#agentProcesses.set(process.id, process);
 
       // Return infos for the user client to connect to the agent
-      return {
-        success: true,
+      return op.success({
         agentId: process.id,
         sessionToken,
         transportRoom: { name: roomName, token: userToken },
-        clientSideConfig: agentConfig.clientSchema.parse(definition.config),
-      };
+        // Pipe first through server config to ensure client config is a subset of server config
+        clientSideConfig: agentServerConfig.schema
+          .pipe(agentClientConfig.schema)
+          .parse(definition.config),
+      });
     } catch (error) {
-      const message = `Failed to create agent process: ${name}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({ code: "Unknown", error });
     }
   }
 
   async getAgentProcess(id: string, sessionToken: string) {
-    using h0 = (await this.telemetry.trace("getAgentProcess()", { id })).start();
+    using _ = (await this.telemetry.trace("getAgentProcess()", { id })).start();
     try {
       const process = this.#agentProcesses.get(id);
       if (!process) {
-        const message = `Agent process not found: ${id}`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({ code: "NotFound", message: `Agent process '${id}' not found.` });
       }
       if (process.sessionToken !== sessionToken) {
-        const message = `Invalid session token for agent process: ${id}`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({
+          code: "InvalidInput",
+          message: `Invalid session token for agent process '${id}'.`,
+        });
       }
-      return { success: true, process };
+      return op.success(process);
     } catch (error) {
-      const message = `Failed to get agent process: ${id}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to obtain agent process '${id}'.`,
+        error,
+      });
     }
   }
 
   async startAgentProcess(id: string, sessionToken: string) {
     using h0 = (await this.telemetry.trace("startAgentProcess()", { id })).start();
     try {
-      const processResult = await this.getAgentProcess(id, sessionToken);
-      const process = processResult.process;
-      if (!(process && processResult.success)) return processResult;
+      const [errGet, process] = await this.getAgentProcess(id, sessionToken);
+      if (errGet) return op.failure(errGet);
 
       // Track timing for starting the process
       using h1 = (
         await this.telemetry.trace("start-process", { id, agentName: process.name })
       ).start();
-
-      const startResult = await process.start();
+      const [errStart] = await op.attempt(process.start);
+      if (errStart) return op.failure(errStart);
       h1.end();
-
-      if (!startResult.success) return startResult;
 
       // Log with timing
       const formattedName = chalk.bold.italic(process.name);
       h0.log.info({
-        message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
         attributes: { id, agentName: process.name },
       });
 
-      return { success: true };
+      return op.success();
     } catch (error) {
-      const message = `Failed to start agent process: ${id}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to start agent process '${id}'.`,
+        error,
+      });
     }
   }
 
   async stopAgentProcess(id: string, sessionToken: string) {
     using h0 = (await this.telemetry.trace("stopAgentProcess()", { id })).start();
     try {
-      const processResult = await this.getAgentProcess(id, sessionToken);
-      const process = processResult.process;
-      if (!(process && processResult.success)) return processResult;
+      const [errGet, process] = await this.getAgentProcess(id, sessionToken);
+      if (errGet) return op.failure(errGet);
 
       // Track timing for stopping the process
       using h1 = (
         await this.telemetry.trace("stop-process", { id, agentName: process.name })
       ).start();
 
-      const stopResult = await process.stop();
+      const [errStop] = await process.stop();
       h1.end();
 
-      if (!stopResult.success) return stopResult;
+      if (errStop) return op.failure(errStop);
 
       // Log with timing
       const formattedName = chalk.bold.italic(process.name);
       h0.log.info({
-        message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
         attributes: { id, agentName: process.name },
       });
 
-      return { success: true };
+      return op.success();
     } catch (error) {
-      const message = `Failed to stop agent process: ${id}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to stop agent process '${id}'.`,
+        error,
+      });
     }
   }
 
   async restartAgentProcess(id: string, sessionToken: string) {
     using h0 = (await this.telemetry.trace("restartAgentProcess()", { id })).start();
     try {
-      const processResult = await this.getAgentProcess(id, sessionToken);
-      const process = processResult.process;
-      if (!(process && processResult.success)) return processResult;
+      const [errGet, process] = await this.getAgentProcess(id, sessionToken);
+      if (errGet) return op.failure(errGet);
 
       // Track timing for restarting the process
       using h1 = (
         await this.telemetry.trace("restart-process", { id, agentName: process.name })
       ).start();
-      const restartResult = await process.restart();
+      const [errRestart] = await process.restart();
       h1.end();
 
-      if (!restartResult.success) return restartResult;
+      if (errRestart) return op.failure(errRestart);
 
       // Log with timing
       const formattedName = chalk.bold.italic(process.name);
       h0.log.info({
-        message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+        message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
         attributes: { id, agentName: process.name },
       });
 
-      return true;
+      return op.success();
     } catch (error) {
-      const message = `Failed to restart agent process: ${id}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to restart agent process '${id}'.`,
+        error,
+      });
     }
   }
 
   async getAgentProcessInfo(id: string, sessionToken: string) {
-    using h0 = (await this.telemetry.trace("getAgentProcessInfo()", { id })).start();
+    using _ = (await this.telemetry.trace("getAgentProcessInfo()", { id })).start();
     try {
-      const processResult = await this.getAgentProcess(id, sessionToken);
-      const process = processResult.process;
-      if (!(process && processResult.success)) return processResult;
-      const statsResult = await process.getProcessStats();
-      return {
-        success: true,
-        info: {
-          id,
-          name: process.name,
-          scope: process.scope,
-          status: process.status,
-          lastStartedAt: process.lastStartedAt,
-          lastSeenAt: process.lastSeenAt,
-          restartCount: process.restartCount,
-          stats: statsResult.stats,
-        },
-      };
+      const [errGet, process] = await this.getAgentProcess(id, sessionToken);
+      if (errGet) return op.failure(errGet);
+      const [errStats, stats] = await process.getProcessStats();
+      if (errStats) return op.failure(errStats);
+      return op.success({
+        id,
+        name: process.name,
+        scope: process.scope,
+        status: process.status,
+        lastStartedAt: process.lastStartedAt,
+        lastSeenAt: process.lastSeenAt,
+        restartCount: process.restartCount,
+        ...(stats ?? {}),
+      });
     } catch (error) {
-      const message = `Failed to get agent process info: ${id}`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to get info for agent process '${id}'.`,
+        error,
+      });
+    }
+  }
+
+  async pingAgentProcess(id: string, sessionToken: string) {
+    using _ = (await this.telemetry.trace("pingAgentProcess()", { id })).start();
+    try {
+      const [errGet, process] = await this.getAgentProcess(id, sessionToken);
+      if (errGet) return op.failure(errGet);
+      const [errPing] = await process.ping();
+      if (errPing) return op.failure(errPing);
+      return op.success("pong");
+    } catch (error) {
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to ping agent process '${id}'.`,
+        error,
+      });
     }
   }
 
   async getServerInfo() {
-    using h0 = (await this.telemetry.trace("getServerInfo()")).start();
+    using _ = (await this.telemetry.trace("getServerInfo()")).start();
     try {
-      const stats = this.#processStats.get();
-      return {
-        success: true,
-        info: {
-          lifeVersion: packageJson.version,
-          nodeVersion: process.version,
-          startedAt: this.#startedAt,
-          ...stats,
-        },
-      };
+      const [errStats, stats] = this.#processStats.get();
+      if (errStats) return op.failure(errStats);
+      return op.success({
+        lifeVersion: packageJson.version,
+        nodeVersion: process.version,
+        // biome-ignore lint/style/noNonNullAssertion: cannot be null here
+        startedAt: this.#startedAt!,
+        ...(stats ?? {}),
+      });
     } catch (error) {
-      const message = "Failed to get server info";
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({ code: "Unknown", message: "Failed to get server info", error });
     }
   }
 }

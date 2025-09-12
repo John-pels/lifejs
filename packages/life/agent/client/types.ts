@@ -5,6 +5,8 @@ import type {
   PluginClientConfig,
   PluginClientDefinition,
 } from "@/plugins/client/types";
+import type * as op from "@/shared/operation";
+import type { ClassShape } from "@/shared/types";
 import type { AgentDefinition } from "../server/types";
 import type { AgentClient } from "./class";
 import type { AgentClientBuilder } from "./define";
@@ -53,7 +55,6 @@ export type AgentClientPluginsMapping = Record<
   { class: ReturnType<PluginClientClassDefinition>; definition: PluginClientDefinition }
 >;
 
-// Used in plugin-specific client libraries to expect an agent with specific plugins registered as argument
 export type AgentClientWithPlugins<
   Client extends AgentClient<AgentClientDefinition>,
   Plugins extends Record<
@@ -62,10 +63,10 @@ export type AgentClientWithPlugins<
   >,
 > = Client & {
   [K in keyof Plugins]: Omit<
-    PluginClientBase<Plugins[K]["definition"]> &
-      (Plugins[K]["class"] extends undefined
-        ? never
-        : Omit<InstanceType<Plugins[K]["class"]>, "methods">),
+    op.ToPublic<PluginClientBase<Plugins[K]["definition"]>> &
+      (Plugins[K]["class"] extends ClassShape
+        ? Omit<op.ToPublic<InstanceType<Plugins[K]["class"]>>, "methods">
+        : object),
     "agent" | "telemetry" | "dependencies"
   >;
 };

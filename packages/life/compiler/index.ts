@@ -9,7 +9,9 @@ import { globbySync } from "globby";
 import ts from "typescript";
 import { deepClone } from "@/shared/deep-clone";
 import { ns } from "@/shared/nanoseconds";
-import { lifeTelemetry } from "@/telemetry/client";
+import * as op from "@/shared/operation";
+import type { TelemetryClient } from "@/telemetry/base";
+import { createTelemetryClient } from "@/telemetry/node";
 import { type CompilerOptions, compilerOptionsSchema } from "./options";
 
 const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
@@ -37,7 +39,7 @@ export class LifeCompiler {
     servers: new Set<string>(),
     clients: new Set<string>(),
   };
-  telemetry = lifeTelemetry.child("compiler");
+  telemetry: TelemetryClient;
   serverBundleContext: esbuild.BuildContext | null = null;
 
   // Language Service for faster type extraction
@@ -49,6 +51,12 @@ export class LifeCompiler {
   constructor(options: CompilerOptions<"input">) {
     this.options = compilerOptionsSchema.parse(options);
 
+    // Initialize telemetry
+    this.telemetry = createTelemetryClient("compiler", {
+      watch: this.options.watch,
+      optimize: this.options.optimize,
+    });
+
     // Ensure outputDir is absolute
     this.options.outputDirectory = this.options.outputDirectory.startsWith("/")
       ? this.options.outputDirectory
@@ -56,59 +64,64 @@ export class LifeCompiler {
   }
 
   async start() {
-    // Telemetry
     using h0 = (await this.telemetry.trace("start()")).start();
-    h0.log.info({ message: "Starting compiler." });
-    h0.log.debug({ message: `Optimized build: ${this.options.optimize}` });
-    h0.log.debug({ message: `Project directory: ${this.options.projectDirectory}` });
-    h0.log.debug({ message: `Output directory: ${this.options.outputDirectory}` });
+    try {
+      h0.log.info({ message: "Starting compiler." });
+      h0.log.debug({ message: `Optimized build: ${this.options.optimize}` });
+      h0.log.debug({ message: `Project directory: ${this.options.projectDirectory}` });
+      h0.log.debug({ message: `Output directory: ${this.options.outputDirectory}` });
 
-    // 1. Reset and link the build directory output to life/build
-    await Promise.all([this.resetOutputDirectory(), this.linkBuildDirectory()]);
+      // 1. Reset and link the build directory output to life/build
+      await Promise.all([this.resetOutputDirectory(), this.linkBuildDirectory()]);
 
-    // 2. Make an initial exploration of all entry paths
-    await this.initEntryPaths();
+      // 2. Make an initial exploration of all entry paths
+      await this.initEntryPaths();
 
-    // 3. Return early if no agents servers are found yet.
-    if (!this.entryPaths.servers.length) {
+      // 3. Return early if no agents servers are found yet.
+      if (!this.entryPaths.servers.length) {
+        h0.log.info({
+          message: "Nothing to compile yet. Create a first `agent/server.ts` file in your project.",
+        });
+        return op.success();
+      }
+
+      // 4. Start an initial compilation of all agents
+      using h1 = (await this.telemetry.trace("initial-compilation")).start();
+      await Promise.all(this.entryPaths.configs.map((p) => this.compileConfig(p, false))); // configs are compiled first, because required by agents compilations
+      await Promise.all([
+        ...this.entryPaths.servers.map((p) => this.compileAgentServer(p)),
+        ...this.entryPaths.clients.map((p) => this.compileAgentClient(p)),
+      ]);
+      await Promise.all([this.generateServerBundle(), this.generateClientBundle()]);
+      h1.end();
       h0.log.info({
-        message: "Nothing to compile yet. Create a first `agent/server.ts` file in your project.",
+        message: `Agents compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
       });
-      return;
+
+      // 5. Watch for new/deleted entry paths if watch mode is enabled
+      if (this.options.watch) {
+        this.watchEntryPaths();
+        h0.log.info({ message: "Watching for changes..." });
+
+        // 4. Listen for SIGINT and SIGTERM to gracefully stop the compiler
+        const handleShutdown = async (signal: string) => {
+          console.log("");
+          this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
+          await this.stop();
+        };
+        process.once("SIGINT", () => handleShutdown("SIGINT"));
+        process.once("SIGTERM", () => handleShutdown("SIGTERM"));
+      }
+      // Else stop the compiler
+      else await this.stop();
+
+      // Telemetry
+      this.telemetry.counter("compiler_started").increment();
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
-
-    // 4. Start an initial compilation of all agents
-    using h1 = (await this.telemetry.trace("initial-compilation")).start();
-    await Promise.all(this.entryPaths.configs.map((p) => this.compileConfig(p, false))); // configs are compiled first, because required by agents compilations
-    await Promise.all([
-      ...this.entryPaths.servers.map((p) => this.compileAgentServer(p)),
-      ...this.entryPaths.clients.map((p) => this.compileAgentClient(p)),
-    ]);
-    await Promise.all([this.generateServerBundle(), this.generateClientBundle()]);
-    h1.end();
-    h0.log.info({
-      message: `Agents compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
-    });
-
-    // 5. Watch for new/deleted entry paths if watch mode is enabled
-    if (this.options.watch) {
-      this.watchEntryPaths();
-      h0.log.info({ message: "Watching for changes..." });
-
-      // 4. Listen for SIGINT and SIGTERM to gracefully stop the compiler
-      const handleShutdown = async (signal: string) => {
-        console.log("");
-        this.telemetry.log.info({ message: `Received ${signal}, shutting down gracefully...` });
-        await this.stop();
-      };
-      process.once("SIGINT", () => handleShutdown("SIGINT"));
-      process.once("SIGTERM", () => handleShutdown("SIGTERM"));
-    }
-    // Else stop the compiler
-    else await this.stop();
-
-    // Telemetry
-    this.telemetry.counter("compiler_started").increment();
   }
 
   #stopStarted = false;
@@ -128,7 +141,7 @@ export class LifeCompiler {
     this.watcher = null;
 
     // Ensure telemetry consumers have finished processing
-    await this.telemetry.flush();
+    await this.telemetry.flushConsumers();
   }
 
   isEntryPath(absPath: string) {
@@ -319,7 +332,7 @@ export class LifeCompiler {
           if (needBundle) await this.generateServerBundle();
           h1.end();
           h0.log.info({
-            message: `Agent server '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent server '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { serverPath: absPath },
           });
         }
@@ -347,7 +360,7 @@ export class LifeCompiler {
           if (needBundle) await this.generateServerBundle();
           h1.end();
           h0.log.info({
-            message: `Agent server '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent server '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { serverPath: absPath },
           });
         }
@@ -370,7 +383,7 @@ export class LifeCompiler {
           if (needBundle) await this.generateClientBundle();
           h1.end();
           h0.log.info({
-            message: `Agent client '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent client '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { clientPath: absPath },
           });
         }
@@ -398,7 +411,7 @@ export class LifeCompiler {
           if (needBundle) await this.generateClientBundle();
           h1.end();
           h0.log.info({
-            message: `Agent client '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent client '${chalk.bold.italic(name)}' re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { clientPath: absPath },
           });
         }
@@ -466,13 +479,13 @@ export class LifeCompiler {
           .join(", ");
         if (recompiledAgentServers.size > 0) {
           h0.log.info({
-            message: `Agent${recompiledAgentServers.size > 1 ? "s" : ""} server${recompiledAgentServers.size > 1 ? "s" : ""} ${formattedServerNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent${recompiledAgentServers.size > 1 ? "s" : ""} server${recompiledAgentServers.size > 1 ? "s" : ""} ${formattedServerNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { touchedPaths },
           });
         }
         if (recompiledAgentClients.size > 0) {
           h0.log.info({
-            message: `Agent${recompiledAgentClients.size > 1 ? "s" : ""} client${recompiledAgentClients.size > 1 ? "s" : ""} ${formattedClientNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+            message: `Agent${recompiledAgentClients.size > 1 ? "s" : ""} client${recompiledAgentClients.size > 1 ? "s" : ""} ${formattedClientNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
             attributes: { touchedPaths },
           });
         }
@@ -555,7 +568,7 @@ export class LifeCompiler {
           .map((name) => `'${chalk.bold.italic(name)}'`)
           .join(", ");
         h0.log.info({
-          message: `Agent${names.size > 1 ? "s" : ""} ${formattedNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getSpan().duration)}ms`)}.`,
+          message: `Agent${names.size > 1 ? "s" : ""} ${formattedNames} re-compiled in ${chalk.bold(`${ns.toMs(h1.getData().duration)}ms`)}.`,
           attributes: { configPath },
         });
       }
@@ -623,7 +636,7 @@ export class LifeCompiler {
       }
       configPaths.sort((a, b) => b.length - a.length);
 
-      // 5. Obtain a unified checksum of the server file dependencies tree
+      // 5. Obtain a unified sha of the server file dependencies tree
       const treeFiles = new Set<string>([serverPath, ...configPaths]);
       // - Add all dependencies from the dependenciesMap
       for (const file of deepClone(treeFiles)) {
@@ -640,7 +653,7 @@ export class LifeCompiler {
         });
       }
       // - Compute the unified hash from all tree hashes
-      const checksum = createHash("md5").update(treeHashes.join(":")).digest("hex");
+      const sha = createHash("md5").update(treeHashes.join(":")).digest("hex");
 
       // 6. Generate agent server build content
       const content = `
@@ -649,7 +662,7 @@ import agent from "${serverPath}";
 export default {
   definition: agent._definition,
   globalConfigs: [${configPaths.map((_, i) => `config${i}`).join(", ")}],
-  checksum: "${checksum}"
+  sha: "${sha}"
 } as const;
       `.trim();
 

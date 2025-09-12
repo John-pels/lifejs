@@ -1,10 +1,10 @@
 import { z } from "zod";
+import { type Config, createConfig, type DeeplyEditable } from "@/shared/config";
 import type { PluginDefinition } from "../server/types";
 import { PluginClientBase } from "./class";
 import type {
   PluginClientAtomsDefinition,
   PluginClientClassDefinitionInput,
-  PluginClientConfigDefinition,
   PluginClientDefinition,
   PluginClientDependenciesDefinition,
 } from "./types";
@@ -39,13 +39,19 @@ export class PluginClientBuilder<
     return builder as Omit<typeof builder, ExcludedMethods | "dependencies">;
   }
 
-  config<const Schema extends PluginClientConfigDefinition>(schema: Schema) {
+  config<const Schema extends z.AnyZodObject>({
+    schema,
+    toTelemetryAttribute = () => ({}),
+  }: {
+    schema: Schema;
+    toTelemetryAttribute?: (data: DeeplyEditable<z.output<Schema>>) => Record<string, unknown>;
+  }) {
     const builder = new PluginClientBuilder({
       ...this._definition,
-      config: schema,
+      config: createConfig({ schema, toTelemetryAttribute }),
     }) as PluginClientBuilder<
       ServerDefinition,
-      ClientDefinition & { config: Schema },
+      ClientDefinition & { config: Config<Schema> },
       ExcludedMethods | "config"
     >;
     return builder as Omit<typeof builder, ExcludedMethods | "config">;
@@ -55,8 +61,8 @@ export class PluginClientBuilder<
     const Input extends PluginClientClassDefinitionInput<
       ServerDefinition,
       ClientDefinition,
-      z.output<ServerDefinition["config"]>,
-      z.output<ClientDefinition["config"]>
+      z.output<ServerDefinition["config"]["schema"]>,
+      z.output<ClientDefinition["config"]["schema"]>
     >,
   >(input: Input) {
     const builder = new PluginClientBuilder({
@@ -97,7 +103,7 @@ export function definePluginClient<const ServerPlugin extends { _definition: Plu
       <_ServerConfig, _ClientConfig>() =>
         class Client extends Base<PluginClientDefinition> {}
     )({}, PluginClientBase),
-    config: z.object({}),
+    config: createConfig({ schema: z.object({}) }),
     dependencies: {},
     $serverDef: {} as ServerPlugin["_definition"],
   } as const satisfies PluginClientDefinition;

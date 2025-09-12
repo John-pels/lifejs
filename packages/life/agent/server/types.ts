@@ -1,6 +1,6 @@
 import type z from "zod";
 import type { PluginConfig, PluginDefinition } from "@/plugins/server/types";
-import type { agentConfig } from "../config";
+import type { agentServerConfig } from "../config";
 import type { AgentBuilder } from "./define";
 
 export type AgentScopeDefinition<Schema extends z.AnyZodObject = z.AnyZodObject> = {
@@ -13,7 +13,7 @@ export type AgentScope<ScopeDefinition extends AgentScopeDefinition = AgentScope
 
 export type AgentDefinition = {
   name: string;
-  config: z.output<typeof agentConfig.serverSchema>;
+  config: z.output<typeof agentServerConfig.schema>;
   plugins: Record<string, PluginDefinition>;
   pluginConfigs: Record<string, unknown>;
   scope: AgentScopeDefinition;

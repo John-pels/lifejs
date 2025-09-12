@@ -12,7 +12,7 @@ const MAX_TOKENS = 256; // Hardcoded in the model
 
 // Config
 export const turnSenseEOUConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("turnsense"),
     quantized: z.boolean().default(true),
     /**
@@ -23,17 +23,16 @@ export const turnSenseEOUConfig = createConfig({
      */
     maxMessages: z.number().default(1),
   }),
-  clientSchema: z.object({}),
 });
 
 // Model
 type PreTrainedTokenizer = InstanceType<Awaited<typeof transformers>["PreTrainedTokenizer"]>;
-export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.serverSchema> {
+export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.schema> {
   #_tokenizer?: PreTrainedTokenizer;
   #_session?: InferenceSession;
 
-  constructor(config: z.input<typeof turnSenseEOUConfig.serverSchema>) {
-    super(turnSenseEOUConfig.serverSchema, config);
+  constructor(config: z.input<typeof turnSenseEOUConfig.schema>) {
+    super(turnSenseEOUConfig.schema, config);
   }
 
   // Get or create the ONNX inference session

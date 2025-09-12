@@ -7,15 +7,18 @@ import { type VADProvider, vadProviders } from "@/models/vad";
 import { PluginServer } from "@/plugins/server/class";
 import type { PluginDefinition } from "@/plugins/server/types";
 import type { SerializableValue } from "@/shared/canon";
-import { lifeTelemetry } from "@/telemetry/client";
-import { TransportServer } from "@/transport/server";
+import * as op from "@/shared/operation";
+import type { TelemetryClient } from "@/telemetry/base";
+import { createTelemetryClient } from "@/telemetry/node";
+import { TransportNodeClient } from "@/transport/client/node";
 import type { AgentDefinition, AgentScope } from "./types";
 
 export class AgentServer {
   _definition: AgentDefinition;
   _isAgentServer = true;
   id: string;
-  transport: TransportServer;
+  sha: string;
+  transport: TransportNodeClient;
   storage = null;
   models: {
     vad: InstanceType<VADProvider>;
@@ -27,30 +30,47 @@ export class AgentServer {
   plugins: Record<string, PluginServer<PluginDefinition>> = {};
   scope: AgentScope<AgentDefinition["scope"]>;
   isRestart: boolean;
-  telemetry = lifeTelemetry.child("agent-server");
   readonly #initialPluginsContexts: Record<string, SerializableValue>;
+  telemetry: TelemetryClient;
 
   constructor({
     id,
+    sha,
     definition,
     scope,
     pluginsContexts,
     isRestart,
   }: {
     id: string;
+    sha: string;
     definition: AgentDefinition;
     scope?: AgentScope<AgentDefinition["scope"]>;
-    pluginsContexts?: Record<string, SerializableValue>;
     isRestart?: boolean;
+    pluginsContexts?: Record<string, SerializableValue>;
   }) {
     this._definition = definition;
     this.id = id;
+    this.sha = sha;
     this.scope = scope ?? definition.scope.schema.parse({});
     this.isRestart = isRestart ?? false;
     this.#initialPluginsContexts = pluginsContexts ?? {};
 
+    // Initialize telemetry
+    this.telemetry = createTelemetryClient("agent.server", {
+      agentId: id,
+      agentSha: sha,
+      agentName: definition.name,
+      agentConfig: definition.config,
+      transportProviderName: definition.config.transport.provider,
+      llmProviderName: definition.config.models.llm.provider,
+      sttProviderName: definition.config.models.stt.provider,
+      eouProviderName: definition.config.models.eou.provider,
+      ttsProviderName: definition.config.models.tts.provider,
+      vadProviderName: definition.config.models.vad.provider,
+    });
+
     // Initialize transport
-    this.transport = new TransportServer(definition.config.transport);
+    this.transport = new TransportNodeClient(definition.config.transport);
 
     // Initialize storage
     // TODO
@@ -126,12 +146,12 @@ export class AgentServer {
   }
 
   async start() {
-    using h0 = (await this.telemetry.trace("AgentServer.start()")).start();
+    using _ = (await this.telemetry.trace("AgentServer.start()")).start();
 
     try {
       // Create plugin servers
       for (const definition of Object.values(this._definition.plugins)) {
-        const config = definition.config.parse(
+        const config = definition.config.schema.parse(
           this._definition.pluginConfigs[definition.name] ?? {},
         );
         this.plugins[definition.name] = new PluginServer({
@@ -147,14 +167,14 @@ export class AgentServer {
         this.plugins[plugin.name as keyof typeof this.plugins]?.init();
 
       // Start all plugin servers
-      await Promise.all(Object.values(this.plugins).map((p) => p.start()));
+      const result = await Promise.all(Object.values(this.plugins).map((p) => p.start()));
+      const err = result.find((r) => r[0])?.[0];
+      if (err) return op.failure(err);
 
       // Return that the agent server was started successfully
-      return { success: true };
+      return op.success();
     } catch (error) {
-      const message = "Failed to start agent server.";
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({ code: "Unknown", error });
     }
   }
 
@@ -172,14 +192,13 @@ export class AgentServer {
       );
 
       // Disconnect transport
-      await this.transport.leaveRoom();
+      const [errLeave] = await this.transport.leaveRoom();
+      if (errLeave) return op.failure(errLeave);
 
       // Return that the agent server was stopped successfully
-      return { success: true };
+      return op.success();
     } catch (error) {
-      const message = "Failed to stop agent server.";
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({ code: "Unknown", error });
     }
   }
 }

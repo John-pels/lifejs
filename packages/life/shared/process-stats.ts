@@ -1,4 +1,5 @@
 import os from "node:os";
+import * as op from "@/shared/operation";
 
 /**
  * Accurately track the CPU and memory usage of the current process.
@@ -37,18 +38,21 @@ export class ProcessStats {
   }
 
   get() {
-    const memoryUsed = process.memoryUsage().rss;
-    const totalMemory = os.totalmem();
-    const freeMemory = os.freemem();
-
-    return {
-      cpu: this.#cpu,
-      memory: {
-        usedPercent: (memoryUsed / totalMemory) * 100,
-        totalBytes: totalMemory,
-        freeBytes: freeMemory,
-        usedBytes: memoryUsed,
-      },
-    };
+    try {
+      const memoryUsed = process.memoryUsage().rss;
+      const totalMemory = os.totalmem();
+      const freeMemory = os.freemem();
+      return op.success({
+        cpu: this.#cpu,
+        memory: {
+          usedPercent: (memoryUsed / totalMemory) * 100,
+          totalBytes: totalMemory,
+          freeBytes: freeMemory,
+          usedBytes: memoryUsed,
+        },
+      });
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 }

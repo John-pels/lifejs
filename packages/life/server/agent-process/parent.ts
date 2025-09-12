@@ -5,6 +5,8 @@ import { type BirpcReturn, createBirpc } from "birpc";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { canon, type SerializableValue } from "@/shared/canon";
+import type { LifeError } from "@/shared/error";
+import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
@@ -49,9 +51,18 @@ export class AgentProcess {
   }
 
   async getDefinition() {
-    const servers = await importServerBuild(true);
-    const definition = servers?.[this.name as keyof typeof servers]?.definition;
-    return definition;
+    using _ = (
+      await this.#server.telemetry.trace("AgentProcess.getDefinition()", { id: this.id })
+    ).start();
+
+    try {
+      const [error, servers] = await op.attempt(importServerBuild(true));
+      if (error) return op.failure(error);
+      const definition = servers?.[this.name as keyof typeof servers]?.definition;
+      return op.success(definition);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   async start() {
@@ -65,14 +76,15 @@ export class AgentProcess {
         h0.log.warn({
           message: `start() was called on an already '${this.status}' agent process.`,
         });
-        return { success: true };
+        return op.success();
       }
 
       // Error if the agent is stopping
       if (this.status === "stopping") {
-        const message = `Cannot start agent in '${this.status}' state.`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({
+          code: "Conflict",
+          message: `Cannot start agent in '${this.status}' state.`,
+        });
       }
 
       // Update the status
@@ -82,11 +94,10 @@ export class AgentProcess {
       });
 
       // Get the agent definition
-      const definition = await this.getDefinition();
+      const [errGet, definition] = await this.getDefinition();
+      if (errGet) return op.failure(errGet);
       if (!definition) {
-        const message = `Agent definition not found for '${this.name}'.`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({ code: "NotFound", message: `Agent '${this.name}' not found.` });
       }
 
       // Fork the child process
@@ -103,18 +114,30 @@ export class AgentProcess {
       this.#child = createBirpc<ChildMethods, ParentMethods>(
         {
           syncContext: (params) => {
-            this.#pluginsContexts[params.pluginName] = params.context;
-            this.lastSeenAt = Date.now();
+            try {
+              this.#pluginsContexts[params.pluginName] = params.context;
+              this.lastSeenAt = Date.now();
+              return op.success();
+            } catch (error) {
+              return op.failure({ code: "Unknown", error });
+            }
           },
           syncTelemetry: (signal) => {
-            this.#server.telemetry.sendSignal({
-              ...signal,
-              scope: ["life", "server", "agent-process", this.name],
-            });
-            this.lastSeenAt = Date.now();
+            try {
+              this.#server.telemetry.sendSignal(signal);
+              this.lastSeenAt = Date.now();
+              return op.success();
+            } catch (error) {
+              return op.failure({ code: "Unknown", error });
+            }
           },
           ready: () => {
-            this.#readyResolve?.();
+            try {
+              this.#readyResolve?.();
+              return op.success();
+            } catch (error) {
+              return op.failure({ code: "Unknown", error });
+            }
           },
         },
         {
@@ -133,7 +156,7 @@ export class AgentProcess {
       this.#child.injectEnvVars(process.env);
 
       // Start the agent server in the child process
-      const startResult = await this.#child.start({
+      const [errStart] = await this.#child.start({
         id: this.id,
         name: this.name,
         scope: this.scope,
@@ -141,7 +164,7 @@ export class AgentProcess {
         pluginsContexts: this.#pluginsContexts,
         isRestart: this.restartCount > 0,
       });
-      if (!startResult.success) return startResult;
+      if (errStart) return op.failure(errStart);
 
       // Wait for the agent to be ready
       await waitReady;
@@ -156,17 +179,19 @@ export class AgentProcess {
       this.#readyResolve = null;
 
       // Return that the agent was started successfully
-      return { success: true };
+      return op.success();
     } catch (error) {
       // Uncaught error
-      const message = `Failed to start agent '${this.name}'.`;
-      h0.log.error({ message, error });
       this.status = "stopped";
       this.nodeProcess = null;
       this.lastStartedAt = undefined;
       this.lastSeenAt = undefined;
       this.#readyResolve = null;
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to start agent '${this.name}'.`,
+        error,
+      });
     }
   }
 
@@ -176,9 +201,10 @@ export class AgentProcess {
     try {
       // Error if the agent is starting
       if (this.status === "starting") {
-        const message = `Cannot stop agent in '${this.status}' state.`;
-        h0.log.error({ message });
-        return { success: false, message };
+        return op.failure({
+          code: "Conflict",
+          message: `Cannot stop agent in '${this.status}' state.`,
+        });
       }
 
       // Warn if the agent is already stopped or stopping, that might be unexpected
@@ -203,20 +229,24 @@ export class AgentProcess {
         this.nodeProcess?.off("exit", this.#handleChildExitCallback);
 
       // Gracefully stop the agent (10s timeout)
-      let stopResult: { success: boolean; message?: string } | undefined;
+      let stopErr: LifeError | undefined;
+      let stopSuccess = false;
       try {
         await Promise.race([
           (async () => {
-            stopResult = await this.#child?.stop();
+            const result = await this.#child?.stop();
+            stopErr = result?.[0];
+            stopSuccess = Boolean(!stopErr);
           })(),
           new Promise((resolve) => setTimeout(resolve, 10_000)),
         ]);
       } catch (_) {
         // Ignore
       }
-      if (!stopResult?.success) {
+      if (!stopSuccess) {
         h0.log.warn({
-          message: `Agent process '${this.name}' did not shutdown gracefully. Will force kill. Reason: ${stopResult?.message}`,
+          message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${stopErr ? "(see error)" : "(timeout)"})`,
+          error: stopErr,
         });
       }
 
@@ -230,36 +260,40 @@ export class AgentProcess {
       this.lastSeenAt = undefined;
 
       // Return that the agent was stopped successfully
-      return { success: true };
+      return op.success();
     } catch (error) {
       // Uncaught error
-      const message = `Failed to stop agent '${this.name}'. Will force kill.`;
-      h0.log.error({ message, error });
       if (this.nodeProcess && this.nodeProcess.exitCode === null) this.nodeProcess.kill("SIGKILL");
       this.status = "stopped";
       this.nodeProcess = null;
       this.lastStartedAt = undefined;
       this.lastSeenAt = undefined;
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to stop agent '${this.name}', will force kill.`,
+        error,
+      });
     }
   }
 
   async restart() {
-    using h0 = (
+    using _ = (
       await this.#server.telemetry.trace("AgentProcess.restart()", { id: this.id })
     ).start();
 
     try {
-      const stopResult = await this.stop();
-      if (!stopResult.success) return stopResult;
+      const [errStop] = await this.stop();
+      if (errStop) return op.failure(errStop);
       this.restartCount++;
-      const startResult = await this.start();
-      if (!startResult.success) return startResult;
-      return { success: true };
+      const [errStart] = await this.start();
+      if (errStart) return op.failure(errStart);
+      return op.success();
     } catch (error) {
-      const message = `Failed to restart agent '${this.name}'.`;
-      h0.log.error({ message, error });
-      return { success: false, message };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to restart agent '${this.name}'.`,
+        error,
+      });
     }
   }
 
@@ -333,14 +367,33 @@ export class AgentProcess {
 
   async getProcessStats() {
     if (!this.#child || this.status !== "running")
-      return { success: false, message: "Agent is not running." };
+      return op.failure({ code: "NotFound", message: "Agent is not running." });
     try {
-      const stats = await this.#child.getProcessStats();
-      return stats;
+      const [errStats, stats] = await this.#child.getProcessStats();
+      if (errStats) return op.failure(errStats);
+      return op.success(stats);
     } catch (error) {
-      const message = `Failed to get process stats for agent '${this.name}'.`;
-      this.#server.telemetry.log.error({ message, error });
-      return { success: false, message, stats: null };
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to get process stats for agent '${this.name}'.`,
+        error,
+      });
+    }
+  }
+
+  async ping() {
+    try {
+      if (!this.#child || this.status !== "running")
+        return op.failure({ code: "NotFound", message: "Agent is not running." });
+      const [errPing] = await this.#child.ping();
+      if (errPing) return op.failure(errPing);
+      return op.success();
+    } catch (error) {
+      return op.failure({
+        code: "Unknown",
+        message: `Failed to ping agent '${this.name}'.`,
+        error,
+      });
     }
   }
 }

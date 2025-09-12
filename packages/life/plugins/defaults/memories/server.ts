@@ -17,11 +17,19 @@ async function buildMemory(
 
 export const memoriesPlugin = definePlugin("memories")
   .dependencies([generationPlugin])
-  .config(
-    z.object({
+  .config({
+    schema: z.object({
       items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
     }),
-  )
+    toTelemetryAttribute: (config) => {
+      // Rewrite items to only keep their configs
+      config.items = config.items.map((item) => ({
+        config: item._definition.config,
+      })) as never;
+
+      return config;
+    },
+  })
   .events({
     "history-changed": {
       dataSchema: z.array(messageSchema),
@@ -108,7 +116,12 @@ export const memoriesPlugin = definePlugin("memories")
       if (event.type !== "build-request") continue;
 
       // Compute hash of input messages to check cache
-      const messagesHash = await canon.sha256({ messages: event.data.messages });
+      const [errHash, messagesHash] = await canon.sha256({ messages: event.data.messages });
+      if (errHash) {
+        // TODO: Log error
+        events.emit({ type: "build-response", data: { ...event.data, messages: [] } });
+        continue;
+      }
 
       // Check if we've already computed memories for these messages
       const cachedResult = context.get().computedMemoriesCache.get(messagesHash);
@@ -181,15 +194,15 @@ export const memoriesPlugin = definePlugin("memories")
     if (event.type !== "cache-memory") return;
     const currentTimestamp = context.get().memoriesLastTimestamp.get(event.data.name) ?? 0;
     if (event.data.timestamp >= currentTimestamp) {
-      context.set("memoriesLastResults", (prev) => {
-        const newMap = new Map(prev);
+      context.set((ctx) => {
+        const newMap = new Map(ctx.memoriesLastResults);
         newMap.set(event.data.name, event.data.messages);
-        return newMap;
+        return { ...ctx, memoriesLastResults: newMap };
       });
-      context.set("memoriesLastTimestamp", (prev) => {
-        const newMap = new Map(prev);
+      context.set((ctx) => {
+        const newMap = new Map(ctx.memoriesLastTimestamp);
         newMap.set(event.data.name, event.data.timestamp);
-        return newMap;
+        return { ...ctx, memoriesLastTimestamp: newMap };
       });
     }
   })
@@ -197,23 +210,23 @@ export const memoriesPlugin = definePlugin("memories")
   .addEffect("handle-build-cache", ({ event, context }) => {
     if (event.type !== "cache-build") return;
 
-    context.set("computedMemoriesCache", (prev) => {
-      const newMap = new Map(prev);
+    context.set((ctx) => {
+      const newMap = new Map(ctx.computedMemoriesCache);
       newMap.set(event.data.messagesHash, {
         hash: event.data.messagesHash,
         memories: event.data.memories,
       });
-      return newMap;
+      return { ...ctx, computedMemoriesCache: newMap };
     });
   })
   // Re-emit the build-response event
   .addEffect("re-emit-build-response", ({ event, dependencies, context }) => {
     if (event.type !== "build-response") return;
     // Add the request id to the processed requests ids
-    context.set("processedRequestsIds", (prev) => {
-      const newSet = new Set(prev);
+    context.set((ctx) => {
+      const newSet = new Set(ctx.processedRequestsIds);
       newSet.add(event.data.requestId);
-      return newSet;
+      return { ...ctx, processedRequestsIds: newSet };
     });
     // Re-emit the resources response event
     dependencies.generation.events.emit({

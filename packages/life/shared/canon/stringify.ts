@@ -6,6 +6,7 @@
  */
 
 import { deserialize, serialize } from "superjson";
+import * as op from "@/shared/operation";
 import type { SerializableValue } from "./serialize";
 
 // biome-ignore-start lint/style: reason
@@ -83,8 +84,8 @@ export function stableDeepStringify(data: any, opts?: any): string {
  * serialization so that structurally equivalent values always stringify to the same
  * output.
  *
- * @param {SerializableValue} value - The value to canonicalize and stringify.
- * @returns {string} A canonical JSON string representing the value.
+ * @param value - The value to canonicalize and stringify.
+ * @returns A canonical JSON string representing the value.
  *
  * @example
  * ```ts
@@ -97,8 +98,8 @@ export function stableDeepStringify(data: any, opts?: any): string {
  * stringify(new Set([3, 1, 2])) === stringify(new Set([1, 2, 3])); // → true
  * ```
  */
-export const stringify = (value: SerializableValue): string => {
-  return stableDeepStringify(serialize(value));
+export const stringify = (value: SerializableValue) => {
+  return op.attempt(() => stableDeepStringify(serialize(value)));
 };
 
 /**
@@ -108,10 +109,10 @@ export const stringify = (value: SerializableValue): string => {
  * the JSON string and then running it through `canon.deserialize`, restoring
  * special types supported by the canon layer.
  *
- * @param {string} value - A canonical string produced by `canon.stringify`.
- * @returns {SerializableValue} The deserialized value.
+ * @param value - A canonical string produced by `canon.stringify`.
+ * @returns The deserialized value.
  *
- * @throws {SyntaxError} If `value` is not valid JSON.
+ * @throws If `value` is not valid JSON.
  * @example
  * ```ts
  * import { stringify, parse } from "@shared/canon";
@@ -120,6 +121,6 @@ export const stringify = (value: SerializableValue): string => {
  * const v = parse(s); // → Map { "a" => 1, "b" => 2 }
  * ```
  */
-export const parse = (value: string): SerializableValue => {
-  return deserialize(JSON.parse(value));
+export const parse = (value: string): op.OperationResult<SerializableValue> => {
+  return op.attempt(() => deserialize(JSON.parse(value)));
 };

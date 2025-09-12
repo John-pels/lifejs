@@ -6,6 +6,7 @@ import type {
   PluginEventsHandler,
 } from "@/plugins/server/types";
 import { AsyncQueue } from "@/shared/async-queue";
+import type * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { Resources } from "@/shared/resources";
 import { Generation, type GenerationChunk } from "./generation";
@@ -18,10 +19,10 @@ export type GenerationPluginEvent = PluginEvent<
 type GenerationPluginContext = z.output<typeof generationPlugin._definition.context>;
 
 export type GenerationPluginParams = {
-  agent: AgentServer;
-  events: PluginEventsHandler<typeof generationPlugin._definition.events>;
+  agent: op.ToPublic<AgentServer>;
+  events: op.ToPublic<PluginEventsHandler<typeof generationPlugin._definition.events>>;
   queue: AsyncQueue<GenerationPluginEvent>;
-  context: PluginContextHandler<GenerationPluginContext, "read">;
+  context: op.ToPublic<PluginContextHandler<GenerationPluginContext, "read">>;
 };
 
 // Orchestrator

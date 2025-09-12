@@ -1,4 +1,3 @@
-// biome-ignore lint/performance/noNamespaceImport: yjs recommendation
 import * as Y from "yjs";
 import { z } from "zod";
 import { definePlugin } from "../../server/define";
@@ -28,11 +27,19 @@ export const storesPlugin = definePlugin("stores")
       config: ["voiceDetection"],
     }),
   ])
-  .config(
-    z.object({
+  .config({
+    schema: z.object({
       items: z.array(z.custom<{ _definition: StoreDefinition }>()).default([]),
     }),
-  )
+    toTelemetryAttribute: (config) => {
+      // Rewrite items to only keep their configs
+      config.items = config.items.map((item) => ({
+        config: item._definition.config,
+      })) as never;
+
+      return config;
+    },
+  })
   .events({
     "update-store-data": {
       dataSchema: z.object({
@@ -51,15 +58,6 @@ export const storesPlugin = definePlugin("stores")
       storesData: z.record(z.string(), z.any()).default({}),
     }),
   )
-  .methods({
-    test: {
-      schema: {
-        input: z.object({}),
-        output: z.object({ result: z.string() }),
-      },
-      run: () => ({ result: "test" }),
-    },
-  })
   .addService("crdt-manager", async ({ queue, events, config }) => {
     const docs = new Map<string, { doc: Y.Doc; isArray: boolean }>();
     // Initialize CRDT stores from config
@@ -105,7 +103,7 @@ export const storesPlugin = definePlugin("stores")
   })
   .addEffect("sync-store-context", ({ event, context }) => {
     if (event.type === "update-store-data") {
-      context.set("storesData", (ctx) => ({
+      context.set((ctx) => ({
         ...ctx,
         storesData: { ...ctx.storesData, [event.data.name]: event.data.data },
       }));

@@ -77,12 +77,14 @@ export const generationPluginClient = definePluginClient<SimplifiedGenerationPlu
     // Subscribe to context changes when the atom is mounted
     onMount(status, () => {
       // Fetch initial status from context
-      status.set(server.context.get().status);
+      const [err, context] = server.context.safe.get();
+      if (err) return;
+      status.set(context.status);
 
       // Subscribe to status changes from the context
       const unsubscribe = server.context.onChange(
         (ctx) => ctx.status,
-        (newStatus) => status.set(newStatus),
+        (ctx) => status.set(ctx.status),
       );
 
       // Return cleanup function

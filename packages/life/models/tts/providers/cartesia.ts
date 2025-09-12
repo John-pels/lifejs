@@ -7,7 +7,7 @@ import { TTSBase, type TTSGenerateJob } from "../base";
 
 // Config
 export const cartesiaTTSConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("cartesia"),
     apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
     model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
@@ -32,17 +32,22 @@ export const cartesiaTTSConfig = createConfig({
       .default("en"),
     voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
   }),
-  clientSchema: z.object({}),
+  toTelemetryAttribute: (config) => {
+    // Redact sensitive fields
+    config.apiKey = "redacted" as never;
+
+    return config;
+  },
 });
 
 // Model
-export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfig.serverSchema> {
+export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfig.schema> {
   readonly #cartesia: CartesiaClient;
   readonly #socket: Websocket;
   readonly #initializedJobsIds: string[] = [];
 
-  constructor(config: z.input<typeof cartesiaTTSConfig.serverSchema>) {
-    super(cartesiaTTSConfig.serverSchema, config);
+  constructor(config: z.input<typeof cartesiaTTSConfig.schema>) {
+    super(cartesiaTTSConfig.schema, config);
     if (!config.apiKey)
       throw new Error(
         "CARTESIA_API_KEY environment variable or config.apiKey must be provided to use this model.",

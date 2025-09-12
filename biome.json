@@ -39,7 +39,9 @@
       },
       "performance": {
         "noBarrelFile": "off",
-        "noAwaitInLoops": "error"
+        "noAwaitInLoops": "error",
+        "noNamespaceImport": "off",
+        "noDelete": "off"
       },
       "nursery": {
         "useConsistentTypeDefinitions": "off",

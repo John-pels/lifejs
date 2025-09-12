@@ -1,18 +1,14 @@
 import { z } from "zod";
-import type { TelemetryClient } from "@/telemetry/types";
+import { type Config, createConfig, type DeeplyEditable } from "@/shared/config";
 import type {
-  PluginConfig,
-  PluginConfigDefinition,
-  PluginContext,
-  PluginContextHandler,
   PluginDefinition,
   PluginDependenciesDefinition,
   PluginEffectFunction,
   PluginEventsDefinition,
-  PluginEventsHandler,
   PluginInterceptorFunction,
   PluginLifecycle,
-  PluginMethodsDefinition,
+  PluginMethodDefinition,
+  PluginMethodSchemas,
   PluginServiceFunction,
 } from "./types";
 
@@ -45,7 +41,7 @@ export class PluginBuilder<
       };
     };
 
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       dependencies,
     }) as unknown as PluginBuilder<
@@ -55,25 +51,31 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods | "dependencies"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "dependencies">;
+    return builder as Omit<typeof builder, ExcludedMethods | "dependencies">;
   }
 
-  config<const Schema extends PluginConfigDefinition>(schema: Schema) {
-    const plugin = new PluginBuilder({
+  config<const Schema extends z.AnyZodObject>({
+    schema,
+    toTelemetryAttribute = () => ({}),
+  }: {
+    schema: Schema;
+    toTelemetryAttribute?: (data: DeeplyEditable<z.output<Schema>>) => Record<string, unknown>;
+  }) {
+    const builder = new PluginBuilder({
       ...this._definition,
-      config: schema,
+      config: createConfig({ schema, toTelemetryAttribute }),
     }) as PluginBuilder<
-      Definition & { config: Schema },
+      Definition & { config: Config<Schema> },
       EffectKeys,
       ServiceKeys,
       InterceptorKeys,
       ExcludedMethods | "config"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "config">;
+    return builder as Omit<typeof builder, ExcludedMethods | "config">;
   }
 
   context<Schema extends z.AnyZodObject>(schema: Schema) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       context: schema,
     }) as PluginBuilder<
@@ -83,11 +85,11 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods | "context"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "context">;
+    return builder as Omit<typeof builder, ExcludedMethods | "context">;
   }
 
   events<const EventsDef extends PluginEventsDefinition>(events: EventsDef) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       events,
     }) as PluginBuilder<
@@ -97,45 +99,15 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods | "events"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "events">;
+    return builder as Omit<typeof builder, ExcludedMethods | "events">;
   }
 
-  methodsold<const MethodsDef extends PluginMethodsDefinition>(methods: MethodsDef) {
-    const plugin = new PluginBuilder({
-      ...this._definition,
-      methods,
-    }) as PluginBuilder<
-      Definition & { methods: MethodsDef },
-      EffectKeys,
-      ServiceKeys,
-      InterceptorKeys,
-      ExcludedMethods | "methods"
-    >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
-  }
-
-  methods<const Schemas extends Record<string, { input: z.AnyZodObject; output: z.AnyZodObject }>>(
+  methods<const Schemas extends Record<string, PluginMethodSchemas>>(
     methods: {
-      [K in keyof Schemas]: {
-        schema: Schemas[K];
-        run: Schemas[K] extends { input: z.AnyZodObject; output: z.AnyZodObject }
-          ? (
-              params: {
-                config: PluginConfig<Definition["config"], "output">;
-                context: PluginContextHandler<
-                  PluginContext<Definition["context"], "output">,
-                  "read"
-                >;
-                events: PluginEventsHandler<Definition["events"]>;
-                telemetry: TelemetryClient;
-              },
-              input: z.infer<Schemas[K]["input"]>,
-            ) => z.infer<Schemas[K]["output"]> | Promise<z.infer<Schemas[K]["output"]>>
-          : never;
-      };
+      [K in keyof Schemas]: PluginMethodDefinition<Definition, Schemas[K]>;
     },
   ) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       methods,
     }) as PluginBuilder<
@@ -145,50 +117,11 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods | "methods"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
+    return builder as Omit<typeof builder, ExcludedMethods | "methods">;
   }
-
-  /*
-  
-    // biome-ignore lint/suspicious/noExplicitAny: required here
-  methods<const Schemas extends Record<string, z.ZodFunction<any, any>>>(
-    methods: {
-      [K in keyof Schemas]: {
-        schema: Schemas[K];
-        run: Schemas[K] extends z.ZodFunction<infer TArgs, infer TReturns>
-          ? (
-              params: {
-                config: PluginConfig<Definition["config"], "output">;
-                context: PluginContextHandler<
-                  PluginContext<Definition["context"], "output">,
-                  "read"
-                >;
-                events: PluginEventsHandler<Definition["events"]>;
-                telemetry: TelemetryClient;
-              },
-              ...args: z.infer<TArgs> extends readonly unknown[] ? z.infer<TArgs> : never
-            ) => z.infer<TReturns> | Promise<z.infer<TReturns>>
-          : never;
-      };
-    },
-  ) {
-    const plugin = new PluginBuilder({
-      ...this._definition,
-      methods,
-    }) as PluginBuilder<
-      Definition & { methods: typeof methods },
-      EffectKeys,
-      ServiceKeys,
-      InterceptorKeys,
-      ExcludedMethods | "methods"
-    >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "methods">;
-  }
-    
-  */
 
   lifecycle<const LifecycleConfig extends PluginLifecycle<Definition>>(lifecycle: LifecycleConfig) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       lifecycle,
     }) as unknown as PluginBuilder<
@@ -198,11 +131,11 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods | "lifecycle"
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods | "lifecycle">;
+    return builder as Omit<typeof builder, ExcludedMethods | "lifecycle">;
   }
 
   addEffect<const Name extends string>(name: Name, effect: PluginEffectFunction<Definition>) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       effects: { ...(this._definition.effects ?? {}), [name]: effect },
     }) as PluginBuilder<
@@ -212,12 +145,12 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   removeEffect<const Name extends EffectKeys>(name: Name) {
     const { [name]: _removed, ...remainingEffects } = this._definition.effects ?? {};
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       effects: remainingEffects,
     }) as unknown as PluginBuilder<
@@ -227,11 +160,11 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   addService<const Name extends string>(name: Name, service: PluginServiceFunction<Definition>) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       services: { ...(this._definition.services ?? {}), [name]: service },
     }) as PluginBuilder<
@@ -241,12 +174,12 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   removeService<const Name extends ServiceKeys>(name: Name) {
     const { [name]: _removed, ...remainingServices } = this._definition.services ?? {};
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       services: remainingServices,
     }) as unknown as PluginBuilder<
@@ -256,14 +189,14 @@ export class PluginBuilder<
       InterceptorKeys,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   addInterceptor<const Name extends string>(
     name: Name,
     interceptor: PluginInterceptorFunction<Definition>,
   ) {
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       interceptors: { ...(this._definition.interceptors ?? {}), [name]: interceptor },
     }) as PluginBuilder<
@@ -273,12 +206,12 @@ export class PluginBuilder<
       InterceptorKeys | Name,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   removeInterceptor<const Name extends InterceptorKeys>(name: Name) {
     const { [name]: _removed, ...remainingInterceptors } = this._definition.interceptors ?? {};
-    const plugin = new PluginBuilder({
+    const builder = new PluginBuilder({
       ...this._definition,
       interceptors: remainingInterceptors,
     }) as unknown as PluginBuilder<
@@ -288,14 +221,14 @@ export class PluginBuilder<
       Exclude<InterceptorKeys, Name>,
       ExcludedMethods
     >;
-    return plugin as Omit<typeof plugin, ExcludedMethods>;
+    return builder as Omit<typeof builder, ExcludedMethods>;
   }
 
   pick<
     const Options extends {
       events?: Array<keyof Definition["events"]>;
       context?: Array<keyof Definition["context"]["shape"]>;
-      config?: boolean | Array<keyof Definition["config"]["shape"]>;
+      config?: boolean | Array<keyof Definition["config"]["schema"]["shape"]>;
     },
   >(_options: Options) {
     // Pick is now type-only - runtime always returns the full plugin
@@ -308,8 +241,10 @@ export class PluginBuilder<
       config: Options["config"] extends true
         ? Definition["config"]
         : Options["config"] extends readonly string[]
-          ? z.ZodObject<Pick<Definition["config"]["shape"], Options["config"][number]>>
-          : z.ZodObject<Record<string, never>>;
+          ? Config<
+              z.ZodObject<Pick<Definition["config"]["schema"]["shape"], Options["config"][number]>>
+            >
+          : Config<z.ZodObject<Record<string, never>>>;
       events: Options["events"] extends readonly string[]
         ? Pick<Definition["events"], Options["events"][number]>
         : never;
@@ -338,7 +273,7 @@ export function definePlugin<const Name extends string>(name: Name) {
   return new PluginBuilder({
     name,
     dependencies: {},
-    config: z.object({}),
+    config: createConfig({ schema: z.object({}) }),
     context: z.object({}),
     events: {},
     lifecycle: {},

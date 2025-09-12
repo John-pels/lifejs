@@ -3,6 +3,7 @@ import type { AgentClient } from "@/agent/client/class";
 import type { AgentClientDefinition } from "@/agent/client/types";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
+import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { PluginContext } from "../server/types";
 import type {
@@ -18,9 +19,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   readonly _definition: ClientDefinition;
   readonly config: PluginClientConfig<ClientDefinition["config"], "output">;
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
-  server!: PluginClientServer<ClientDefinition["$serverDef"]>;
-
+  server!: PluginClientServer<ClientDefinition["$serverDef"], "internal">;
   readonly #agent: AgentClient<AgentClientDefinition>;
+
   get #dependencies() {
     const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
     for (const [depName] of Object.entries(this._definition.dependencies ?? {})) {
@@ -29,7 +30,6 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     }
     return dependencies;
   }
-  // #telemetry: TelemetryClient;
 
   readonly #eventsListeners = new Map<
     string,
@@ -45,9 +45,13 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       selector: (
         context: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
       ) => SerializableValue;
-      callback: (newValue: SerializableValue, oldValue: SerializableValue) => void | Promise<void>;
+      callback: (
+        newContext: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
+        oldContext: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
+      ) => void | Promise<void>;
     }
   >();
+  // #telemetry: TelemetryClient;
 
   constructor(
     definition: ClientDefinition,
@@ -56,14 +60,18 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   ) {
     this._definition = definition;
     this.#agent = agent;
-    this.config = definition.config.parse(config) as PluginClientConfig<
+    this.config = definition.config.schema.parse(config) as PluginClientConfig<
       ClientDefinition["config"],
       "output"
     >;
 
     this.atoms = definition.atoms({
       config: this.config,
-      server: this.server,
+      server: {
+        methods: op.toPublic(this.server.methods) as never,
+        context: op.toPublic(this.server.context) as never,
+        events: op.toPublic(this.server.events) as never,
+      },
       dependencies: this.#dependencies,
     }) as PluginClientAtoms<ClientDefinition["atoms"]>;
 
@@ -94,6 +102,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       },
       execute: async ({ listenerId, event }) => {
         await this.#eventsListeners.get(listenerId)?.callback(event);
+        return op.success();
       },
     });
     this.server.events.on = (...args: unknown[]) => {
@@ -115,7 +124,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       });
 
       // Return unsubscribe function
-      return () => {
+      return op.success(() => {
         // Stop subscription server-side
         agent.transport.call({
           name: `plugin.${this._definition.name}.events.unsubscribe`,
@@ -127,12 +136,12 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
 
         // Clean up callback
         this.#eventsListeners.delete(id);
-      };
+      });
     };
     this.server.events.once = (...args: unknown[]) => {
       const [selector, callback] = args as Parameters<typeof this.server.events.once>;
       const unsubscribe = this.server.events.on(selector, async (event) => {
-        unsubscribe();
+        unsubscribe?.[1]?.();
         await callback(event);
       });
       return unsubscribe;
@@ -153,11 +162,11 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       });
 
       // Return unsubscribe function
-      return () => {
+      return op.success(() => {
         this.#contextListeners.delete(listenerId);
-      };
+      });
     };
-    this.server.context.get = () => deepClone(this.#contextValue);
+    this.server.context.get = () => op.attempt(() => deepClone(this.#contextValue));
     this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
@@ -165,12 +174,14 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
           output: z.object({ value: z.any(), timestamp: z.number() }),
         },
       })
-      .then((response) => {
-        if (response.status === "error") {
+      .then((result) => {
+        const [err, response] = result;
+        if (err) {
           // Todo: Use telemetry client instead
           console.error(
             "Failed to fetch the initial context value for plugin",
             this._definition.name,
+            err,
           );
           return;
         }
@@ -190,6 +201,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
           this.#contextValue = value;
         }
         await this.#notifyContextListeners(oldContextValue);
+        return op.success();
       },
     });
   }
@@ -203,7 +215,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         const oldSelectedValue = listener.selector(oldContextValue);
         // Only call if value actually changed
         if (!canon.equal(newSelectedValue, oldSelectedValue)) {
-          await listener.callback(newSelectedValue, oldSelectedValue);
+          await listener.callback(deepClone(this.#contextValue), deepClone(oldContextValue));
         }
       }),
     );

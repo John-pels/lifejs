@@ -1,7 +1,8 @@
 import { Command } from "commander";
+import type { TelemetryClient } from "@/telemetry/base";
 import { executeStart, type StartOptions } from "./action";
 
-export function createStartCommand() {
+export function createStartCommand(telemetry: TelemetryClient) {
   const command = new Command("start")
     .description("Start the production server.")
     .helpOption("--help", "Display help for command.")
@@ -15,15 +16,7 @@ export function createStartCommand() {
       "Token to authenticate with the server. You can also set LIFE_SERVER_TOKEN environment variable.",
     )
     .option("--debug", "Enable debug mode logs, same as LOG_LEVEL=debug.")
-    .action(async (options: StartOptions) => {
-      try {
-        await executeStart(options);
-      } catch (error) {
-        if (!(error instanceof Error)) return;
-        console.error("\x1b[31mError:\x1b[0m", error.message);
-        process.exit(1);
-      }
-    });
+    .action(async (options: StartOptions) => await executeStart(telemetry, options));
 
   return command;
 }

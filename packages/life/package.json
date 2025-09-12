@@ -84,16 +84,6 @@
         "default": "./dist/exports/react.js"
       }
     },
-    "./auth": {
-      "import": {
-        "types": "./dist/exports/auth.d.ts",
-        "default": "./dist/exports/auth.mjs"
-      },
-      "require": {
-        "types": "./dist/exports/auth.d.ts",
-        "default": "./dist/exports/auth.js"
-      }
-    },
     "./build/client": {
       "import": {
         "types": "./dist/exports/build/client.d.ts",
@@ -128,6 +118,7 @@
   "dependencies": {
     "@ast-grep/napi": "^0.39.4",
     "@hono/node-server": "^1.19.1",
+    "@hono/node-ws": "^1.2.0",
     "@hono/zod-validator": "^0.7.2",
     "@huggingface/transformers": "^3.7.2",
     "@inkjs/ui": "^2.0.0",
@@ -165,6 +156,7 @@
     "@deepgram/sdk": "4.11.2",
     "@mistralai/mistralai": "^1.9.18",
     "@types/bun": "^1.2.21",
+    "@types/ws": "^8.18.1",
     "openai": "^5.16.0",
     "tsup": "^8.5.0"
   },

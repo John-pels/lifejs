@@ -11,7 +11,7 @@ import { STTBase, type STTGenerateJob } from "../base";
 
 // Config
 export const deepgramSTTConfig = createConfig({
-  serverSchema: z.object({
+  schema: z.object({
     provider: z.literal("deepgram"),
     apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
     model: z
@@ -54,16 +54,21 @@ export const deepgramSTTConfig = createConfig({
       .default("nova-2-general"),
     language: z.string().default("en"),
   }),
-  clientSchema: z.object({}),
+  toTelemetryAttribute: (config) => {
+    // Redact sensitive fields
+    config.apiKey = "redacted" as never;
+
+    return config;
+  },
 });
 
 // Model
-export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.serverSchema> {
+export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
   readonly #deepgram: DeepgramClient;
   readonly #jobsSockets: Map<string, ListenLiveClient> = new Map();
 
-  constructor(config: z.input<typeof deepgramSTTConfig.serverSchema>) {
-    super(deepgramSTTConfig.serverSchema, config);
+  constructor(config: z.input<typeof deepgramSTTConfig.schema>) {
+    super(deepgramSTTConfig.schema, config);
     if (!config.apiKey)
       throw new Error(
         "DEEPGRAM_API_KEY environment variable or config.apiKey must be provided to use this model.",

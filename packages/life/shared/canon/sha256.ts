@@ -1,6 +1,6 @@
+import * as op from "@/shared/operation";
 import type { SerializableValue } from "./serialize";
 import { stringify } from "./stringify";
-
 /**
  * canon.sha256
  *
@@ -11,7 +11,7 @@ import { stringify } from "./stringify";
  * order‑insensitive, structurally equivalent inputs always yield the same hash.
  *
  * @param value - The value to hash.
- * @returns {string} A 64‑character, lowercase hex SHA‑256 digest of the value’s canonical form.
+ * @returns A 64‑character, lowercase hex SHA‑256 digest of the value’s canonical form.
  *
  * @example
  * ```ts
@@ -26,10 +26,17 @@ import { stringify } from "./stringify";
  * canon.sha256(new Date("2021-08-01"));
  * ```
  */
+
 export const sha256 = async (value: SerializableValue) => {
-  const json = stringify(value);
-  const hashedData = new TextEncoder().encode(json);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", hashedData);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    const [err, data] = stringify(value);
+    if (err) return op.failure(err);
+    const hashedData = new TextEncoder().encode(data);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", hashedData);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return op.success(hash);
+  } catch (error) {
+    return op.failure({ code: "Unknown", error });
+  }
 };

@@ -1,57 +1,61 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { Telemetry } from "@/telemetry/client";
+import { TelemetryClient } from "@/telemetry/base";
+import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
+import { formatLogForTerminal } from "@/telemetry/helpers/terminal";
+import { createTelemetryClient } from "@/telemetry/node";
+import type { TelemetryLogLevel } from "@/telemetry/types";
 import { createBuildCommand } from "./commands/build";
 import { createDevCommand } from "./commands/dev";
 import { createInitCommand } from "./commands/init";
 import { createStartCommand } from "./commands/start";
-import { cliTelemetry } from "./telemetry";
-import { formatTelemetryLog } from "./utils/format-telemetry-log";
 import { applyHelpFormatting } from "./utils/help-formatter";
 import { formatVersion, getVersion } from "./utils/version";
 
 async function main() {
-  // Set up cleanup function to run before process exits
-  let cleanupDone = false;
-  const cleanup = async () => {
-    if (cleanupDone) return;
-    cleanupDone = true;
-    await cliTelemetry.flush();
-    console.log(""); // Newline after the command for better readability
-  };
-  process.on("SIGINT", () => setImmediate(cleanup));
-  process.on("SIGTERM", () => setImmediate(cleanup));
-  process.on("beforeExit", () => cleanup);
-
-  // Initialize program
-  const program = new Command();
-  const version = await getVersion();
-
-  // Retrieve log level
-  const logLevel = Telemetry.parseLogLevel(
-    process.argv.includes("--debug") ? "debug" : (process.env.LOG_LEVEL ?? "info"),
-  );
-
-  // Subscribe to CLI telemetry logs and print them after formatting
-  cliTelemetry.registerConsumer({
+  // Stream formatted telemetry logs to the terminal
+  let logLevel = process.argv.includes("--debug") ? "debug" : undefined;
+  logLevel = logLevel ?? (process.env.LOG_LEVEL as TelemetryLogLevel) ?? "info";
+  TelemetryClient.registerGlobalConsumer({
     async start(queue) {
       for await (const item of queue) {
         if (item.type === "log") {
           // Ignore logs lower than the requested log level
-          if (Telemetry.logLevelPriority(item.level) < Telemetry.logLevelPriority(logLevel))
+          if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel))
             continue;
 
           // Format and print the log
           try {
-            console.log(await formatTelemetryLog(item));
+            console.log(await formatLogForTerminal(item));
           } catch {
-            // Fallback to raw output if formatting fails
             console.log(item.message);
           }
         }
       }
     },
   });
+
+  // Set up cleanup function to run before process exits
+  let cleanupDone = false;
+  const cleanup = async () => {
+    if (cleanupDone) return;
+    cleanupDone = true;
+    await TelemetryClient.flushAllConsumers();
+    console.log(""); // Newline for better readability
+  };
+  process.on("SIGINT", () => setImmediate(cleanup));
+  process.on("SIGTERM", () => setImmediate(cleanup));
+  process.on("beforeExit", () => cleanup);
+
+  // Create the CLI telemety client
+  const cliTelemetry = createTelemetryClient("cli", {
+    command: process.argv.at(2) ?? "unknown",
+    args: process.argv.slice(3) ?? [],
+  });
+
+  // Initialize program
+  const program = new Command();
+  const version = await getVersion();
 
   // Configure the main program
   program
@@ -61,10 +65,10 @@ async function main() {
 
   // Register commands
   const commands = [
-    createDevCommand(),
-    createBuildCommand(),
-    createStartCommand(),
-    createInitCommand(),
+    createDevCommand(cliTelemetry),
+    createBuildCommand(cliTelemetry),
+    createStartCommand(cliTelemetry),
+    createInitCommand(cliTelemetry),
   ];
 
   // Apply formatting to commands

@@ -76,14 +76,14 @@
     },
     "packages/life": {
       "name": "life",
-      "version": "0.13.0",
+      "version": "0.15.0",
       "bin": {
         "life": "./dist/cli/index.mjs",
       },
       "dependencies": {
         "@ast-grep/napi": "^0.39.4",
-        "@dotenvx/dotenvx": "^1.49.0",
         "@hono/node-server": "^1.19.1",
+        "@hono/node-ws": "^1.2.0",
         "@hono/zod-validator": "^0.7.2",
         "@huggingface/transformers": "^3.7.2",
         "@inkjs/ui": "^2.0.0",
@@ -121,6 +121,7 @@
         "@deepgram/sdk": "4.11.2",
         "@mistralai/mistralai": "^1.9.18",
         "@types/bun": "^1.2.21",
+        "@types/ws": "^8.18.1",
         "openai": "^5.16.0",
         "tsup": "^8.5.0",
       },
@@ -314,6 +315,8 @@
     "@fullhuman/postcss-purgecss": ["@fullhuman/postcss-purgecss@2.3.0", "", { "dependencies": { "postcss": "7.0.32", "purgecss": "^2.3.0" } }, "sha512-qnKm5dIOyPGJ70kPZ5jiz0I9foVOic0j+cOzNDoo8KoCf6HjicIZ99UfO2OmE7vCYSKAAepEwJtNzpiiZAh9xw=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.1", "", { "peerDependencies": { "hono": "^4" } }, "sha512-h44e5s+ByUriaRIbeS/C74O8v90m0A95luyYQGMF7KEn96KkYMXO7bZAwombzTpjQTU4e0TkU8U1WBIXlwuwtA=="],
+
+    "@hono/node-ws": ["@hono/node-ws@1.2.0", "", { "dependencies": { "ws": "^8.17.0" }, "peerDependencies": { "@hono/node-server": "^1.11.1", "hono": "^4.6.0" } }, "sha512-OBPQ8OSHBw29mj00wT/xGYtB6HY54j0fNSdVZ7gZM3TUeq0So11GXaWtFf1xWxQNfumKIsj0wRuLKWfVsO5GgQ=="],
 
     "@hono/zod-validator": ["@hono/zod-validator@0.7.2", "", { "peerDependencies": { "hono": ">=3.9.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-ub5eL/NeZ4eLZawu78JpW/J+dugDAYhwqUIdp9KYScI6PZECij4Hx4UsrthlEUutqDDhPwRI0MscUfNkvn/mqQ=="],
 
@@ -700,6 +703,8 @@
     "@types/react-dom": ["@types/react-dom@19.1.9", "", { "peerDependencies": { "@types/react": "^19.0.0" } }, "sha512-qXRuZaOsAdXKFyOhRBg6Lqqc0yay13vN7KrIg4L7N4aaHN68ma9OK3NE1BoDFgFOTfM7zg+3/8+2n8rLUH3OKQ=="],
 
     "@types/unist": ["@types/unist@3.0.3", "", {}, "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q=="],
+
+    "@types/ws": ["@types/ws@8.18.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg=="],
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.3.0", "", {}, "sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g=="],
 

@@ -1,15 +1,18 @@
 import type z from "zod";
 import { AgentClient } from "@/agent/client/class";
 import type { AgentClientDefinition, GeneratedAgentClient } from "@/agent/client/types";
-import type { agentConfig } from "@/agent/config";
+import type { agentClientConfig } from "@/agent/config";
 import { type ClientBuild, importClientBuild } from "@/exports/build/client";
 import type { LifeServer } from "@/server";
+import * as op from "@/shared/operation";
+// import type { LifeServerApiClient } from "./api";
 
 export class LifeClient {
   readonly #serverUrl: string;
   readonly #serverToken?: string;
   readonly #agents: Map<string, AgentClient<AgentClientDefinition>>;
   #clientBuild: ClientBuild | null = null;
+  // api: LifeServerApiClient;
 
   constructor(params?: { serverUrl?: string; serverToken?: string }) {
     this.#serverUrl = params?.serverUrl ?? "http://localhost:3003";
@@ -26,10 +29,7 @@ export class LifeClient {
   async createAgent<Name extends keyof ClientBuild>(
     name: Name,
     scope: Record<string, unknown> = {},
-  ): Promise<
-    | { success: true; agent: GeneratedAgentClient<Name> }
-    | { success: false; message: string; error?: unknown }
-  > {
+  ) {
     try {
       const response = await fetch(`${this.#serverUrl}/agent/create`, {
         method: "POST",
@@ -41,18 +41,18 @@ export class LifeClient {
           scope,
         }),
       });
-
-      const data: Awaited<ReturnType<LifeServer["createAgentProcess"]>> = await response.json();
-
-      if (!data.success) {
-        return { success: false, message: data.message || "Failed to create agent" };
-      }
+      const [err, data]: Awaited<ReturnType<LifeServer["createAgentProcess"]>> =
+        await response.json();
+      if (err) return op.failure(err);
 
       // TypeScript narrows the type, but we still need runtime checks
       const { agentId, sessionToken, transportRoom, clientSideConfig } = data;
 
       if (!(agentId && sessionToken && transportRoom)) {
-        return { success: false, message: "Server response missing required fields" };
+        return op.failure({
+          code: "InvalidInput",
+          message: "Server response missing required fields",
+        });
       }
 
       // Load the client build if not already loaded
@@ -62,7 +62,10 @@ export class LifeClient {
 
       const agentBuild = this.#clientBuild[name as keyof ClientBuild];
       if (!agentBuild) {
-        return { success: false, message: `Agent '${String(name)}' not found in client build` };
+        return op.failure({
+          code: "NotFound",
+          message: `Agent '${String(name)}' not found in client build`,
+        });
       }
 
       // Create agent client with proper definition and plugins from build
@@ -74,17 +77,15 @@ export class LifeClient {
         sessionToken,
         transportRoom,
         config:
-          clientSideConfig ?? ({ transport: {} } as z.output<typeof agentConfig.clientSchema>),
+          clientSideConfig ?? ({ transport: {} } as z.output<typeof agentClientConfig.schema>),
       }) as GeneratedAgentClient<Name>;
 
       this.#agents.set(agentId, agentClient);
-      return { success: true, agent: agentClient };
+      return op.success(op.toPublic(agentClient));
     } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : "Unknown error occurred",
-        error,
-      };
+      const message = "Failed to create agent.";
+      // this.#telemetry.log.error({ message, error, attributes: { agentId, name } });
+      return op.failure({ code: "Unknown", message, error });
     }
   }
 
@@ -93,16 +94,29 @@ export class LifeClient {
    * @param id - Agent ID
    * @returns AgentClient instance or undefined
    */
-  getAgent<Name extends keyof ClientBuild>(id: string): GeneratedAgentClient<Name> | undefined {
-    return this.#agents.get(id) as GeneratedAgentClient<Name> | undefined;
+  getAgent<Name extends keyof ClientBuild>(id: string) {
+    try {
+      const agent = this.#agents.get(id) as GeneratedAgentClient<Name> | undefined;
+      return op.success(op.toPublic(agent));
+    } catch (error) {
+      const message = "Failed to get agent.";
+      // this.#telemetry.log.error({ message, error, attributes: { id } });
+      return op.failure({ code: "Unknown", message, error });
+    }
   }
 
   /**
    * List all created agent instances
    * @returns Array of agent IDs
    */
-  listAgents(): string[] {
-    return Array.from(this.#agents.keys());
+  listAgents() {
+    try {
+      return op.success(Array.from(this.#agents.keys()));
+    } catch (error) {
+      const message = "Failed to list agents.";
+      // this.#telemetry.log.error({ message, error });
+      return op.failure({ code: "Unknown", message, error });
+    }
   }
 
   /**
@@ -114,36 +128,33 @@ export class LifeClient {
   async getOrCreateAgent<Name extends keyof ClientBuild>(
     name: Name,
     scope: Record<string, unknown> = {},
-  ): Promise<GeneratedAgentClient<Name> | { success: false; message: string; error?: unknown }> {
-    // Check if agent with same name already exists
-    const existingAgent = Array.from(this.#agents.values()).find(
-      (a) => a._definition.name === String(name),
-    );
+  ) {
+    try {
+      // Check if agent with same name already exists
+      const existingAgent = Array.from(this.#agents.values()).find(
+        (a) => a._definition.name === String(name),
+      );
+      if (existingAgent) return op.success(existingAgent as GeneratedAgentClient<Name>);
 
-    if (existingAgent) {
-      return existingAgent as GeneratedAgentClient<Name>;
+      // Else, create a new agent
+      const [err, agent] = await this.createAgent(name, scope);
+      if (err) return op.failure(err);
+      return op.success(agent);
+    } catch (error) {
+      const message = "Failed to get or create agent.";
+      // this.#telemetry.log.error({ message, error, attributes: { name, scope } });
+      return op.failure({ code: "Unknown", message, error });
     }
-
-    const agentResult = await this.createAgent(name, scope);
-    if (agentResult.success) {
-      return agentResult.agent;
-    }
-    return { success: false, message: agentResult.message, error: agentResult.error };
   }
 
   /**
    * Get server information
-   * @param token - Optional server token for authentication
+   * @param serverToken - Optional server token for authentication
    * @returns Server info response
    */
-  async info(
-    token?: string,
-  ): Promise<
-    | Awaited<ReturnType<LifeServer["getServerInfo"]>>
-    | { success: false; message: string; error: unknown }
-  > {
+  async info(serverToken?: string) {
     try {
-      const authToken = token || this.#serverToken;
+      const authToken = serverToken || this.#serverToken;
       const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
       const response = await fetch(`${this.#serverUrl}/server/info`, {
@@ -151,29 +162,23 @@ export class LifeClient {
         headers,
       });
 
-      const data = await response.json();
-      return data;
+      const data = (await response.json()) as Awaited<ReturnType<LifeServer["getServerInfo"]>>;
+      return op.success(data);
     } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : "Failed to get server info",
-        error,
-      };
+      const message = "Failed to get server info.";
+      // this.#telemetry.log.error({ message, error });
+      return op.failure({ code: "Unknown", message, error });
     }
   }
 
   /**
    * Check if the server is responsive
-   * @param token - Optional server token for authentication
+   * @param serverToken - Optional server token for authentication
    * @returns True if server responds with "pong"
    */
-  async ping(
-    token?: string,
-  ): Promise<
-    { success: true; pong: boolean } | { success: false; message: string; error: unknown }
-  > {
+  async ping(serverToken?: string) {
     try {
-      const authToken = token || this.#serverToken;
+      const authToken = serverToken || this.#serverToken;
       const headers: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
       const response = await fetch(`${this.#serverUrl}/server/ping`, {
@@ -181,13 +186,13 @@ export class LifeClient {
       });
 
       const text = await response.text();
-      return { success: true, pong: text === "pong" };
+      if (text !== "pong")
+        return op.failure({ code: "Unknown", message: `Ping failed. Received '${text}'.` });
+      return op.success("pong");
     } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : "Ping failed",
-        error,
-      };
+      const message = "Failed to ping server.";
+      // this.#telemetry.log.error({ message, error });
+      return op.failure({ code: "Unknown", message, error });
     }
   }
 }

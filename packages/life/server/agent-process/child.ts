@@ -2,15 +2,17 @@ import { createBirpc } from "birpc";
 import { AgentServer } from "@/agent/server/class";
 import { importServerBuild } from "@/exports/build/server";
 import { canon } from "@/shared/canon";
+import * as op from "@/shared/operation";
 import { ProcessStats } from "@/shared/process-stats";
-import { lifeTelemetry } from "@/telemetry/client";
+import { createTelemetryClient } from "@/telemetry/node";
 import type { ChildMethods, ParentMethods } from "./types";
 
 let agentServer: AgentServer | null = null;
+
 const processStats = new ProcessStats();
 
-// Scope is going to be rewritten by the parent process anwyay
-const telemetry = lifeTelemetry;
+// Attributes are going to be rewritten by the parent process anyway
+const telemetry = createTelemetryClient("server");
 
 // Create RPC channel with parent process
 const rpc = createBirpc<ParentMethods, ChildMethods>(
@@ -18,19 +20,32 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
     // biome-ignore lint/suspicious/useAwait: not needed
     async injectEnvVars(vars) {
       process.env = { ...process.env, ...vars };
+      return op.success();
     },
     async start(params) {
       try {
+        // Retrieve the agent definition
+        const [errImport, servers] = await op.attempt(importServerBuild(true));
+        if (errImport) return op.failure(errImport);
+        const server = servers?.[params.name as keyof typeof servers];
+        if (!server)
+          return op.failure({ code: "NotFound", message: `Agent '${params.name}' not found.` });
+        const definition = server.definition;
+
         // Create the agent server
-        const servers = await importServerBuild(true);
-        const definition = servers?.[params.name as keyof typeof servers]?.definition;
-        agentServer = new AgentServer({
-          id: params.id,
-          definition,
-          scope: params.scope,
-          pluginsContexts: params.pluginsContexts,
-          isRestart: params.isRestart,
-        });
+        const [errCreate, instance] = op.attempt(
+          () =>
+            new AgentServer({
+              id: params.id,
+              definition: server.definition,
+              scope: params.scope,
+              sha: server.sha,
+              pluginsContexts: params.pluginsContexts,
+              isRestart: params.isRestart,
+            }),
+        );
+        if (errCreate) return op.failure(errCreate);
+        agentServer = instance;
 
         // Stream plugin context changes to parent
         for (const pluginName of Object.keys(definition.plugins)) {
@@ -38,18 +53,24 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
             (c) => c,
             async (c) => {
               if (!agentServer) return;
-              await rpc.syncContext({
+              const [error] = await rpc.syncContext({
                 agentId: agentServer.id,
                 pluginName,
                 context: c,
                 timestamp: Date.now(),
               });
+              if (error)
+                telemetry.log.error({
+                  message: `Failed to sync for plugin '${pluginName}' in agent '${agentServer._definition.name}' process.`,
+                  error,
+                });
             },
           );
         }
 
         // Start the agent server
-        await agentServer.start();
+        const [err] = await agentServer.start();
+        if (err) return op.failure(err);
 
         // Register transport room
         await agentServer.transport.joinRoom(params.transportRoom.name, params.transportRoom.token);
@@ -58,32 +79,37 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
         await rpc.ready();
 
         // Return that the agent server was started successfully
-        return { success: true };
+        return op.success();
       } catch (error) {
-        const message = "Failed to start agent server.";
-        telemetry.log.error({ message, error });
-        return { success: false, message };
+        return op.failure({ code: "Unknown", error });
       }
     },
 
     async stop() {
-      if (agentServer) {
-        const result = await agentServer.stop();
-        if (!result.success) return result;
-        agentServer = null;
+      try {
+        if (agentServer) {
+          const [err] = await agentServer.stop();
+          if (err) return op.failure(err);
+          agentServer = null;
+        }
+        return op.success();
+      } catch (error) {
+        return op.failure({ code: "Unknown", error });
       }
-      return { success: true };
     },
 
     // Simple ping to check if process is responsive
     async ping() {
-      await Promise.resolve();
-      return { success: true };
+      return await op.success();
     },
 
     // Get detailed stats from the child process
     async getProcessStats() {
-      return { success: true, stats: await processStats.get() };
+      try {
+        return await op.success(processStats.get());
+      } catch (error) {
+        return op.failure({ code: "Unknown", error });
+      }
     },
   },
   {
@@ -103,9 +129,3 @@ process.on("unhandledRejection", (reason) => {
   telemetry.log.error({ message: reason instanceof Error ? reason.message : String(reason) });
   process.exit(1);
 });
-
-// Graceful shutdown on SIGTERM
-// process.on("SIGTERM", async () => {
-//   if (agentServer) await agentServer.stop();
-//   process.exit(0);
-// });

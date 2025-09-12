@@ -1,7 +1,10 @@
 import type z from "zod";
+import type { PluginClientBase } from "@/plugins/client/class";
+import type { PluginClientDefinition } from "@/plugins/client/types";
 import type { LifeServer } from "@/server";
-import { TransportClient } from "@/transport/client";
-import type { agentConfig } from "../config";
+import * as op from "@/shared/operation";
+import { TransportBrowserClient } from "@/transport/client/browser";
+import type { agentClientConfig } from "../config";
 import { type AgentClientAtoms, createAgentClientAtoms } from "./atoms";
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "./types";
 
@@ -9,12 +12,12 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   readonly _isAgentClient = true;
   readonly _definition: Definition;
   readonly id: string;
-  readonly transport: TransportClient;
+  readonly transport: TransportBrowserClient;
   readonly atoms: AgentClientAtoms;
   readonly #serverUrl: string;
   readonly #sessionToken: string;
   readonly #transportRoom: { name: string; token: string };
-  readonly #config: z.output<typeof agentConfig.clientSchema>;
+  readonly #config: z.output<typeof agentClientConfig.schema>;
 
   constructor(params: {
     id: string;
@@ -23,7 +26,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     serverUrl: string;
     sessionToken: string;
     transportRoom: { name: string; token: string };
-    config: z.output<typeof agentConfig.clientSchema>;
+    config: z.output<typeof agentClientConfig.schema>;
   }) {
     this.id = params.id;
     this._definition = params.definition;
@@ -33,7 +36,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     this.#config = params.config;
 
     // Initialize transport
-    this.transport = new TransportClient(this.#config.transport);
+    this.transport = new TransportBrowserClient(this.#config.transport);
 
     // Initialize atoms
     this.atoms = createAgentClientAtoms(this);
@@ -72,8 +75,27 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
 
   #initializePlugins(plugins: AgentClientPluginsMapping) {
     for (const [name, pluginDef] of Object.entries(this._definition.plugins)) {
-      // @ts-expect-error
-      this[name] = new plugins[name](pluginDef, this._definition.pluginConfigs[name], this);
+      // Retrieve plugin class
+      const PluginClass = plugins[name as keyof typeof plugins]
+        ?.class as unknown as typeof PluginClientBase<PluginClientDefinition>;
+      if (!PluginClass) return;
+
+      // Create plugin instance
+      const plugin = op.toPublic(
+        new PluginClass(
+          pluginDef,
+          this._definition.pluginConfigs[name] as Record<string, unknown>,
+          this,
+        ),
+      );
+
+      // Make server methods, events, and context public
+      plugin.server.methods = op.toPublic(plugin.server.methods) as never;
+      plugin.server.events = op.toPublic(plugin.server.events) as never;
+      plugin.server.context = op.toPublic(plugin.server.context) as never;
+
+      // Assign plugin instance to agent client
+      this[name as keyof typeof this] = plugin as never;
     }
   }
 
@@ -82,10 +104,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    * @returns Server response on successful start
    * @throws Error if the agent fails to start
    */
-  async start(): Promise<
-    | Awaited<ReturnType<LifeServer["startAgentProcess"]>>
-    | { success: false; message: string; error: unknown }
-  > {
+  async start() {
     try {
       const [apiResponse] = await Promise.all([
         fetch(`${this.#serverUrl}/agent/start`, {
@@ -102,17 +121,16 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
       ]);
 
       if (!apiResponse.success) {
-        throw new Error(apiResponse.message || "Failed to start agent");
+        return op.failure({
+          code: "Unknown",
+          message: "Failed to start agent",
+          error: apiResponse,
+        });
       }
 
-      return apiResponse;
+      return op.success();
     } catch (error) {
-      return {
-        success: false,
-        message:
-          error instanceof Error ? error.message : "Unknown error occurred while starting agent",
-        error,
-      };
+      return op.failure({ code: "Unknown", error });
     }
   }
 
@@ -121,10 +139,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    * @returns Server response on successful stop
    * @throws Error if the agent fails to stop
    */
-  async stop(): Promise<
-    | Awaited<ReturnType<LifeServer["stopAgentProcess"]>>
-    | { success: false; message: string; error: unknown }
-  > {
+  async stop() {
     try {
       const [apiResponse] = await Promise.all([
         fetch(`${this.#serverUrl}/agent/stop`, {
@@ -141,17 +156,12 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
       ]);
 
       if (!apiResponse.success) {
-        throw new Error(apiResponse.message || "Failed to stop agent");
+        return op.failure({ code: "Unknown", message: "Failed to stop agent", error: apiResponse });
       }
 
-      return apiResponse;
+      return op.success();
     } catch (error) {
-      return {
-        success: false,
-        message:
-          error instanceof Error ? error.message : "Unknown error occurred while stopping agent",
-        error,
-      };
+      return op.failure({ code: "Unknown", error });
     }
   }
 
@@ -164,11 +174,11 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     | { success: false; message: string; error: unknown }
   > {
     try {
-      const stopResult = await this.stop();
-      if (!stopResult.success) return stopResult;
-      const startResult = await this.start();
-      if (!startResult.success) return startResult;
-      return { success: true };
+      const [errStop] = await this.stop();
+      if (errStop) return op.failure(errStop);
+      const [errStart] = await this.start();
+      if (errStart) return op.failure(errStart);
+      return op.success();
     } catch (error) {
       return {
         success: false,

@@ -1,5 +1,6 @@
 import type { AgentScope } from "@/agent/server/types";
 import type { SerializableValue } from "@/shared/canon";
+import type * as op from "@/shared/operation";
 import type { TelemetrySignal } from "@/telemetry/types";
 
 // Methods the parent exposes to child processes
@@ -15,19 +16,19 @@ export interface ParentMethods {
     pluginName: string;
     context: SerializableValue;
     timestamp: number;
-  }) => void;
+  }) => op.OperationResult<void>;
 
   // Sync telemetry signal to parent
-  syncTelemetry: (signal: TelemetrySignal) => void;
+  syncTelemetry: (signal: TelemetrySignal) => op.OperationResult<void>;
 
   // Ready signal from child when AgentServer is fully started
-  ready: () => void;
+  ready: () => op.OperationResult<void>;
 }
 
 // Methods the child process exposes to parent
 export interface ChildMethods {
   // Inject environment variables into the child process
-  injectEnvVars: (vars: Record<string, string | undefined>) => void;
+  injectEnvVars: (vars: Record<string, string | undefined>) => Promise<op.OperationResult<void>>;
 
   // Initialize and start the AgentServer with given configuration
   start: (params: {
@@ -37,34 +38,27 @@ export interface ChildMethods {
     transportRoom: { name: string; token: string };
     pluginsContexts: Record<string, SerializableValue>;
     isRestart: boolean;
-  }) => Promise<{ success: boolean; message?: string }>;
+  }) => Promise<op.OperationResult<void>>;
 
   // Gracefully stop the AgentServer
-  stop: () => Promise<{ success: boolean; message?: string }>;
+  stop: () => Promise<op.OperationResult<void>>;
 
   // Ping to check if process is responsive
-  ping: () => Promise<{ success: boolean; message?: string }>;
+  ping: () => Promise<op.OperationResult<void>>;
 
   // Get process stats from the child process
   getProcessStats: () => Promise<
-    | {
-        success: true;
-        stats: {
-          cpu: {
-            usedPercent: number;
-            usedNs: number;
-          };
-          memory: {
-            usedPercent: number;
-            totalBytes: number;
-            freeBytes: number;
-            usedBytes: number;
-          };
-        };
-      }
-    | {
-        success: false;
-        message: string;
-      }
+    op.OperationResult<{
+      cpu: {
+        usedPercent: number;
+        usedNs: number;
+      };
+      memory: {
+        usedPercent: number;
+        totalBytes: number;
+        freeBytes: number;
+        usedBytes: number;
+      };
+    }>
   >;
 }

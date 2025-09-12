@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type agentConfig, defineConfig } from "@/agent/config";
+import { type agentServerConfig, defineConfig } from "@/agent/config";
 import type {
   PluginConfig,
   PluginDefinition,
@@ -22,7 +22,7 @@ export class AgentBuilder<
     this._definition = definition;
   }
 
-  config(params: z.input<typeof agentConfig.serverSchema>) {
+  config(params: z.input<typeof agentServerConfig.schema>) {
     // Create a new builder instance with the provided config
     const builder = new AgentBuilder({
       ...this._definition,
@@ -107,12 +107,12 @@ export class AgentBuilder<
   }
 
   #pluginMethod(plugin: PluginDependencyDefinition, plugins: PluginDependenciesDefinition) {
-    return <const C extends z.input<PluginDefinition["config"]>>(config: C): unknown => {
+    return <const C extends z.input<PluginDefinition["config"]["schema"]>>(config: C): unknown => {
       const builder = new AgentBuilder({
         ...this._definition,
         pluginConfigs: {
           ...((this._definition as Definition).pluginConfigs ?? {}),
-          [plugin.name]: plugin.config.parse(config),
+          [plugin.name]: plugin.config.schema.parse(config),
         },
       });
       return this.#withPluginsMethods(builder, plugins) as Omit<

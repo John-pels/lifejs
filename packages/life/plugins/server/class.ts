@@ -3,6 +3,7 @@ import type { AgentServer } from "@/agent/server/class";
 import type {
   PluginConfig,
   PluginContext,
+  PluginContextDefinition,
   PluginContextHandler,
   PluginDefinition,
   PluginDependencies,
@@ -17,9 +18,10 @@ import type {
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
+import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
-import { lifeTelemetry } from "@/telemetry/client";
-import type { TelemetryClient } from "@/telemetry/types";
+import type { TelemetryClient } from "@/telemetry/base";
+import { createTelemetryClient } from "@/telemetry/node";
 
 type PluginExternalInterceptor = {
   server: PluginServer<PluginDefinition>;
@@ -71,7 +73,20 @@ export class PluginServer<const Definition extends PluginDefinition> {
     this.#agent = agent;
     this.#config = config;
     this.#context = definition.context.parse(context);
-    this.#telemetry = lifeTelemetry.child(`plugin-${definition.name}`);
+    this.#telemetry = createTelemetryClient("plugin.server", {
+      agentId: agent.id,
+      agentSha: agent.sha,
+      agentName: agent._definition.name,
+      agentConfig: agent._definition.config,
+      transportProviderName: agent._definition.config.transport.provider,
+      llmProviderName: agent._definition.config.models.llm.provider,
+      sttProviderName: agent._definition.config.models.stt.provider,
+      eouProviderName: agent._definition.config.models.eou.provider,
+      ttsProviderName: agent._definition.config.models.tts.provider,
+      vadProviderName: agent._definition.config.models.vad.provider,
+      pluginName: definition.name,
+      pluginServerConfig: definition.config.schemaTelemetry.parse(config),
+    });
 
     // Expose methods via RPC
     for (const [name, method] of Object.entries(this._definition.methods ?? {})) {
@@ -94,9 +109,11 @@ export class PluginServer<const Definition extends PluginDefinition> {
         }),
         output: z.object({ id: z.string() }),
       },
-      execute: (input) => ({
-        id: this.#events.emit(input as PluginEvent<Definition["events"], "input">),
-      }),
+      execute: (input) => {
+        const [err, id] = this.#events.emit(input as PluginEvent<Definition["events"], "input">);
+        if (err) return op.failure(err);
+        return op.success({ id });
+      },
     });
 
     // Handle events subscription via RPC
@@ -115,6 +132,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
           callback: "remote",
           selector,
         });
+        return op.success();
       },
     });
     this.#agent.transport.register({
@@ -127,6 +145,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       execute: (input) => {
         const { listenerId } = input;
         this.#eventsListeners.delete(listenerId);
+        return op.success();
       },
     });
 
@@ -134,7 +153,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
       schema: { output: z.object({}) },
-      execute: () => this.#context,
+      execute: () => op.success(this.#context),
     });
   }
 
@@ -162,7 +181,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       else this.#queue.push(outputEvent);
 
       // Return the id
-      return id;
+      return op.success(id);
     },
     on: (selector, callback) => {
       // Generate new listener id
@@ -176,16 +195,16 @@ export class PluginServer<const Definition extends PluginDefinition> {
       });
 
       // Return unsubscribe function
-      return () => {
+      return op.success(() => {
         this.#eventsListeners.delete(id);
-      };
+      });
     },
     once: (selector, callback) => {
       const unsubscribe = this.#events.on(selector, async (event) => {
-        unsubscribe();
+        unsubscribe?.[1]?.();
         await callback(event);
       });
-      return unsubscribe;
+      return op.success(unsubscribe);
     },
   };
 
@@ -194,23 +213,20 @@ export class PluginServer<const Definition extends PluginDefinition> {
     return {
       onChange: this.onContextChange.bind(this),
       get: this.#getContext.bind(this),
-    } as PluginContextHandler<PluginContext<Definition["context"], "output">, "read">;
+    } as PluginContextHandler<PluginContext<PluginContextDefinition, "output">, "read">;
   }
 
   // Create writable context for effects
-  #createWritableContextHandler(): PluginContextHandler<
-    PluginContext<Definition["context"], "output">,
-    "write"
-  > {
+  #createWritableContextHandler() {
     return {
       ...this.#createReadonlyContextHandler(),
       set: this.#setContext.bind(this),
-    };
+    } as PluginContextHandler<PluginContext<PluginContextDefinition, "output">, "write">;
   }
 
   // Obtain a cloned snapshot of the context
   #getContext(): PluginContext<Definition["context"], "output"> {
-    return deepClone(this.#context);
+    return op.attempt(() => deepClone(this.#context));
   }
 
   // Context setter
@@ -221,7 +237,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
       | ((
           prev: PluginContext<Definition["context"], "output">[K],
         ) => PluginContext<Definition["context"], "output">[K]),
-  ): void {
+  ) {
     // Create a cloned snapshot of the current value and context
     const oldContext = deepClone(this.#context);
     const currentKeyValue = deepClone(this.#context[key]);
@@ -242,13 +258,15 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
     // Notify listeners
     this.#notifyContextListeners(oldContext);
+
+    return op.success();
   }
 
   // Subscribe to context changes
   onContextChange(
     selector: (context: PluginContext<Definition["context"], "output">) => SerializableValue,
     callback: (newValue: SerializableValue, oldValue: SerializableValue) => void,
-  ): () => void {
+  ) {
     const id = newId("listener");
     this.#contextListeners.set(id, {
       id,
@@ -257,9 +275,9 @@ export class PluginServer<const Definition extends PluginDefinition> {
     });
 
     // Return unsubscribe function
-    return () => {
+    return op.success(() => {
       this.#contextListeners.delete(id);
-    };
+    });
   }
 
   // Notify all listeners
@@ -300,20 +318,28 @@ export class PluginServer<const Definition extends PluginDefinition> {
         const result = method.run(
           {
             config: this.#config,
-            context: this.#createWritableContextHandler(),
-            events: this.#events as PluginEventsHandler<Definition["events"]>,
+            context: op.toPublic(this.#createWritableContextHandler()),
+            events: this.#events as PluginEventsHandler<PluginEventsDefinition>,
             telemetry: this.#telemetry,
           },
           validationResult.data,
         );
 
+        // Unwrap error and data if the result is an operation result
+        const data = op.isResult(result) ? result[1] : result;
+        const error = op.isResult(result) ? result[0] : null;
+        if (error) return op.failure(error);
+
         // Validate output using the schema
-        const outputValidation = method.schema.output.safeParse(result);
+        const outputValidation = method.schema.output.safeParse(data);
         if (!outputValidation.success) {
-          throw new Error(`Invalid output from method ${name}: ${outputValidation.error.message}`);
+          return op.failure({
+            code: "Internal",
+            message: `Invalid output from method ${name}: ${outputValidation.error?.message}`,
+          });
         }
 
-        return outputValidation.data;
+        return op.success(outputValidation.data);
       };
     }
 
@@ -326,9 +352,9 @@ export class PluginServer<const Definition extends PluginDefinition> {
       try {
         await this._definition.lifecycle.onError({
           config: this.#config,
-          context: this.#createWritableContextHandler(),
-          events: this.#events as PluginEventsHandler<Definition["events"]>,
-          methods: this.#getMethods(),
+          context: op.toPublic(this.#createWritableContextHandler()),
+          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+          methods: op.toPublic(this.#getMethods()),
           error,
           telemetry: this.#telemetry,
         });
@@ -378,13 +404,13 @@ export class PluginServer<const Definition extends PluginDefinition> {
       const readonlyContext = this.#createReadonlyContextHandler();
 
       service({
-        agent: this.#agent,
+        agent: op.toPublic(this.#agent),
         queue: queue[Symbol.asyncIterator](),
         config: this.#config,
-        context: readonlyContext,
-        events: this.#events as PluginEventsHandler<Definition["events"]>,
+        context: op.toPublic(readonlyContext),
+        events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+        methods: op.toPublic(this.#getMethods()),
         dependencies,
-        methods: this.#getMethods(),
         telemetry: this.#telemetry,
       });
     }
@@ -410,9 +436,9 @@ export class PluginServer<const Definition extends PluginDefinition> {
       try {
         await this._definition.lifecycle.onStart({
           config: this.#config,
-          context: this.#createWritableContextHandler(),
-          events: this.#events as PluginEventsHandler<Definition["events"]>,
-          methods: this.#getMethods(),
+          context: op.toPublic(this.#createWritableContextHandler()),
+          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+          methods: op.toPublic(this.#getMethods()),
           telemetry: this.#telemetry,
         });
       } catch (error) {
@@ -429,9 +455,9 @@ export class PluginServer<const Definition extends PluginDefinition> {
       try {
         await this._definition.lifecycle.onRestart({
           config: this.#config,
-          context: this.#createWritableContextHandler(),
-          events: this.#events as PluginEventsHandler<Definition["events"]>,
-          methods: this.#getMethods(),
+          context: op.toPublic(this.#createWritableContextHandler()),
+          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+          methods: op.toPublic(this.#getMethods()),
           telemetry: this.#telemetry,
         });
       } catch (error) {
@@ -445,106 +471,112 @@ export class PluginServer<const Definition extends PluginDefinition> {
     }
 
     // Start the queue
-    for await (let event of this.#queue) {
-      try {
-        // 1. Run external interceptors
-        let isDropped = false;
-        for (const { interceptor, server } of this.#externalInterceptors) {
-          const drop = (_reason: string) => (isDropped = true);
-          const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
-            event = newEvent;
-          };
+    (async () => {
+      for await (let event of this.#queue) {
+        try {
+          // 1. Run external interceptors
+          let isDropped = false;
+          for (const { interceptor, server } of this.#externalInterceptors) {
+            const drop = (_reason: string) => (isDropped = true);
+            const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
+              event = newEvent;
+            };
 
-          // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
-          await interceptor({
-            event,
-            next,
-            drop,
-            dependency: {
-              name: this._definition.name,
-              definition: this._definition,
+            // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
+            await interceptor({
+              event,
+              next,
+              drop,
+              dependency: {
+                name: this._definition.name,
+                definition: this._definition,
+                config: this.#config,
+                context: op.toPublic(this.#createReadonlyContextHandler()),
+                events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+                methods: op.toPublic(this.#getMethods()),
+              },
+              current: {
+                events: op.toPublic(
+                  server.#events as PluginEventsHandler<typeof server._definition.events>,
+                ),
+                context: op.toPublic(server.#createReadonlyContextHandler()),
+                config: server.#config,
+              },
+              telemetry: server.#telemetry,
+            });
+            if (isDropped) break;
+          }
+          if (isDropped) continue;
+
+          // 2. Run effects
+          const dependencies = this.#buildDependencies();
+          for (const effect of Object.values(this._definition.effects ?? {})) {
+            // biome-ignore lint/performance/noAwaitInLoops: sequential execution expected here
+            await effect({
+              agent: op.toPublic(this.#agent),
+              event: deepClone(event),
               config: this.#config,
-              context: this.#createReadonlyContextHandler(),
-              events: this.#events as PluginEventsHandler<Definition["events"]>,
-              methods: this.#getMethods(),
-            },
-            current: {
-              events: server.#events as PluginEventsHandler<typeof server._definition.events>,
-              context: server.#createReadonlyContextHandler(),
-              config: server.#config,
-            },
-            telemetry: server.#telemetry,
-          });
-          if (isDropped) break;
-        }
-        if (isDropped) continue;
+              context: op.toPublic(this.#createWritableContextHandler()),
+              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+              dependencies,
+              methods: op.toPublic(this.#getMethods()),
+              telemetry: this.#telemetry,
+            });
+          }
 
-        // 2. Run effects
-        const dependencies = this.#buildDependencies();
-        for (const effect of Object.values(this._definition.effects ?? {})) {
-          // biome-ignore lint/performance/noAwaitInLoops: sequential execution expected here
-          await effect({
-            agent: this.#agent,
-            event: deepClone(event),
-            config: this.#config,
-            context: this.#createWritableContextHandler(),
-            events: this.#events as PluginEventsHandler<Definition["events"]>,
-            dependencies,
-            methods: this.#getMethods(),
-            telemetry: this.#telemetry,
-          });
-        }
+          // 3. Feed services' queues
+          for (const queue of this.#servicesQueues) {
+            queue.push(deepClone(event));
+          }
 
-        // 3. Feed services' queues
-        for (const queue of this.#servicesQueues) {
-          queue.push(deepClone(event));
-        }
+          // 4. Notify events listeners
+          await Promise.all(
+            Array.from(this.#eventsListeners.values()).map(async ({ id, callback, selector }) => {
+              const isAllSelector = selector === "*";
+              const isArraySelectorAndIncludesEvent =
+                Array.isArray(selector) && selector.includes(event.type);
+              const isObjectSelectorAndIncludesEvent =
+                typeof selector === "object" &&
+                "include" in selector &&
+                (selector.include === "*" || selector.include.includes(event.type));
+              const isObjectSelectorAndExcludesEvent =
+                typeof selector === "object" &&
+                "exclude" in selector &&
+                selector.exclude?.includes(event.type);
 
-        // 4. Notify events listeners
-        await Promise.all(
-          Array.from(this.#eventsListeners.values()).map(async ({ id, callback, selector }) => {
-            const isAllSelector = selector === "*";
-            const isArraySelectorAndIncludesEvent =
-              Array.isArray(selector) && selector.includes(event.type);
-            const isObjectSelectorAndIncludesEvent =
-              typeof selector === "object" &&
-              "include" in selector &&
-              (selector.include === "*" || selector.include.includes(event.type));
-            const isObjectSelectorAndExcludesEvent =
-              typeof selector === "object" &&
-              "exclude" in selector &&
-              selector.exclude?.includes(event.type);
+              if (
+                isAllSelector ||
+                isArraySelectorAndIncludesEvent ||
+                (isObjectSelectorAndIncludesEvent && !isObjectSelectorAndExcludesEvent)
+              ) {
+                // If this is a remote callback, stream the event to the remote callback
+                if (callback === "remote") {
+                  await this.#agent.transport.call({
+                    name: `plugin.${this._definition.name}.events.callback`,
+                    input: { listenerId: id, event },
+                    schema: {
+                      input: z.object({ listenerId: z.string(), event: z.any() }),
+                    },
+                  });
+                }
 
-            if (
-              isAllSelector ||
-              isArraySelectorAndIncludesEvent ||
-              (isObjectSelectorAndIncludesEvent && !isObjectSelectorAndExcludesEvent)
-            ) {
-              // If this is a remote callback, stream the event to the remote callback
-              if (callback === "remote") {
-                await this.#agent.transport.call({
-                  name: `plugin.${this._definition.name}.events.callback`,
-                  input: { listenerId: id, event },
-                  schema: {
-                    input: z.object({ listenerId: z.string(), event: z.any() }),
-                  },
-                });
+                // Else, call the local callback
+                else await callback(event);
               }
-
-              // Else, call the local callback
-              else await callback(event);
-            }
-          }),
-        );
-      } catch (error) {
-        this.#telemetry.log.error({
-          message: `Error processing event in plugin '${this._definition.name}'.`,
-          error,
-          attributes: { plugin: this._definition.name },
-        });
-        await this.#callOnErrorHook(error);
+            }),
+          );
+        } catch (error) {
+          this.#telemetry.log.error({
+            message: `Error processing event in plugin '${this._definition.name}'.`,
+            error,
+            attributes: { plugin: this._definition.name },
+          });
+          await this.#callOnErrorHook(error);
+        }
       }
-    }
+    })();
+
+    return op.success();
   }
 
   async stop() {
@@ -553,9 +585,9 @@ export class PluginServer<const Definition extends PluginDefinition> {
       try {
         await this._definition.lifecycle.onStop({
           config: this.#config,
-          context: this.#createWritableContextHandler(),
-          events: this.#events as PluginEventsHandler<Definition["events"]>,
-          methods: this.#getMethods(),
+          context: op.toPublic(this.#createWritableContextHandler()),
+          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+          methods: op.toPublic(this.#getMethods()),
           telemetry: this.#telemetry,
         });
       } catch (error) {

@@ -1,7 +1,19 @@
 import { deserializeError, serializeError } from "serialize-error";
 import superjson, { type SuperJSONResult } from "superjson";
 import { ZodError, z } from "zod";
+import * as op from "@/shared/operation";
 import { deserializeLifeError, LifeError, serializeLifeError } from "../error";
+
+// Register custom transformer for LifeError objects
+// biome-ignore lint/suspicious/noExplicitAny: Record<string, unknown> is serializable
+superjson.registerCustom<LifeError, any>(
+  {
+    isApplicable: (v): v is LifeError => v instanceof LifeError,
+    serialize: (err) => serializeLifeError(err),
+    deserialize: (data) => deserializeLifeError(data),
+  },
+  "LifeError",
+);
 
 // Register custom transformer for ZodError to preserve all error information
 // We use unknown[] as the serialized type since ZodIssue has complex union types
@@ -26,17 +38,6 @@ superjson.registerCustom<Error, any>(
     deserialize: (data) => deserializeError(data),
   },
   "Error",
-);
-
-// Register custom transformer for LifeError objects
-// biome-ignore lint/suspicious/noExplicitAny: Record<string, unknown> is serializable
-superjson.registerCustom<LifeError, any>(
-  {
-    isApplicable: (v): v is LifeError => v instanceof LifeError,
-    serialize: (err) => serializeLifeError(err),
-    deserialize: (data) => deserializeLifeError(data),
-  },
-  "LifeError",
 );
 
 // - Primitive types
@@ -98,10 +99,8 @@ export type SerializeResult = SuperJSONResult;
  * - Store the result as JSON: `JSON.stringify(canon.serialize(v))`
  * - Send across the wire and rehydrate with `canon.deserialize`
  *
- * @param {SerializableValue | unknown} value
- *   The value to encode into the canon/SuperJSON wire format.
- * @returns {SerializeResult}
- *   A plain JSON-safe object describing the value and its metadata.
+ * @param value - The value to encode into the canon/SuperJSON wire format.
+ * @returns A plain JSON-safe object describing the value and its metadata.
  *
  * @example
  * ```ts
@@ -114,8 +113,8 @@ export type SerializeResult = SuperJSONResult;
  * const payload = JSON.stringify(encoded);
  * ```
  */
-export const serialize = (value: SerializableValue | unknown): SerializeResult => {
-  return superjson.serialize(value);
+export const serialize = (value: SerializableValue | unknown) => {
+  return op.attempt(() => superjson.serialize(value));
 };
 
 /**
@@ -125,10 +124,8 @@ export const serialize = (value: SerializableValue | unknown): SerializeResult =
  * `canon.serialize`. All special types preserved during serialization are
  * restored (Date, Map, Set, BigInt, RegExp, etc.).
  *
- * @param {SerializeResult} value
- *   The structured payload (usually parsed from JSON) to turn back into a live value.
- * @returns {SerializableValue}
- *   The fully rehydrated value.
+ * @param value - The structured payload (usually parsed from JSON) to turn back into a live value.
+ * @returns The fully rehydrated value.
  *
  * @example
  * ```ts
@@ -142,7 +139,9 @@ export const serialize = (value: SerializableValue | unknown): SerializeResult =
  * const decoded = canon.deserialize(JSON.parse(wire));
  * ```
  */
-export const deserialize = (value?: SerializeResult): SerializableValue | undefined => {
-  if (!value) return value;
-  return superjson.deserialize(value);
+export const deserialize = (
+  value?: SerializeResult,
+): op.OperationResult<SerializableValue | undefined> => {
+  if (!value) return op.success(value);
+  return op.attempt(() => superjson.deserialize(value));
 };

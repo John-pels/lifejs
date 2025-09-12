@@ -9,11 +9,11 @@ interface LifeErrorCodeDefinition {
   extraSchema?: z.ZodObject<Record<string, z.ZodType<SerializableValue>>>;
 }
 
-const lifeErrorCodes = {
+export const lifeErrorCodes = {
   /**
    * Used when the user sends an invalid input.
    */
-  Input: {
+  InvalidInput: {
     retriable: false,
     defaultMessage: "Invalid input provided.",
     httpEquivalent: 400,
@@ -75,9 +75,9 @@ const lifeErrorCodes = {
     httpEquivalent: 502,
   },
   /**
-   * Used when an error is thrown but not handled by the framework or application.
+   * Used when an unexpected error is thrown.
    */
-  Unhandled: {
+  Unknown: {
     retriable: false,
     defaultMessage: "Unknown error.",
     httpEquivalent: 500,
@@ -85,7 +85,7 @@ const lifeErrorCodes = {
       /**
        * The unhandled thrown value.
        */
-      cause: z.any(),
+      error: z.any(),
     }),
   },
   /**
@@ -157,23 +157,22 @@ export class LifeError extends Error {
   }
 }
 
-export function lifeError<
-  Code extends keyof typeof lifeErrorCodes,
-  Def extends (typeof lifeErrorCodes)[Code],
->(
-  params: {
-    code: Code;
-    message?: string;
-    retryAfterMs?: number;
-    isPublic?: boolean;
-  } & ("extraSchema" extends keyof Def
-    ? Def["extraSchema"] extends z.ZodObject<Record<string, z.ZodType<SerializableValue>>>
-      ? z.output<Def["extraSchema"]>
-      : // biome-ignore lint/complexity/noBannedTypes: fine here
-        {}
+export type LifeErrorParams<Code extends keyof typeof lifeErrorCodes> = {
+  code: Code;
+  message?: string;
+  retryAfterMs?: number;
+  isPublic?: boolean;
+} & ("extraSchema" extends keyof (typeof lifeErrorCodes)[Code]
+  ? (typeof lifeErrorCodes)[Code]["extraSchema"] extends z.ZodObject<
+      Record<string, z.ZodType<SerializableValue>>
+    >
+    ? z.output<(typeof lifeErrorCodes)[Code]["extraSchema"]>
     : // biome-ignore lint/complexity/noBannedTypes: fine here
-      {}),
-) {
+      {}
+  : // biome-ignore lint/complexity/noBannedTypes: fine here
+    {});
+
+export function lifeError<Code extends keyof typeof lifeErrorCodes>(params: LifeErrorParams<Code>) {
   const { code, message, retryAfterMs, isPublic, ...extra } = params;
   return new LifeError({
     code,
@@ -201,7 +200,7 @@ const serializedLifeErrorSchema = z.object({
 export function serializeLifeError(error: LifeError): Record<string, unknown> {
   if (!(error instanceof LifeError))
     throw new LifeError({
-      code: "Input",
+      code: "InvalidInput",
       message: "The provided object is not a LifeError instance.",
     });
   return {
@@ -218,13 +217,13 @@ export function serializeLifeError(error: LifeError): Record<string, unknown> {
 export function deserializeLifeError(obj: Record<string, unknown>): LifeError {
   if (!obj._isLifeError)
     throw new LifeError({
-      code: "Input",
+      code: "InvalidInput",
       message: "The provided object is not a serialized LifeError.",
     });
   const { success, data } = serializedLifeErrorSchema.safeParse(obj);
   if (!success)
     throw new LifeError({
-      code: "Input",
+      code: "InvalidInput",
       message: "The provided object is not a serialized LifeError.",
     });
   return new LifeError({
@@ -238,14 +237,23 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeError {
 }
 
 export function makePublic(error: LifeError) {
-  // biome-ignore lint/performance/noDelete: fine here
-  delete error.stack;
+  // Ignore in development
+  if (process.env.NODE_ENV === "development") return error;
+
+  // Avoid leaking stack traces in production
+  error.stack = undefined;
+
+  // If the error is already public, return it
   if (error.isPublic) return error;
+
+  // Else, create an obfuscated error
   const internalError = new LifeError({
     id: error.id,
     code: "Internal",
+    isPublic: true,
   });
-  // biome-ignore lint/performance/noDelete: fine here
-  delete internalError.stack;
+  internalError.stack = undefined;
+
+  // Return the obfuscated error
   return internalError;
 }
