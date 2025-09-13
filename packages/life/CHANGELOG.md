@@ -1,5 +1,13 @@
 # life
 
+## 0.18.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [3b01e92](https://github.com/lifejs/lifejs/commit/3b01e9201a55e4be193f1b26ad96e32dfaf65fc9) — Make transport receive\* methods returning an unsubscribe() hook
+- [@LilaRest](https://github.com/LilaRest) in [3b01e92](https://github.com/lifejs/lifejs/commit/3b01e9201a55e4be193f1b26ad96e32dfaf65fc9) — Support public operations filtering in Transport classes
+- [@LilaRest](https://github.com/LilaRest) in [73a25ba](https://github.com/lifejs/lifejs/commit/73a25ba308a81badafa506da56dfd12b498223be) — Adapt transport RPC using the operation library and LifeError as the rest of the codebase
+
 ## 0.17.0
 
 ### Minor Changes
