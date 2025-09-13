@@ -1,7 +1,7 @@
 import type { z } from "zod";
+import { TransportClientBase } from "../base";
 import type { transportBrowserConfig } from "../config/browser";
 import { LiveKitBrowserClient } from "../providers/livekit/browser";
-import { TransportClientBase } from "./base";
 
 // Providers
 export const clientTransportProviders = {
@@ -10,8 +10,11 @@ export const clientTransportProviders = {
 
 // Transport
 export class TransportBrowserClient extends TransportClientBase {
-  constructor(config: z.output<typeof transportBrowserConfig.schema>) {
+  constructor({
+    config,
+    filterPublic = false,
+  }: { config: z.output<typeof transportBrowserConfig.schema>; filterPublic?: boolean }) {
     const ProviderClass = clientTransportProviders[config.provider];
-    super(new ProviderClass(config));
+    super({ provider: new ProviderClass(config), filterPublic });
   }
 }

@@ -70,7 +70,10 @@ export class AgentServer {
     });
 
     // Initialize transport
-    this.transport = new TransportNodeClient(definition.config.transport);
+    this.transport = new TransportNodeClient({
+      config: definition.config.transport,
+      filterPublic: true,
+    });
 
     // Initialize storage
     // TODO

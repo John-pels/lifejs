@@ -91,6 +91,9 @@ export const serializableValueSchema: z.ZodType<SerializableValue> = z.lazy(() =
 export type SerializableValue =
   | SerializablePrimitives
   | SerializableValue[]
+  | readonly SerializableValue[]
+  | [SerializableValue, ...SerializableValue[]]
+  | readonly [SerializableValue, ...SerializableValue[]]
   | Set<SerializableValue>
   | Map<SerializableValue, SerializableValue>
   | { [key: string]: SerializableValue };

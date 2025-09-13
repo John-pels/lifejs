@@ -137,7 +137,9 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       connector.room.registerTextStreamHandler(topic, (iterator, participantInfo) => {
         callback(iterator as AsyncIterable<string>, participantInfo.identity);
       });
-      return op.success();
+      return op.success(() => {
+        connector.room.unregisterTextStreamHandler(topic);
+      });
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }
@@ -188,7 +190,9 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       if (!this.room) return op.failure({ code: "Conflict", message: "Room not connected." });
       if (!this.listeners[type]) this.listeners[type] = [];
       this.listeners[type].push(callback as (event: TransportEvent) => void);
-      return op.success();
+      return op.success(() => {
+        this.listeners[type] = this.listeners[type]?.filter((listener) => listener !== callback);
+      });
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }

@@ -19,6 +19,7 @@ import { type RemoteTrack, type Room as RoomType, TrackKind } from "@livekit/rtc
 import z from "zod";
 import { createConfig } from "@/shared/config";
 import * as op from "@/shared/operation";
+import type { MaybePromise } from "@/shared/types";
 import { type TransportEvent, TransportProviderClientBase } from "../base";
 
 // Config
@@ -76,8 +77,6 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       },
     );
   }
-
-  // private activeAudioStreams = new Map<string, AudioStream>();
 
   #initializeListeners(room: RoomType) {
     // audio-chunk
@@ -165,7 +164,7 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
 
   receiveStreamText(
     topic: string,
-    callback: (iterator: AsyncIterable<string>, participantId: string) => void | Promise<void>,
+    callback: (iterator: AsyncIterable<string>, participantId: string) => MaybePromise<void>,
   ) {
     try {
       const [errEnsure, connector] = this.ensureConnected("receiveText", this);
@@ -173,7 +172,9 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       connector.room.registerTextStreamHandler(topic, (iterator, participantInfo) => {
         callback(iterator as unknown as AsyncIterable<string>, participantInfo.identity);
       });
-      return op.success();
+      return op.success(() => {
+        connector.room.unregisterTextStreamHandler(topic);
+      });
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }
@@ -187,7 +188,9 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       if (!this.room) return op.failure({ code: "Conflict", message: "Room not connected." });
       if (!this.listeners[type]) this.listeners[type] = [];
       this.listeners[type].push(callback as (event: TransportEvent) => void);
-      return op.success();
+      return op.success(() => {
+        this.listeners[type] = this.listeners[type]?.filter((listener) => listener !== callback);
+      });
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }

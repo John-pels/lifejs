@@ -80,7 +80,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       this.server.methods[name as keyof typeof this.server.methods] = (input: unknown) =>
         agent.transport.call({
           name: `plugin.${this._definition.name}.methods.${name}`,
-          input,
+          input: input as SerializableValue,
           // biome-ignore lint/suspicious/noExplicitAny: no need further type precision here
         }) as any;
     }
@@ -89,7 +89,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     this.server.events.emit = (input: unknown) =>
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.emit`,
-        input,
+        input: input as SerializableValue,
       }) as Promise<op.OperationResult<string>>;
     agent.transport.register({
       name: `plugin.${this._definition.name}.events.callback`,

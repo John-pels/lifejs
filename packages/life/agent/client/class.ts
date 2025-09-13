@@ -36,7 +36,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     this.#config = params.config;
 
     // Initialize transport
-    this.transport = new TransportBrowserClient(this.#config.transport);
+    this.transport = new TransportBrowserClient({ config: this.#config.transport });
 
     // Initialize atoms
     this.atoms = createAgentClientAtoms(this);
