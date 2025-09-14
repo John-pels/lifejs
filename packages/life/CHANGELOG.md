@@ -1,5 +1,17 @@
 # life
 
+## 0.19.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [cf9310f](https://github.com/lifejs/lifejs/commit/cf9310f0ad558e334fc2c7489dd8adcea86048ce) — New telemetry client for browser-runtime
+- [@LilaRest](https://github.com/LilaRest) in [cf9310f](https://github.com/lifejs/lifejs/commit/cf9310f0ad558e334fc2c7489dd8adcea86048ce) — Simplified telemetry tracing for cross-runtime compatibility
+- [@LilaRest](https://github.com/LilaRest) in [da8ba2c](https://github.com/lifejs/lifejs/commit/da8ba2cd280b1ba130587425abf8effe9cc1b53c) — Polyfill the nanoseconds lib so it can work cross-runtimes
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [cf9310f](https://github.com/lifejs/lifejs/commit/cf9310f0ad558e334fc2c7489dd8adcea86048ce) — Move all the test suites to Vitest
+
 ## 0.18.0
 
 ### Minor Changes
