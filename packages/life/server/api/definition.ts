@@ -1,5 +1,5 @@
 import z from "zod";
-import { agentClientConfig } from "@/agent/config";
+import { agentClientConfig } from "@/agent/client/config";
 import { telemetrySignalSchema } from "@/telemetry/schemas";
 import type { LifeApiDefinition } from "./types";
 

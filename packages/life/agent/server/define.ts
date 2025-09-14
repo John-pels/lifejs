@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type agentServerConfig, defineConfig } from "@/agent/config";
+import { type agentServerConfig, defineConfig } from "@/agent/server/config";
 import type {
   PluginConfig,
   PluginDefinition,

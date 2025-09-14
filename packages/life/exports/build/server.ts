@@ -2,7 +2,7 @@
 // It is going to be replaced during compilation.
 
 import type { z } from "zod";
-import type { agentServerConfig } from "@/agent/config";
+import type { agentServerConfig } from "@/agent/server/config";
 import type { AgentDefinition } from "@/agent/server/types";
 
 type Mode = "LIFE_BUILD_MODE";

@@ -46,9 +46,9 @@ import z from "zod";
 import {
   isLifeError,
   LifeError,
+  type LifeErrorCode,
   type LifeErrorParams,
   lifeError,
-  type lifeErrorCodes,
 } from "./error";
 import type { ClassShape } from "./types";
 
@@ -115,7 +115,7 @@ export const success = <const DR extends OperationDataOrResult = void>(
  * // result: [LifeError, null]
  * ```
  */
-export const failure = <Code extends keyof typeof lifeErrorCodes, D extends OperationData = never>(
+export const failure = <Code extends LifeErrorCode, D extends OperationData = never>(
   errorOrDef: LifeErrorParams<Code>,
 ): OperationFailure<D> => {
   const error = isLifeError(errorOrDef) ? errorOrDef : lifeError(errorOrDef);
@@ -183,11 +183,11 @@ export function attempt<DR extends OperationDataOrResult>(
 export function attempt<const DR extends OperationDataOrResult>(
   task: (() => DR) | Promise<DR> | (() => Promise<DR>),
 ): Promise<OperationEnsureResult<DR>> | OperationEnsureResult<DR> {
-  const handleError = (error: unknown): OperationFailure<OperationEnsureData<DR>> => {
+  const handleError = (error: unknown) => {
     if (isLifeError(error)) return failure(error);
     return failure({ code: "Unknown", error });
   };
-  const handleResult = (result: DR): OperationEnsureResult<DR> => {
+  const handleResult = (result: DR) => {
     if (isResult(result)) return result as OperationEnsureResult<DR>;
     return success(result) as OperationEnsureResult<DR>;
   };

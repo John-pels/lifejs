@@ -1,6 +1,6 @@
 import type z from "zod";
 import type { PluginConfig, PluginDefinition } from "@/plugins/server/types";
-import type { agentServerConfig } from "../config";
+import type { agentServerConfig } from "./config";
 import type { AgentBuilder } from "./define";
 
 export type AgentScopeDefinition<Schema extends z.AnyZodObject = z.AnyZodObject> = {

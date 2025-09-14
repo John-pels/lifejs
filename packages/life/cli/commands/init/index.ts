@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import type { InitOptions } from "./action";
 import { executeInit } from "./action";
 

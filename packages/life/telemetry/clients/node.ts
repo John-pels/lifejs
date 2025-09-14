@@ -1,11 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import os from "node:os";
 import type z from "zod";
-import packageJson from "../package.json" with { type: "json" };
-import { createTelemetryClientBase, TelemetryClient } from "./base";
-import { AnonymousDataConsumer } from "./consumers/anonymous";
-import type { telemetryScopesDefinitions } from "./scopes";
-import type { TelemetryResource, TelemetrySpan } from "./types";
+import packageJson from "../../package.json" with { type: "json" };
+import { AnonymousDataConsumer } from "../consumers/anonymous";
+import { telemetryNodeScopesDefinition } from "../scopes/node";
+import type { TelemetryResource, TelemetrySpan } from "../types";
+import { TelemetryClient } from "./base";
 
 export class TelemetryNodeClient extends TelemetryClient {
   readonly #spanDataContext = new AsyncLocalStorage<TelemetrySpan | undefined>();
@@ -33,18 +33,30 @@ export class TelemetryNodeClient extends TelemetryClient {
     this.#spanDataContext.enterWith(spanData);
   }
 
-  protected runContextWith(spanData: TelemetrySpan | undefined, fn: () => unknown) {
+  protected runWithSpanData(spanData: TelemetrySpan | undefined, fn: () => unknown) {
     return this.#spanDataContext.run(spanData, fn);
   }
 }
 
-export function createTelemetryClient<Scope extends keyof typeof telemetryScopesDefinitions>(
+export function createTelemetryClient<Scope extends keyof typeof telemetryNodeScopesDefinition>(
   scope: Scope,
   requiredAttributes: z.infer<
-    (typeof telemetryScopesDefinitions)[Scope]["requiredAttributesSchema"]
-  > = {},
+    (typeof telemetryNodeScopesDefinition)[Scope]["requiredAttributesSchema"]
+  >,
 ) {
-  return createTelemetryClientBase(TelemetryNodeClient, scope, requiredAttributes);
+  // Validate the required attributes
+  const schema = telemetryNodeScopesDefinition[scope].requiredAttributesSchema;
+  const { data, error } = schema.safeParse(requiredAttributes);
+  if (error) throw new Error(`Invalid required attributes for scope '${scope}': ${error.message}`);
+
+  // Ensure requested scope is valid
+  if (!Object.keys(telemetryNodeScopesDefinition).includes(scope))
+    throw new Error(`Invalid telemetry scope: '${scope}'.`);
+
+  // Build the client
+  const client = new TelemetryNodeClient(scope);
+  for (const [key, value] of Object.entries(data)) client.setAttribute(key, value);
+  return client;
 }
 
 // Register the anonymous data consumer if the project has not opted out

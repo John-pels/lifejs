@@ -17,7 +17,7 @@ Here are the package manager commands to execute **at the root** of the monorepo
 - `bun run types` - Run TypeScript type checking across the entire repository
 - `bun run lint` - Run linting with ultracite (extends Biome) across the entire repository
 - `bun run format` - Format code with ultracite across the entire repository
-- `bun test` - Run tests across the entire repository
+- `bun run test` (and not `bun test`) - Run tests across the entire repository
 
 You mainly want to use those root commands instead of calling specific apps/packages commands.
 
@@ -50,7 +50,7 @@ Here is an overview of its sub-folders:
 - **Monorepo**: Turborepo.
 - **Linting & Formatting**: ultracite (extends Biome), configured in `biome.json`
 - **TypeScript**: Version 5.x.x across all packages
-- **Testing**: For now we simply using `bun test` (bundled with Bun) which is automatically picking and running `*.test.ts` files in the project.
+- **Testing**: Vitest (ran with `bun run test`) which is automatically picking and running `*.test.ts` files in the project.
 
 ## Development Guidelines
 

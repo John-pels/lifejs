@@ -1,7 +1,7 @@
 import type z from "zod";
 import { AgentClient } from "@/agent/client/class";
+import type { agentClientConfig } from "@/agent/client/config";
 import type { AgentClientDefinition, GeneratedAgentClient } from "@/agent/client/types";
-import type { agentClientConfig } from "@/agent/config";
 import { type ClientBuild, importClientBuild } from "@/exports/build/client";
 import type { LifeServer } from "@/server";
 import * as op from "@/shared/operation";

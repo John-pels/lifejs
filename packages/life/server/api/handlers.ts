@@ -1,5 +1,5 @@
 import * as op from "@/shared/operation";
-import { TelemetryClient } from "@/telemetry/base";
+import { TelemetryClient } from "@/telemetry/clients/base";
 import type { TelemetryConsumer } from "@/telemetry/types";
 import type { definition } from "./definition";
 import type { LifeApiHandlers, LifeApiStreamSendFunction } from "./types";
@@ -8,13 +8,16 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
   ({
     "telemetry.send-signal": {
       onCast: ({ data }) => {
-        serverTelemetry.sendSignal(data.signal);
         // Ensure the signal scope is client to prevent server-side telemetry data tampering
         if (["client", "agent.client", "plugin.client"].includes(data.signal.scope))
           return op.failure({
             code: "Validation",
             message: `Telemetry signal scope must be in ["client", "agent.client", "plugin.client"].`,
           });
+
+        // Send the signal
+        serverTelemetry.sendSignal(data.signal);
+
         return op.success();
       },
     },

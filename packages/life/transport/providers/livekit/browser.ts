@@ -11,7 +11,7 @@ export const livekitBrowserConfig = createConfig({
     serverUrl: z
       .string()
       .url()
-      .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
+      .default(globalThis.process?.env?.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
   }),
   toTelemetryAttribute: (config) => {
     // Remember if the server is a dev server

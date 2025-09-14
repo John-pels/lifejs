@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import { executeStart, type StartOptions } from "./action";
 
 export function createStartCommand(telemetry: TelemetryClient) {

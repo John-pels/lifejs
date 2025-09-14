@@ -4,7 +4,7 @@ import type { PluginClientDefinition } from "@/plugins/client/types";
 import type { LifeServer } from "@/server";
 import * as op from "@/shared/operation";
 import { TransportBrowserClient } from "@/transport/client/browser";
-import type { agentClientConfig } from "../config";
+import type { agentClientConfig } from "../client/config";
 import { type AgentClientAtoms, createAgentClientAtoms } from "./atoms";
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "./types";
 

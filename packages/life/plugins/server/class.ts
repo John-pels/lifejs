@@ -20,8 +20,8 @@ import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
-import type { TelemetryClient } from "@/telemetry/base";
-import { createTelemetryClient } from "@/telemetry/node";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/node";
 
 type PluginExternalInterceptor = {
   server: PluginServer<PluginDefinition>;

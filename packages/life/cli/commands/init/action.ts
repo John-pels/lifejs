@@ -1,6 +1,6 @@
 import { generateHeader } from "@/cli/utils/header";
 import { loadEnvVars } from "@/cli/utils/load-env-vars";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 
 export interface InitOptions {
   template?: string;

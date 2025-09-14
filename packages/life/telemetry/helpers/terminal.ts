@@ -1,7 +1,8 @@
 import chalk from "chalk";
 import esbuild, { type BuildFailure } from "esbuild";
 import type { TelemetryLog } from "@/telemetry/types";
-import { telemetryScopesDefinitions } from "../scopes";
+import { telemetryBrowserScopesDefinition } from "../scopes/browser";
+import { telemetryNodeScopesDefinition } from "../scopes/node";
 
 export async function formatLogForTerminal(log: TelemetryLog) {
   // Get symbol and color based on level
@@ -14,7 +15,8 @@ export async function formatLogForTerminal(log: TelemetryLog) {
   else if (log.level === "info") style = { prefix: chalk.bold.cyan("⦿"), color: chalk.cyan };
   else style = { prefix: chalk.bold.gray("→"), color: chalk.gray };
   const scopeDefinition =
-    telemetryScopesDefinitions[log.scope as keyof typeof telemetryScopesDefinitions];
+    telemetryNodeScopesDefinition?.[log.scope as keyof typeof telemetryNodeScopesDefinition] ??
+    telemetryBrowserScopesDefinition?.[log.scope as keyof typeof telemetryBrowserScopesDefinition];
   const scopeDisplayName =
     scopeDefinition?.displayName instanceof Function
       ? // biome-ignore lint/suspicious/noExplicitAny: fine here

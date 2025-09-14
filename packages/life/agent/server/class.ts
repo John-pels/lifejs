@@ -8,8 +8,8 @@ import { PluginServer } from "@/plugins/server/class";
 import type { PluginDefinition } from "@/plugins/server/types";
 import type { SerializableValue } from "@/shared/canon";
 import * as op from "@/shared/operation";
-import type { TelemetryClient } from "@/telemetry/base";
-import { createTelemetryClient } from "@/telemetry/node";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/node";
 import { TransportNodeClient } from "@/transport/client/node";
 import type { AgentDefinition, AgentScope } from "./types";
 
@@ -149,60 +149,60 @@ export class AgentServer {
   }
 
   async start() {
-    using _ = (await this.telemetry.trace("AgentServer.start()")).start();
+    return await this.telemetry.trace("AgentServer.start()", async () => {
+      try {
+        // Create plugin servers
+        for (const definition of Object.values(this._definition.plugins)) {
+          const config = definition.config.schema.parse(
+            this._definition.pluginConfigs[definition.name] ?? {},
+          );
+          this.plugins[definition.name] = new PluginServer({
+            agent: this,
+            definition,
+            config,
+            context: this.#initialPluginsContexts?.[definition.name] ?? {},
+          });
+        }
 
-    try {
-      // Create plugin servers
-      for (const definition of Object.values(this._definition.plugins)) {
-        const config = definition.config.schema.parse(
-          this._definition.pluginConfigs[definition.name] ?? {},
-        );
-        this.plugins[definition.name] = new PluginServer({
-          agent: this,
-          definition,
-          config,
-          context: this.#initialPluginsContexts?.[definition.name] ?? {},
-        });
+        // Prepare all plugins (this sets up services, interceptors, etc.)
+        for (const plugin of Object.values(this._definition.plugins))
+          this.plugins[plugin.name as keyof typeof this.plugins]?.init();
+
+        // Start all plugin servers
+        const result = await Promise.all(Object.values(this.plugins).map((p) => p.start()));
+        const err = result.find((r) => r[0])?.[0];
+        if (err) return op.failure(err);
+
+        // Return that the agent server was started successfully
+        return op.success();
+      } catch (error) {
+        return op.failure({ code: "Unknown", error });
       }
-
-      // Prepare all plugins (this sets up services, interceptors, etc.)
-      for (const plugin of Object.values(this._definition.plugins))
-        this.plugins[plugin.name as keyof typeof this.plugins]?.init();
-
-      // Start all plugin servers
-      const result = await Promise.all(Object.values(this.plugins).map((p) => p.start()));
-      const err = result.find((r) => r[0])?.[0];
-      if (err) return op.failure(err);
-
-      // Return that the agent server was started successfully
-      return op.success();
-    } catch (error) {
-      return op.failure({ code: "Unknown", error });
-    }
+    });
   }
 
   async stop() {
-    using h0 = (await this.telemetry.trace("AgentServer.stop()")).start();
+    return await this.telemetry.trace("AgentServer.stop()", async (span) => {
+      try {
+        // Stop all plugins
+        await Promise.all(
+          Object.entries(this.plugins).map(([pluginId, plugin]) => {
+            return plugin.stop().catch((error) => {
+              span.log.error({ message: `Error stopping plugin ${pluginId}:`, error });
+            });
+          }),
+        );
 
-    try {
-      // Stop all plugins
-      await Promise.all(
-        Object.entries(this.plugins).map(([pluginId, plugin]) => {
-          return plugin.stop().catch((error) => {
-            h0.log.error({ message: `Error stopping plugin ${pluginId}:`, error });
-          });
-        }),
-      );
+        // Disconnect transport
+        const [errLeave] = await this.transport.leaveRoom();
+        if (errLeave) return op.failure(errLeave);
 
-      // Disconnect transport
-      const [errLeave] = await this.transport.leaveRoom();
-      if (errLeave) return op.failure(errLeave);
-
-      // Return that the agent server was stopped successfully
-      return op.success();
-    } catch (error) {
-      return op.failure({ code: "Unknown", error });
-    }
+        // Return that the agent server was stopped successfully
+        return op.success();
+      } catch (error) {
+        return op.failure({ code: "Unknown", error });
+      }
+    });
   }
 }
 

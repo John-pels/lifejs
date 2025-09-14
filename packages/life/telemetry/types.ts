@@ -31,22 +31,27 @@ export interface TelemetryConsumer {
   start(queue: AsyncQueue<TelemetrySignal>): void;
 }
 
+export type TelemetryConsumerList = Array<{
+  instance: TelemetryConsumer;
+  queue: AsyncQueue<TelemetrySignal>;
+}>;
+
 // - Log Level
 export type TelemetryLogLevel = "debug" | "info" | "warn" | "error" | "fatal";
 export const telemetryLogLevels = ["debug", "info", "warn", "error", "fatal"] as const;
 
 // - Log Handle
-export type TelemetryLogInput = { attributes?: TelemetryAttributes } & (
+export type TelemetryLogInput = { attributes?: TelemetryAttributes; span?: TelemetrySpanHandle } & (
   | { message: string; error?: Error | unknown }
   | { error: Error | unknown }
 );
-export interface TelemetryLogHandle {
+export type TelemetryLogHandle = {
   debug(log: TelemetryLogInput): void;
   info(log: TelemetryLogInput): void;
   warn(log: TelemetryLogInput): void;
   error(log: TelemetryLogInput): void;
   fatal(log: TelemetryLogInput): void;
-}
+};
 
 // - Span Handle
 export interface TelemetrySpanHandle {
@@ -60,4 +65,8 @@ export interface TelemetrySpanHandle {
   setAttributes(attributes: TelemetryAttributes): void;
   log: TelemetryLogHandle;
   end(): void;
+  /**
+   * @internal
+   */
+  _getWritableData(): TelemetrySpan;
 }

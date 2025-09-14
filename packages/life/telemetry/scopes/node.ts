@@ -1,0 +1,55 @@
+import z from "zod";
+import { agentServerConfig } from "@/agent/server/config";
+import { defineScopes } from "./define";
+
+const baseAgentServerAttributesSchema = z.object({
+  agentName: z.string(),
+  agentId: z.string(),
+  agentSha: z.string(),
+  agentConfig: agentServerConfig.schemaTelemetry,
+  transportProviderName: z.string(),
+  llmProviderName: z.string(),
+  sttProviderName: z.string(),
+  eouProviderName: z.string(),
+  ttsProviderName: z.string(),
+  vadProviderName: z.string(),
+});
+
+/**
+ * The list of valid telemetry scopes in the Node.js part of the Life.js codebase.
+ * Ensure consistency and typesafety.
+ */
+export const telemetryNodeScopesDefinition = defineScopes({
+  compiler: {
+    displayName: "Compiler",
+    requiredAttributesSchema: z.object({
+      watch: z.boolean(),
+      optimize: z.boolean(),
+    }),
+  },
+  cli: {
+    displayName: "CLI",
+    requiredAttributesSchema: z.object({
+      command: z.string(), // e.g. "dev", "build", "start", "init"
+      args: z.array(z.string()),
+    }),
+  },
+  server: {
+    displayName: "Server",
+    requiredAttributesSchema: z.object({
+      watch: z.boolean(),
+    }),
+  },
+  "agent.server": {
+    displayName: (attributes) =>
+      `Server > Agent (${attributes?.agentName} - ${attributes?.agentId?.slice(0, 8)})`,
+    requiredAttributesSchema: baseAgentServerAttributesSchema,
+  },
+  "plugin.server": {
+    displayName: (attributes) => `Server > Plugin (${attributes?.pluginName})`,
+    requiredAttributesSchema: baseAgentServerAttributesSchema.extend({
+      pluginName: z.string(),
+      pluginServerConfig: z.any(),
+    }),
+  },
+});

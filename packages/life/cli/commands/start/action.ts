@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { generateHeader } from "@/cli/utils/header";
 import { loadEnvVars } from "@/cli/utils/load-env-vars";
 import { LifeServer } from "@/server";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 
 export interface StartOptions {
   root: string;

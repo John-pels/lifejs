@@ -101,9 +101,12 @@ export const lifeErrorCodes = {
 
 export type LifeErrorCode = keyof typeof lifeErrorCodes;
 
+export type LifeErrorAttributes = Record<string, SerializableValue>;
+
 export class LifeError extends Error {
   readonly id: string;
   readonly code: LifeErrorCode;
+  readonly attributes: LifeErrorAttributes;
   readonly retriable: boolean;
   readonly retryAfterMs?: number;
   readonly httpEquivalent: number;
@@ -114,6 +117,7 @@ export class LifeError extends Error {
     id,
     code,
     message,
+    attributes,
     retryAfterMs,
     isPublic = false,
     stack,
@@ -122,6 +126,7 @@ export class LifeError extends Error {
     id?: string;
     code: LifeErrorCode;
     message?: string;
+    attributes?: LifeErrorAttributes;
     retryAfterMs?: number;
     isPublic?: boolean;
     stack?: string;
@@ -132,6 +137,7 @@ export class LifeError extends Error {
     this.id = id ?? newId("error");
     this.code = code;
     this.retriable = definition.retriable;
+    this.attributes = attributes ?? {};
     this.retryAfterMs = retryAfterMs;
     this.httpEquivalent = definition.httpEquivalent;
     this.isPublic = isPublic;
@@ -149,6 +155,7 @@ export class LifeError extends Error {
       code: this.code,
       message: this.message,
       retriable: this.retriable,
+      attributes: this.attributes,
       retryAfterMs: this.retryAfterMs,
       httpEquivalent: this.httpEquivalent,
       stack: this.stack,
@@ -160,6 +167,7 @@ export class LifeError extends Error {
 export type LifeErrorParams<Code extends keyof typeof lifeErrorCodes> = {
   code: Code;
   message?: string;
+  attributes?: LifeErrorAttributes;
   retryAfterMs?: number;
   isPublic?: boolean;
 } & ("extraSchema" extends keyof (typeof lifeErrorCodes)[Code]
@@ -173,10 +181,11 @@ export type LifeErrorParams<Code extends keyof typeof lifeErrorCodes> = {
     {});
 
 export function lifeError<Code extends keyof typeof lifeErrorCodes>(params: LifeErrorParams<Code>) {
-  const { code, message, retryAfterMs, isPublic, ...extra } = params;
+  const { code, message, attributes, retryAfterMs, isPublic, ...extra } = params;
   return new LifeError({
     code,
     message,
+    attributes,
     retryAfterMs,
     isPublic,
     ...extra,
@@ -194,6 +203,7 @@ const serializedLifeErrorSchema = z.object({
   message: z.string(),
   retryAfterMs: z.number().optional(),
   stack: z.string().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
   _extra: z.record(z.string(), z.unknown()),
 });
 
@@ -210,6 +220,7 @@ export function serializeLifeError(error: LifeError): Record<string, unknown> {
     message: error.message,
     retryAfterMs: error.retryAfterMs,
     stack: error.stack,
+    attributes: error.attributes,
     _extra: error._extra,
   };
 }
@@ -232,6 +243,7 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeError {
     message: data.message,
     retryAfterMs: data.retryAfterMs,
     stack: data.stack,
+    attributes: data.attributes as LifeErrorAttributes,
     ...data._extra,
   });
 }

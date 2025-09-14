@@ -41,7 +41,8 @@
         "noBarrelFile": "off",
         "noAwaitInLoops": "error",
         "noNamespaceImport": "off",
-        "noDelete": "off"
+        "noDelete": "off",
+        "useTopLevelRegex": "warn"
       },
       "nursery": {
         "useConsistentTypeDefinitions": "off",

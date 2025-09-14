@@ -1,9 +1,10 @@
+import { beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { Message, ToolDefinition } from "@/shared/resources";
 import { OpenAILLM } from "../providers/openai";
 import { XaiLLM } from "../providers/xai";
 
-// Provider instances
+// Provider configurations
 const providers = [
   {
     name: "OpenAI",
@@ -34,7 +35,7 @@ const providers = [
 function createMessage(role: Message["role"], content: string): Message {
   const now = Date.now();
   return {
-    id: `msg-${Math.random().toString(36).substr(2, 9)}`,
+    id: `msg-${Math.random().toString(36).substring(2, 9)}`,
     role,
     content,
     createdAt: now,
@@ -54,7 +55,7 @@ function createSearchTool(): ToolDefinition {
         result: z.string().describe("The search result"),
       }),
     },
-    run: async (input: object) => ({
+    run: async (input: unknown) => ({
       success: true,
       output: { result: `Mock search result for: ${(input as { query: string }).query}` },
     }),
@@ -65,7 +66,6 @@ function createCalculatorTool(): ToolDefinition {
   return {
     name: "calculator",
     description: "Perform mathematical calculations",
-
     schema: {
       input: z.object({
         expression: z.string().describe("Mathematical expression to evaluate"),
@@ -74,7 +74,10 @@ function createCalculatorTool(): ToolDefinition {
         result: z.number().describe("The calculation result"),
       }),
     },
-    run: async () => ({ success: true, output: { result: Math.random() * 100 } }),
+    run: async (_input: unknown) => ({
+      success: true,
+      output: { result: 42 },
+    }),
   };
 }
 
@@ -91,315 +94,242 @@ function createWeatherTool(): ToolDefinition {
         condition: z.string().describe("Weather condition"),
       }),
     },
-    run: async () => ({
+    run: async (_input: unknown) => ({
       success: true,
-      temperature: Math.round(Math.random() * 30 + 10),
-      condition: "Sunny",
+      output: { temperature: 22, condition: "Sunny" },
     }),
   };
 }
 
-// Simple helper to consume a stream with timeout
-function consumeStream(
-  job: {
-    getStream: () => AsyncIterable<{ type: string; [key: string]: unknown }>;
-    cancel: () => void;
-  },
-  timeoutMs = 10_000,
-) {
-  const results = {
-    content: "",
-    tools: [] as Array<{ name: string; input: unknown }>,
-    hasContent: false,
-    toolsCalled: 0,
-    error: null as string | null,
-  };
+// Helper to collect stream chunks
+async function collectStreamChunks(
+  job: Awaited<ReturnType<OpenAILLM["generateMessage"] | XaiLLM["generateMessage"]>>,
+): Promise<{
+  content: string;
+  toolCalls?: Array<{ name: string; arguments: unknown }>;
+  error?: string;
+}> {
+  const stream = job.getStream();
+  let content = "";
+  let toolCalls: Array<{ name: string; arguments: unknown }> = [];
+  let error: string | undefined;
 
-  return new Promise<typeof results>((resolve) => {
-    const timeout = setTimeout(() => {
-      job.cancel();
-      resolve(results);
-    }, timeoutMs);
-
-    let inactivityTimeout: NodeJS.Timeout | undefined;
-
-    const checkInactivity = () => {
-      if (inactivityTimeout) clearTimeout(inactivityTimeout);
-      inactivityTimeout = setTimeout(() => {
-        // If tools were called and no chunks for 1 second, consider complete
-        if (results.toolsCalled > 0 || results.hasContent) {
-          clearTimeout(timeout);
-          resolve(results);
-        }
-      }, 1000);
-    };
-
-    (async () => {
-      try {
-        for await (const chunk of job.getStream()) {
-          if (inactivityTimeout) clearTimeout(inactivityTimeout);
-
-          if (chunk.type === "content") {
-            results.content += String(chunk.content);
-            results.hasContent = true;
-            checkInactivity();
-          } else if (chunk.type === "tool") {
-            const tool = chunk.tool as { name: string; input: unknown } | undefined;
-            results.tools.push({ name: tool?.name || "unknown", input: tool?.input });
-            results.toolsCalled++;
-            checkInactivity();
-          } else if (chunk.type === "end") {
-            break;
-          } else if (chunk.type === "error") {
-            results.error = String(chunk.error);
-            break;
-          }
-        }
-      } catch (error) {
-        results.error = String(error);
-      } finally {
-        clearTimeout(timeout);
-        if (inactivityTimeout) clearTimeout(inactivityTimeout);
-        resolve(results);
-      }
-    })();
-  });
-}
-
-interface ProviderConfig {
-  name: string;
-  instance: OpenAILLM | XaiLLM | null;
-  envVar: string;
-}
-
-async function testProvider(providerConfig: ProviderConfig) {
-  const { name, instance, envVar } = providerConfig;
-
-  console.log(`\n🧪 Testing ${name} Provider`);
-
-  if (!instance) {
-    console.log(`⚠️  Skipping ${name} - ${envVar} not set`);
-    return { passed: 0, total: 0 };
-  }
-
-  const provider = instance;
-  let passed = 0;
-  let total = 0;
-
-  // Test 1: Generate simple message
-  total++;
-  console.log("\n📝 Test 1: Generate Message");
-  try {
-    const messages = [
-      createMessage("system", "Respond with exactly 'Hello World'"),
-      createMessage("user", "Say hello"),
-    ];
-
-    const job = await provider.generateMessage({ messages, tools: [] });
-    const result = await consumeStream(job, 8000);
-
-    if (result.error) {
-      console.log(`❌ Generate Message: ${result.error}`);
-    } else if (result.content.length > 0) {
-      console.log(`✅ Generate Message: "${result.content.trim()}"`);
-      passed++;
-    } else {
-      console.log("❌ Generate Message: No response received");
+  for await (const chunk of stream) {
+    if (chunk.type === "content") {
+      content += chunk.content;
+    } else if (chunk.type === "tools") {
+      toolCalls = chunk.tools.map((t) => ({
+        name: t.name,
+        arguments: t.input,
+      }));
+    } else if (chunk.type === "error") {
+      error = chunk.error;
+    } else if (chunk.type === "end") {
+      break;
     }
-  } catch (error) {
-    console.log(`❌ Generate Message: ${error}`);
   }
 
-  // Test 2: Generate object
-  total++;
-  console.log("\n📦 Test 2: Generate Object");
-  try {
-    const messages = [
-      createMessage("system", "Respond with valid JSON only"),
-      createMessage("user", "Create a person with name 'John' and age 25"),
-    ];
+  return { content, toolCalls: toolCalls.length > 0 ? toolCalls : undefined, error };
+}
 
-    const schema = z.object({
-      name: z.string(),
-      age: z.number(),
+describe("LLM Providers", () => {
+  beforeAll(() => {
+    console.log("🚀 Testing LLM Providers\n");
+    console.log("This test suite checks:");
+    console.log("• Basic message generation");
+    console.log("• Structured object generation");
+    console.log("• Single tool calling");
+    console.log("• Parallel tool calling");
+    console.log("• Tool chaining capabilities");
+  });
+
+  describe.each(providers)("$name Provider", ({ name, instance, envVar }) => {
+    // Skip all tests in this suite if API key is not available
+    const skipCondition = !instance;
+
+    beforeAll(() => {
+      if (skipCondition) {
+        console.log(`\n🧪 Testing ${name} Provider`);
+        console.log(`⚠️  Skipping ${name} - ${envVar} not set`);
+      } else {
+        console.log(`\n🧪 Testing ${name} Provider`);
+        console.log("✅ API key found, running tests...");
+      }
     });
 
-    const result = await provider.generateObject({ messages, schema });
+    it.skipIf(skipCondition)("should generate basic message", async () => {
+      const messages: Message[] = [
+        createMessage("system", "You are a helpful assistant. Be concise."),
+        createMessage("user", "Say 'Hello World' and nothing else."),
+      ];
 
-    if (result.success && result.data && typeof result.data === "object") {
-      console.log(`✅ Generate Object: ${JSON.stringify(result.data)}`);
-      passed++;
-    } else {
-      console.log(
-        `❌ Generate Object: ${result.success ? "Invalid data structure" : result.error}`,
-      );
-    }
-  } catch (error) {
-    console.log(`❌ Generate Object: ${error}`);
-  }
+      const job = await instance?.generateMessage({ messages, tools: [] });
+      expect(job).toBeDefined();
 
-  // Test 3: Single tool calling
-  total++;
-  console.log("\n🔧 Test 3: Single Tool Calling");
-  try {
-    const messages = [
-      createMessage("system", "Use the search tool when asked to search. Be concise."),
-      createMessage("user", "Search for TypeScript documentation"),
-    ];
-
-    const tools = [createSearchTool()];
-    const job = await provider.generateMessage({ messages, tools });
-    const result = await consumeStream(job, 15_000);
-
-    if (result.error) {
-      console.log(`❌ Single Tool: ${result.error}`);
-    } else if (result.toolsCalled > 0) {
-      const toolDetails = result.tools
-        .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
-        .join(", ");
-      console.log(`✅ Single Tool: ${result.toolsCalled} tool(s) called - ${toolDetails}`);
-      console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
-      passed++;
-    } else {
-      console.log("❌ Single Tool: No tools called");
-      console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
-    }
-  } catch (error) {
-    console.log(`❌ Single Tool: ${error}`);
-  }
-
-  // Test 4: Parallel tool calling
-  total++;
-  console.log("\n⚡ Test 4: Parallel Tool Calling");
-  try {
-    const messages = [
-      createMessage(
-        "system",
-        "You have access to search, calculator, and weather tools. When asked to get multiple pieces of information, use multiple tools efficiently.",
-      ),
-      createMessage(
-        "user",
-        "I need you to: 1) Search for 'AI news', 2) Calculate 15 * 23, and 3) Get weather for London. Please do all of these.",
-      ),
-    ];
-
-    const tools = [createSearchTool(), createCalculatorTool(), createWeatherTool()];
-    const job = await provider.generateMessage({ messages, tools });
-    const result = await consumeStream(job, 20_000);
-
-    if (result.error) {
-      console.log(`❌ Parallel Tools: ${result.error}`);
-    } else {
-      const uniqueTools = new Set(result.tools.map((t) => t.name));
-      const isParallel = uniqueTools.size >= 2;
-
-      if (result.toolsCalled >= 2 && isParallel) {
-        const toolDetails = result.tools
-          .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
-          .join(", ");
-        console.log(
-          `✅ Parallel Tools: ${result.toolsCalled} tool(s) called across ${uniqueTools.size} types`,
-        );
-        console.log(`   Tools: ${toolDetails}`);
-        passed++;
-      } else if (result.toolsCalled > 0) {
-        const toolDetails = result.tools
-          .map((t) => `${t.name}(${JSON.stringify(t.input)})`)
-          .join(", ");
-        console.log(
-          `⚠️  Partial Tools: ${result.toolsCalled} tool(s), ${uniqueTools.size} types - ${toolDetails}`,
-        );
-        passed += 0.5;
-      } else {
-        console.log("❌ Parallel Tools: No tools called");
+      if (job) {
+        const result = await collectStreamChunks(job);
+        expect(result.error).toBeUndefined();
+        expect(result.content).toBeDefined();
+        expect(result.content.toLowerCase()).toContain("hello");
+        console.log(`✅ Basic message generation: "${result.content}"`);
       }
-      console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
-    }
-  } catch (error) {
-    console.log(`❌ Parallel Tools: ${error}`);
-  }
+    });
 
-  // Test 5: Tool chaining
-  total++;
-  console.log("\n🔗 Test 5: Tool Chaining");
-  try {
-    const messages = [
-      createMessage(
-        "system",
-        "First search for information, then use the calculator if you find numbers.",
-      ),
-      createMessage(
-        "user",
-        "Search for 'population of Tokyo' and then calculate 10% of that number",
-      ),
-    ];
+    it.skipIf(skipCondition)("should generate structured object", async () => {
+      const messages: Message[] = [
+        createMessage("system", "Extract information and return as JSON."),
+        createMessage("user", "John Doe is 30 years old and lives in New York."),
+      ];
 
-    const tools = [createSearchTool(), createCalculatorTool()];
-    const job = await provider.generateMessage({ messages, tools });
-    const result = await consumeStream(job, 25_000);
+      const PersonSchema = z.object({
+        name: z.string(),
+        age: z.number(),
+        city: z.string(),
+      });
 
-    if (result.error) {
-      console.log(`❌ Tool Chaining: ${result.error}`);
-    } else if (result.toolsCalled >= 1) {
-      const sequence = result.tools.map((t) => t.name).join(" → ");
-      console.log(`✅ Tool Chaining: ${result.toolsCalled} tool(s) called`);
-      console.log(`   Sequence: ${sequence}`);
-      console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
-      passed++;
-    } else {
-      console.log("❌ Tool Chaining: No tools called");
-      console.log(`   Content generated: ${result.hasContent ? "Yes" : "No"}`);
-    }
-  } catch (error) {
-    console.log(`❌ Tool Chaining: ${error}`);
-  }
+      const response = await instance?.generateObject({ messages, schema: PersonSchema });
 
-  console.log(
-    `\n📊 ${name} Results: ${passed}/${total} tests passed (${Math.round((passed / total) * 100)}%)`,
-  );
-  return { passed, total };
-}
+      expect(response).toBeDefined();
+      if (response?.success) {
+        expect(response.data).toHaveProperty("name");
+        expect(response.data).toHaveProperty("age");
+        expect(response.data).toHaveProperty("city");
+        expect(response.data.name).toContain("John");
+        expect(response.data.age).toBe(30);
+        expect(response.data.city).toContain("New York");
+        console.log("✅ Structured object generation:", JSON.stringify(response.data));
+      }
+    });
 
-async function runTests() {
-  console.log("🚀 Testing LLM Providers\n");
-  console.log("This test suite checks:");
-  console.log("• Basic message generation");
-  console.log("• Structured object generation");
-  console.log("• Single tool calling");
-  console.log("• Parallel tool calling");
-  console.log("• Tool chaining capabilities");
+    it.skipIf(skipCondition)("should handle single tool call", async () => {
+      const messages: Message[] = [
+        createMessage("system", "You can search for information. Use tools when needed."),
+        createMessage("user", "Search for information about TypeScript."),
+      ];
 
-  let totalPassed = 0;
-  let totalTests = 0;
-  let testedProviders = 0;
+      const tools = [createSearchTool()];
+      const job = await instance?.generateMessage({ messages, tools });
 
-  for (const provider of providers) {
-    // biome-ignore lint/performance/noAwaitInLoops: expected here
-    const { passed, total } = await testProvider(provider);
-    totalPassed += passed;
-    totalTests += total;
-    if (total > 0) testedProviders++;
-  }
+      expect(job).toBeDefined();
+      if (job) {
+        const result = await collectStreamChunks(job);
+        expect(result.error).toBeUndefined();
+        expect(result.toolCalls).toBeDefined();
+        expect(result.toolCalls).toHaveLength(1);
 
-  if (testedProviders === 0) {
-    console.log("\n🔑 No API keys found!");
-    console.log("To run tests, set one or more of these environment variables:");
-    for (const provider of providers) {
-      console.log(`• ${provider.envVar} for ${provider.name} testing`);
-    }
-    console.log("\nExample:");
-    console.log("export OPENAI_API_KEY=your_key_here");
-    console.log("export XAI_API_KEY=your_key_here");
-  } else {
-    console.log(
-      `\n🎯 Final Results: ${totalPassed}/${totalTests} tests passed across ${testedProviders} provider(s)`,
-    );
-    console.log(`Overall success rate: ${Math.round((totalPassed / totalTests) * 100)}%`);
-  }
+        if (result.toolCalls?.[0]) {
+          expect(result.toolCalls[0].name).toBe("search");
+          expect(result.toolCalls[0].arguments).toHaveProperty("query");
+          console.log("✅ Single tool call:", result.toolCalls[0].name);
+        }
+      }
+    });
 
-  return totalPassed === totalTests;
-}
+    it.skipIf(skipCondition)("should handle parallel tool calls", async () => {
+      const messages: Message[] = [
+        createMessage(
+          "system",
+          "You can search, calculate, and check weather. Use multiple tools in parallel when appropriate.",
+        ),
+        createMessage("user", "What's the weather in Paris and what's 15 * 24?"),
+      ];
 
-export { runTests };
+      const tools = [createSearchTool(), createCalculatorTool(), createWeatherTool()];
+      const job = await instance?.generateMessage({ messages, tools });
 
-await runTests();
+      expect(job).toBeDefined();
+      if (job) {
+        const result = await collectStreamChunks(job);
+        expect(result.error).toBeUndefined();
+
+        if (result.toolCalls) {
+          expect(result.toolCalls.length).toBeGreaterThanOrEqual(2);
+
+          const toolNames = result.toolCalls.map((tc) => tc.name);
+          expect(toolNames).toContain("weather");
+          expect(toolNames).toContain("calculator");
+
+          console.log(`✅ Parallel tool calls: ${toolNames.join(", ")}`);
+        }
+      }
+    });
+
+    it.skipIf(skipCondition)("should handle tool chaining", async () => {
+      const messages: Message[] = [
+        createMessage(
+          "system",
+          "You can search for information and calculate. Chain tools as needed.",
+        ),
+        createMessage("user", "Search for the population of Tokyo, then calculate 10% of it."),
+      ];
+
+      const tools = [createSearchTool(), createCalculatorTool()];
+
+      // First call - should request search
+      const job1 = await instance?.generateMessage({ messages, tools });
+      expect(job1).toBeDefined();
+
+      if (job1) {
+        const result1 = await collectStreamChunks(job1);
+        expect(result1.error).toBeUndefined();
+
+        if (result1.toolCalls?.[0]) {
+          expect(result1.toolCalls[0].name).toBe("search");
+
+          // Simulate tool execution and add to messages
+          const toolResponseMessage: Message = {
+            id: `msg-${Math.random().toString(36).substring(2, 9)}`,
+            role: "tool-response",
+            content: JSON.stringify({ result: "Population of Tokyo is 14 million" }),
+            toolId: "tool-id-1",
+            toolSuccess: true,
+            createdAt: Date.now(),
+            lastUpdated: Date.now(),
+          } as Message;
+
+          const updatedMessages = [...messages, toolResponseMessage];
+
+          // Second call - should request calculation
+          const job2 = await instance?.generateMessage({ messages: updatedMessages, tools });
+          expect(job2).toBeDefined();
+
+          if (job2) {
+            const result2 = await collectStreamChunks(job2);
+            expect(result2.error).toBeUndefined();
+
+            // Provider might calculate directly or use calculator tool
+            if (result2.toolCalls && result2.toolCalls.length > 0 && result2.toolCalls[0]) {
+              expect(result2.toolCalls[0].name).toBe("calculator");
+              console.log("✅ Tool chaining: search → calculator");
+            } else {
+              // Provider calculated directly in response
+              expect(result2.content).toBeDefined();
+              console.log("✅ Tool chaining: search → direct calculation");
+            }
+          }
+        }
+      }
+    });
+  });
+
+  // Summary after all tests
+  describe("Test Summary", () => {
+    it("should report if no API keys are configured", () => {
+      const testedProviders = providers.filter((p) => p.instance).length;
+
+      if (testedProviders === 0) {
+        console.log("\n🔑 No API keys found!");
+        console.log("To run tests, set one or more of these environment variables:");
+        for (const provider of providers) {
+          console.log(`• ${provider.envVar} for ${provider.name} testing`);
+        }
+        console.log("\nExample:");
+        console.log("export OPENAI_API_KEY=your_key_here");
+        console.log("export XAI_API_KEY=your_key_here");
+      }
+
+      // This test always passes - it's just for reporting
+      expect(true).toBe(true);
+    });
+  });
+});

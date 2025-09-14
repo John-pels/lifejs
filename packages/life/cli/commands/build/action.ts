@@ -1,7 +1,7 @@
 import { generateHeader } from "@/cli/utils/header";
 import { loadEnvVars } from "@/cli/utils/load-env-vars";
 import { LifeCompiler } from "@/compiler";
-import { TelemetryClient } from "@/telemetry/base";
+import { TelemetryClient } from "@/telemetry/clients/base";
 
 export interface BuildOptions {
   root: string;

@@ -4,15 +4,15 @@ import { importServerBuild } from "@/exports/build/server";
 import { canon } from "@/shared/canon";
 import * as op from "@/shared/operation";
 import { ProcessStats } from "@/shared/process-stats";
-import { createTelemetryClient } from "@/telemetry/node";
+import { createTelemetryClient } from "@/telemetry/clients/node";
 import type { ChildMethods, ParentMethods } from "./types";
 
 let agentServer: AgentServer | null = null;
 
 const processStats = new ProcessStats();
 
-// Attributes are going to be rewritten by the parent process anyway
-const telemetry = createTelemetryClient("server");
+// biome-ignore lint/suspicious/noExplicitAny: attributes are going to be rewritten by the parent process anyway
+const telemetry = createTelemetryClient("server", {} as any);
 
 // Create RPC channel with parent process
 const rpc = createBirpc<ParentMethods, ChildMethods>(

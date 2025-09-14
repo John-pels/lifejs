@@ -1,7 +1,10 @@
 import z from "zod";
+import { LOG_ID_BYTES, METRIC_ID_BYTES, SPAN_ID_BYTES, TRACE_ID_BYTES } from "./helpers/otel-id";
 
+// Attributes
 export const telemetryAttributeSchema = z.record(z.string(), z.unknown());
 
+// Resource
 export const telemetryResourceSchema = z
   .object({
     environment: z.enum(["development", "production", "staging", "testing"]),
@@ -22,6 +25,7 @@ export const telemetryResourceSchema = z
       z.object({
         platform: z.literal("browser"),
         deviceType: z.enum([
+          "desktop",
           "mobile",
           "tablet",
           "wearable",
@@ -29,6 +33,7 @@ export const telemetryResourceSchema = z
           "console",
           "xr",
           "embedded",
+          "unknown",
         ]),
         deviceBrand: z.string(),
         deviceModel: z.string(),
@@ -53,6 +58,8 @@ export const telemetryResourceSchema = z
             "ppc",
             "sparc",
             "sparc64",
+            "alpha",
+            "unknown",
           ])
           .optional(),
         browserUserAgent: z.string(),
@@ -79,6 +86,7 @@ export const telemetryResourceSchema = z
           "Trident",
           "w3m",
           "WebKit",
+          "unknown",
         ]),
         isBot: z.boolean(),
         isAiBot: z.boolean(),
@@ -87,8 +95,23 @@ export const telemetryResourceSchema = z
     ]),
   );
 
+// IDs
+const HEX_LOWER_RE = /^[0-9a-f]+$/;
+function createOtelHexIdSchema(bytes: number) {
+  const len = bytes * 2;
+  return z
+    .string()
+    .length(len, `expected ${len} lowercase hex chars`)
+    .regex(HEX_LOWER_RE, "must be lowercase hex [0-9a-f]");
+}
+const telemetryTraceIdSchema = createOtelHexIdSchema(TRACE_ID_BYTES);
+const telemetryLogIdSchema = createOtelHexIdSchema(LOG_ID_BYTES);
+const telemetrySpanIdSchema = createOtelHexIdSchema(SPAN_ID_BYTES);
+const telemetryMetricIdSchema = createOtelHexIdSchema(METRIC_ID_BYTES);
+
+// Log
 export const telemetryLogSchema = z.object({
-  id: z.string(),
+  id: telemetryLogIdSchema,
   scope: z.string(),
   resource: telemetryResourceSchema,
   attributes: telemetryAttributeSchema.optional(),
@@ -106,13 +129,14 @@ export const telemetryLogSchema = z.object({
   messageUnstyled: z.string(),
   timestamp: z.bigint(),
   stack: z.string(),
-  traceId: z.string().optional(),
-  spanId: z.string().optional(),
+  traceId: telemetryTraceIdSchema.optional(),
+  spanId: telemetrySpanIdSchema.optional(),
   error: z.custom<Error>().optional(),
 });
 
+// Span
 export const telemetrySpanSchema = z.object({
-  id: z.string(),
+  id: telemetrySpanIdSchema,
   scope: z.string(),
   resource: telemetryResourceSchema,
   attributes: telemetryAttributeSchema.optional(),
@@ -131,15 +155,16 @@ export const telemetrySpanSchema = z.object({
    * Is undefined if the span hasn't ended yet.
    */
   duration: z.bigint(),
-  traceId: z.string(),
+  traceId: telemetryTraceIdSchema,
   parentSpanId: z.string().optional(),
   logs: z.array(
     telemetryLogSchema.omit({ resource: true, scope: true, traceId: true, spanId: true }),
   ),
 });
 
+// Metric
 export const telemetryMetricSchema = z.object({
-  id: z.string(),
+  id: telemetryMetricIdSchema,
   scope: z.string(),
   resource: telemetryResourceSchema,
   attributes: telemetryAttributeSchema.optional(),
@@ -148,6 +173,7 @@ export const telemetryMetricSchema = z.object({
   value: z.number().or(z.bigint()),
 });
 
+// Signal
 export const telemetrySignalSchema = z.discriminatedUnion("type", [
   telemetryLogSchema.extend({ type: z.literal("log") }),
   telemetrySpanSchema.extend({ type: z.literal("span") }),

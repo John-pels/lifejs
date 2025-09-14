@@ -5,7 +5,7 @@ import { Box, type BoxProps, render, Text, type TextProps, useInput } from "ink"
 import React, { useEffect, useState } from "react";
 import { formatVersion, getVersion, type VersionInfo } from "@/cli/utils/version";
 import { newId } from "@/shared/prefixed-id";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import { theme } from "../../utils/theme";
 import { Divider } from "./components/divider.js";
 import { FullScreenBox } from "./components/fullscreen-box.js";

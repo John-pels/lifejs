@@ -5,7 +5,7 @@ import type { SerializableValue } from "@/shared/canon";
 import type { Config } from "@/shared/config";
 import type * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
-import type { TelemetryClient } from "@/telemetry/base";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 
 // - Dependencies
 export type PluginDependencyDefinition = Pick<

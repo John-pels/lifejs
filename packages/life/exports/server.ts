@@ -1,4 +1,4 @@
-export { defineConfig } from "@/agent/config";
+export { defineConfig } from "@/agent/server/config";
 export { defineAgent } from "@/agent/server/define";
 export { defineMemory } from "@/plugins/defaults/memories/define";
 export { defineStore } from "@/plugins/defaults/stores/define";

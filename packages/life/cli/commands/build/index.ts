@@ -1,6 +1,6 @@
 import { Command } from "commander";
+import { TelemetryClient } from "@/telemetry/clients/base";
 import { BuildOptions, executeBuild } from "./action";
-import { TelemetryClient } from "@/telemetry/base";
 
 export function createBuildCommand(telemetry: TelemetryClient) {
   const command = new Command("build")

@@ -6,7 +6,6 @@ import { ttsProviderConfig } from "@/models/tts";
 import { vadProviderConfig } from "@/models/vad";
 import { createConfig } from "@/shared/config";
 import type { TelemetryConsumer } from "@/telemetry/types";
-import { transportBrowserConfig } from "@/transport/config/browser";
 import { transportNodeConfig } from "@/transport/config/node";
 
 export const agentServerConfig = createConfig({
@@ -35,16 +34,6 @@ export const agentServerConfig = createConfig({
     // Redact telemetry consumers (non-serializable)
     config.telemetry.consumers = "redacted" as never;
 
-    return config;
-  },
-});
-
-export const agentClientConfig = createConfig({
-  schema: z.object({
-    transport: transportBrowserConfig.schema.default({ provider: "livekit" }),
-    experimental: z.object({}).default({}),
-  }),
-  toTelemetryAttribute: (config) => {
     return config;
   },
 });

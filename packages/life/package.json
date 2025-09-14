@@ -31,6 +31,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "types": "tsc --noEmit --emitDeclarationOnly false",
+    "test": "dotenv -e ../../.env -- vitest run",
     "prepack": "cp ../../README.md README.md && cp ../../LICENSE LICENSE && cp ../../LICENSE.SERVICES LICENSE.SERVICES"
   },
   "bin": {
@@ -155,10 +156,15 @@
     "@cartesia/cartesia-js": "^2.2.5",
     "@deepgram/sdk": "4.11.2",
     "@mistralai/mistralai": "^1.9.18",
+    "@playwright/test": "^1.55.0",
     "@types/bun": "^1.2.21",
     "@types/ws": "^8.18.1",
+    "@vitest/browser": "^3.2.4",
+    "dotenv-cli": "^10.0.0",
     "openai": "^5.16.0",
-    "tsup": "^8.5.0"
+    "playwright": "^1.55.0",
+    "tsup": "^8.5.0",
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@cartesia/cartesia-js": "^2.2.5",

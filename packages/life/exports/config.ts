@@ -1,1 +1,1 @@
-export { defineConfig } from "../agent/config";
+export { defineConfig } from "../agent/server/config";
