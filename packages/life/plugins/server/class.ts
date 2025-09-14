@@ -307,39 +307,53 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
     for (const [name, method] of Object.entries(this._definition.methods ?? {})) {
       // Create a function that validates inputs and calls the run function
-      methods[name] = (input: unknown) => {
-        // Validate input using the schema
-        const validationResult = method.schema.input.safeParse(input);
-        if (!validationResult.success) {
-          throw new Error(`Invalid input for method ${name}: ${validationResult.error.message}`);
-        }
+      methods[name] = async (input: unknown) => {
+        return await this.#telemetry.trace(
+          `plugin.${this._definition.name}.methods.${name}()`,
+          async (span) => {
+            try {
+              // Validate input using the schema
+              const validationResult = method.schema.input.safeParse(input);
+              if (!validationResult.success) {
+                return op.failure({
+                  code: "Validation",
+                  message: `Invalid input for method ${name}.`,
+                  zodError: validationResult.error,
+                });
+              }
 
-        // Call the run function with plugin context and validated input
-        const result = method.run(
-          {
-            config: this.#config,
-            context: op.toPublic(this.#createWritableContextHandler()),
-            events: this.#events as PluginEventsHandler<PluginEventsDefinition>,
-            telemetry: this.#telemetry,
+              // Call the run function with plugin context and validated input
+              const result = await method.run(
+                {
+                  config: this.#config,
+                  context: op.toPublic(this.#createWritableContextHandler()),
+                  events: this.#events as PluginEventsHandler<PluginEventsDefinition>,
+                  telemetry: span,
+                },
+                validationResult.data,
+              );
+
+              // Unwrap error and data if the result is an operation result
+              const data = op.isResult(result) ? result[1] : result;
+              const error = op.isResult(result) ? result[0] : null;
+              if (error) return op.failure(error);
+
+              // Validate output using the schema
+              const outputValidation = method.schema.output.safeParse(data);
+              if (!outputValidation.success) {
+                return op.failure({
+                  code: "Validation",
+                  message: `Invalid output from method ${name}.`,
+                  zodError: outputValidation.error,
+                });
+              }
+
+              return op.success(outputValidation.data);
+            } catch (error) {
+              return op.failure({ code: "Unknown", error });
+            }
           },
-          validationResult.data,
         );
-
-        // Unwrap error and data if the result is an operation result
-        const data = op.isResult(result) ? result[1] : result;
-        const error = op.isResult(result) ? result[0] : null;
-        if (error) return op.failure(error);
-
-        // Validate output using the schema
-        const outputValidation = method.schema.output.safeParse(data);
-        if (!outputValidation.success) {
-          return op.failure({
-            code: "Internal",
-            message: `Invalid output from method ${name}: ${outputValidation.error?.message}`,
-          });
-        }
-
-        return op.success(outputValidation.data);
       };
     }
 
@@ -348,24 +362,29 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   // Helper method to call onError lifecycle hook
   async #callOnErrorHook(error: unknown): Promise<void> {
-    if (this._definition.lifecycle?.onError) {
-      try {
-        await this._definition.lifecycle.onError({
-          config: this.#config,
-          context: op.toPublic(this.#createWritableContextHandler()),
-          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-          methods: op.toPublic(this.#getMethods()),
-          error,
-          telemetry: this.#telemetry,
-        });
-      } catch (errorHandlerError) {
-        this.#telemetry.log.error({
-          message: `Error while running onError() lifecycle hook for plugin '${this._definition.name}'.`,
-          error: errorHandlerError,
-          attributes: { plugin: this._definition.name },
-        });
-      }
-    }
+    await this.#telemetry.trace(
+      `plugin.${this._definition.name}.lifecycle.onError()`,
+      async (span) => {
+        if (this._definition.lifecycle?.onError) {
+          try {
+            await this._definition.lifecycle.onError({
+              config: this.#config,
+              context: op.toPublic(this.#createWritableContextHandler()),
+              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+              methods: op.toPublic(this.#getMethods()),
+              error,
+              telemetry: span,
+            });
+          } catch (errorHandlerError) {
+            span.log.error({
+              message: `Error while running onError() lifecycle hook for plugin '${this._definition.name}'.`,
+              error: errorHandlerError,
+              attributes: { plugin: this._definition.name },
+            });
+          }
+        }
+      },
+    );
   }
 
   #buildDependencies() {
@@ -403,16 +422,21 @@ export class PluginServer<const Definition extends PluginDefinition> {
       // Create a single readonly context that always returns fresh values
       const readonlyContext = this.#createReadonlyContextHandler();
 
-      service({
-        agent: op.toPublic(this.#agent),
-        queue: queue[Symbol.asyncIterator](),
-        config: this.#config,
-        context: op.toPublic(readonlyContext),
-        events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-        methods: op.toPublic(this.#getMethods()),
-        dependencies,
-        telemetry: this.#telemetry,
-      });
+      this.#telemetry.trace(
+        `plugin.${this._definition.name}.services.${service.name}()`,
+        (span) => {
+          service({
+            agent: op.toPublic(this.#agent),
+            queue: queue[Symbol.asyncIterator](),
+            config: this.#config,
+            context: op.toPublic(readonlyContext),
+            events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+            methods: op.toPublic(this.#getMethods()),
+            dependencies,
+            telemetry: span,
+          });
+        },
+      );
     }
 
     // 2. Register interceptors with dependencies
@@ -432,43 +456,54 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   async start() {
     // Call onStart lifecycle hook
-    if (this._definition.lifecycle?.onStart) {
-      try {
-        await this._definition.lifecycle.onStart({
-          config: this.#config,
-          context: op.toPublic(this.#createWritableContextHandler()),
-          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-          methods: op.toPublic(this.#getMethods()),
-          telemetry: this.#telemetry,
-        });
-      } catch (error) {
-        this.#telemetry.log.error({
-          message: `Error while running onStart() lifecycle hook for plugin '${this._definition.name}'.`,
-          error,
-          attributes: { plugin: this._definition.name },
-        });
-        await this.#callOnErrorHook(error);
-      }
-    }
+    await this.#telemetry.trace(
+      `plugin.${this._definition.name}.lifecycle.onStart()`,
+      async (span) => {
+        if (this._definition.lifecycle?.onStart) {
+          try {
+            await this._definition.lifecycle.onStart({
+              config: this.#config,
+              context: op.toPublic(this.#createWritableContextHandler()),
+              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+              methods: op.toPublic(this.#getMethods()),
+              telemetry: span,
+            });
+          } catch (error) {
+            span.log.error({
+              message: `Error while running onStart() lifecycle hook for plugin '${this._definition.name}'.`,
+              error,
+              attributes: { plugin: this._definition.name },
+            });
+            await this.#callOnErrorHook(error);
+          }
+        }
+      },
+    );
 
-    if (this.#agent.isRestart && this._definition.lifecycle?.onRestart) {
-      try {
-        await this._definition.lifecycle.onRestart({
-          config: this.#config,
-          context: op.toPublic(this.#createWritableContextHandler()),
-          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-          methods: op.toPublic(this.#getMethods()),
-          telemetry: this.#telemetry,
-        });
-      } catch (error) {
-        this.#telemetry.log.error({
-          message: `Error while running onRestart() lifecycle hook for plugin '${this._definition.name}'.`,
-          error,
-          attributes: { plugin: this._definition.name },
-        });
-        await this.#callOnErrorHook(error);
-      }
-    }
+    // Call onRestart lifecycle hook
+    await this.#telemetry.trace(
+      `plugin.${this._definition.name}.lifecycle.onRestart()`,
+      async (span) => {
+        if (this.#agent.isRestart && this._definition.lifecycle?.onRestart) {
+          try {
+            await this._definition.lifecycle.onRestart({
+              config: this.#config,
+              context: op.toPublic(this.#createWritableContextHandler()),
+              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+              methods: op.toPublic(this.#getMethods()),
+              telemetry: span,
+            });
+          } catch (error) {
+            span.log.error({
+              message: `Error while running onRestart() lifecycle hook for plugin '${this._definition.name}'.`,
+              error,
+              attributes: { plugin: this._definition.name },
+            });
+            await this.#callOnErrorHook(error);
+          }
+        }
+      },
+    );
 
     // Start the queue
     (async () => {
@@ -477,33 +512,40 @@ export class PluginServer<const Definition extends PluginDefinition> {
           // 1. Run external interceptors
           let isDropped = false;
           for (const { interceptor, server } of this.#externalInterceptors) {
-            const drop = (_reason: string) => (isDropped = true);
-            const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
-              event = newEvent;
-            };
-
             // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
-            await interceptor({
-              event,
-              next,
-              drop,
-              dependency: {
-                name: this._definition.name,
-                definition: this._definition,
-                config: this.#config,
-                context: op.toPublic(this.#createReadonlyContextHandler()),
-                events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-                methods: op.toPublic(this.#getMethods()),
+            await server.#telemetry.trace(
+              `plugin.${this._definition.name}.interceptors.${interceptor.name}()`,
+              async (span) => {
+                const drop = (_reason: string) => (isDropped = true);
+                const next = (newEvent: PluginEvent<PluginEventsDefinition, "output">) => {
+                  event = newEvent;
+                };
+
+                await interceptor({
+                  event,
+                  next,
+                  drop,
+                  dependency: {
+                    name: this._definition.name,
+                    definition: this._definition,
+                    config: this.#config,
+                    context: op.toPublic(this.#createReadonlyContextHandler()),
+                    events: op.toPublic(
+                      this.#events as PluginEventsHandler<PluginEventsDefinition>,
+                    ),
+                    methods: op.toPublic(this.#getMethods()),
+                  },
+                  current: {
+                    events: op.toPublic(
+                      server.#events as PluginEventsHandler<typeof server._definition.events>,
+                    ),
+                    context: op.toPublic(server.#createReadonlyContextHandler()),
+                    config: server.#config,
+                  },
+                  telemetry: span,
+                });
               },
-              current: {
-                events: op.toPublic(
-                  server.#events as PluginEventsHandler<typeof server._definition.events>,
-                ),
-                context: op.toPublic(server.#createReadonlyContextHandler()),
-                config: server.#config,
-              },
-              telemetry: server.#telemetry,
-            });
+            );
             if (isDropped) break;
           }
           if (isDropped) continue;
@@ -512,16 +554,21 @@ export class PluginServer<const Definition extends PluginDefinition> {
           const dependencies = this.#buildDependencies();
           for (const effect of Object.values(this._definition.effects ?? {})) {
             // biome-ignore lint/performance/noAwaitInLoops: sequential execution expected here
-            await effect({
-              agent: op.toPublic(this.#agent),
-              event: deepClone(event),
-              config: this.#config,
-              context: op.toPublic(this.#createWritableContextHandler()),
-              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-              dependencies,
-              methods: op.toPublic(this.#getMethods()),
-              telemetry: this.#telemetry,
-            });
+            await this.#telemetry.trace(
+              `plugin.${this._definition.name}.effects.${effect.name}()`,
+              async (span) => {
+                await effect({
+                  agent: op.toPublic(this.#agent),
+                  event: deepClone(event),
+                  config: this.#config,
+                  context: op.toPublic(this.#createWritableContextHandler()),
+                  events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+                  dependencies,
+                  methods: op.toPublic(this.#getMethods()),
+                  telemetry: span,
+                });
+              },
+            );
           }
 
           // 3. Feed services' queues
@@ -581,23 +628,28 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   async stop() {
     // Call onStop lifecycle hook
-    if (this._definition.lifecycle?.onStop) {
-      try {
-        await this._definition.lifecycle.onStop({
-          config: this.#config,
-          context: op.toPublic(this.#createWritableContextHandler()),
-          events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
-          methods: op.toPublic(this.#getMethods()),
-          telemetry: this.#telemetry,
-        });
-      } catch (error) {
-        this.#telemetry.log.error({
-          message: `Error while running onStop() lifecycle hook for plugin '${this._definition.name}'.`,
-          error,
-          attributes: { plugin: this._definition.name },
-        });
-        await this.#callOnErrorHook(error);
-      }
-    }
+    await this.#telemetry.trace(
+      `plugin.${this._definition.name}.lifecycle.onStop()`,
+      async (span) => {
+        if (this._definition.lifecycle?.onStop) {
+          try {
+            await this._definition.lifecycle.onStop({
+              config: this.#config,
+              context: op.toPublic(this.#createWritableContextHandler()),
+              events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
+              methods: op.toPublic(this.#getMethods()),
+              telemetry: span,
+            });
+          } catch (error) {
+            span.log.error({
+              message: `Error while running onStop() lifecycle hook for plugin '${this._definition.name}'.`,
+              error,
+              attributes: { plugin: this._definition.name },
+            });
+            await this.#callOnErrorHook(error);
+          }
+        }
+      },
+    );
   }
 }

@@ -5,7 +5,7 @@ import type { SerializableValue } from "@/shared/canon";
 import type { Config } from "@/shared/config";
 import type * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
-import type { TelemetryClient } from "@/telemetry/clients/base";
+import type { TelemetrySpanHandle } from "@/telemetry/types";
 
 // - Dependencies
 export type PluginDependencyDefinition = Pick<
@@ -133,19 +133,17 @@ export type PluginMethodDefinition<
   Schemas extends PluginMethodSchemas,
 > = {
   schema: Schemas;
-  run: Schemas["input"] extends z.AnyZodObject
-    ? (
-        params: {
-          config: PluginConfig<Definition["config"], "output">;
-          context: op.ToPublic<
-            PluginContextHandler<PluginContext<Definition["context"], "output">, "read">
-          >;
-          events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
-          telemetry: TelemetryClient;
-        },
-        input: z.infer<Schemas["input"]>,
-      ) => MaybePromise<z.infer<Schemas["output"]> | op.OperationResult<z.infer<Schemas["output"]>>>
-    : never;
+  run: (
+    params: {
+      config: PluginConfig<Definition["config"], "output">;
+      context: op.ToPublic<
+        PluginContextHandler<PluginContext<Definition["context"], "output">, "read">
+      >;
+      events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
+      telemetry: TelemetrySpanHandle;
+    },
+    input: Schemas["input"] extends z.AnyZodObject ? z.infer<Schemas["input"]> : never,
+  ) => MaybePromise<z.infer<Schemas["output"]> | op.OperationResult<z.infer<Schemas["output"]>>>;
 };
 // Type for method schemas definition (consistent with tools definition)
 export type PluginMethodsDefinition = Record<
@@ -161,7 +159,7 @@ export type PluginMethodsDefinition = Record<
 export type PluginMethods<MethodsDefinition extends PluginMethodsDefinition> = {
   [K in keyof MethodsDefinition]: (
     input: z.infer<MethodsDefinition[K]["schema"]["input"]>,
-  ) => op.OperationResult<z.infer<MethodsDefinition[K]["schema"]["output"]>>;
+  ) => Promise<op.OperationResult<z.infer<MethodsDefinition[K]["schema"]["output"]>>>;
 };
 
 // - Lifecycle
@@ -173,7 +171,7 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
     >;
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
   onStop?: (params: {
     config: PluginConfig<Definition["config"], "output">;
@@ -182,7 +180,7 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
     >;
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
   onRestart?: (params: {
     config: PluginConfig<Definition["config"], "output">;
@@ -191,7 +189,7 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
     >;
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
   onError?: (params: {
     config: PluginConfig<Definition["config"], "output">;
@@ -201,7 +199,7 @@ export type PluginLifecycle<Definition extends PluginDefinition = PluginDefiniti
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
     error: unknown;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
 };
 
@@ -217,7 +215,7 @@ export type PluginEffectFunction<Definition extends PluginDefinition = PluginDef
     dependencies: PluginDependencies<Definition["dependencies"]>;
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
 export type PluginEffectsDefinition<Definition extends PluginDefinition = PluginDefinition> =
   Record<string, PluginEffectFunction<Definition>>;
@@ -234,7 +232,7 @@ export type PluginServiceFunction<Definition extends PluginDefinition = PluginDe
     dependencies: PluginDependencies<Definition["dependencies"]>;
     events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
     methods: op.ToPublic<PluginMethods<Definition["methods"]>>;
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
 export type PluginServicesDefinition<Definition extends PluginDefinition = PluginDefinition> =
   Record<string, PluginServiceFunction<Definition>>;
@@ -267,7 +265,7 @@ export type PluginInterceptorFunction<Definition extends PluginDefinition = Plug
       >;
       config: PluginConfig<Definition["config"], "output">;
     };
-    telemetry: TelemetryClient;
+    telemetry: TelemetrySpanHandle;
   }) => void | Promise<void>;
 export type PluginInterceptorsDefinition<Definition extends PluginDefinition = PluginDefinition> =
   Record<string, PluginInterceptorFunction<Definition>>;
