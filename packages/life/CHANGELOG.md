@@ -1,5 +1,12 @@
 # life
 
+## 0.20.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [79df6df](https://github.com/lifejs/lifejs/commit/79df6df63d4ac0211d13e80b45681f6cc8e25677) — Implement telemetry into life client, agent client, and plugin client
+- [@LilaRest](https://github.com/LilaRest) in [7004c86](https://github.com/lifejs/lifejs/commit/7004c86f02d8ce40eafb3a7476afa6f7c8865d7d) — Wrap all plugins effects, services, interceptors and hooks into a telemetry span to obtain auto-tracing of plugins
+
 ## 0.19.0
 
 ### Minor Changes
