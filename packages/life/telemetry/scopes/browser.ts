@@ -5,7 +5,6 @@ import { defineScopes } from "./define";
 const baseAgentClientAttributesSchema = z.object({
   agentName: z.string(),
   agentId: z.string(),
-  agentSha: z.string(),
   agentConfig: agentClientConfig.schemaTelemetry,
   transportProviderName: z.string(),
 });

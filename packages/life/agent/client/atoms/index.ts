@@ -1,5 +1,7 @@
 import { atom, onMount, type WritableAtom } from "nanostores";
-import type { LifeServer } from "@/server";
+import type z from "zod";
+import type { definition } from "@/server/api/definition";
+import { type LifeError, lifeError } from "@/shared/error";
 import type { AgentClient } from "../class";
 import type { AgentClientDefinition } from "../types";
 
@@ -8,8 +10,8 @@ export interface InfoAtomConfig {
 }
 
 export type AgentInfoResponse =
-  | Awaited<ReturnType<LifeServer["getAgentProcessInfo"]>>
-  | { success: false; message: string; error: unknown };
+  | { success: true; data: z.infer<(typeof definition)["agent.info"]["outputDataSchema"]> }
+  | { success: false; error: LifeError };
 
 export interface AgentClientAtoms {
   info: (config?: InfoAtomConfig) => WritableAtom<AgentInfoResponse | null> & {
@@ -32,14 +34,14 @@ export function createAgentClientAtoms(
 
         const refetch = async () => {
           try {
-            const data = await client.info();
-            store.set(data);
+            const [error, data] = await client.info();
+            if (error) return store.set({ success: false, error });
+            store.set({ success: true, data });
           } catch (error) {
-            console.error("Failed to fetch agent info:", error);
-            // store.set({
-            //   success: false,
-            //   message: error instanceof Error ? error.message : "Unknown error",
-            // });
+            store.set({
+              success: false,
+              error: lifeError({ code: "Unknown", error }),
+            });
           }
         };
 

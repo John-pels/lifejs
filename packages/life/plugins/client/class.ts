@@ -5,6 +5,8 @@ import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/browser";
 import type { PluginContext } from "../server/types";
 import type {
   PluginClientAtoms,
@@ -19,8 +21,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   readonly _definition: ClientDefinition;
   readonly config: PluginClientConfig<ClientDefinition["config"], "output">;
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
-  server!: PluginClientServer<ClientDefinition["$serverDef"], "internal">;
   readonly #agent: AgentClient<AgentClientDefinition>;
+  readonly #telemetry: TelemetryClient;
+  server!: PluginClientServer<ClientDefinition["$serverDef"], "internal">;
 
   get #dependencies() {
     const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
@@ -51,7 +54,6 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       ) => void | Promise<void>;
     }
   >();
-  // #telemetry: TelemetryClient;
 
   constructor(
     definition: ClientDefinition,
@@ -65,6 +67,17 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       "output"
     >;
 
+    // Initialize telemetry
+    this.#telemetry = createTelemetryClient("plugin.client", {
+      agentId: agent.id,
+      agentName: agent._definition.name,
+      agentConfig: agent.config,
+      transportProviderName: agent.config.transport.provider,
+      pluginName: definition.name,
+      pluginClientConfig: this.config,
+    });
+
+    // Build atoms
     this.atoms = definition.atoms({
       config: this.config,
       server: {
@@ -173,12 +186,11 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       .then((result) => {
         const [err, response] = result;
         if (err) {
-          // Todo: Use telemetry client instead
-          console.error(
-            "Failed to fetch the initial context value for plugin",
-            this._definition.name,
-            err,
-          );
+          this.#telemetry.log.error({
+            message: "Failed to fetch the initial context value for plugin",
+            error: err,
+            attributes: { plugin: this._definition.name },
+          });
           return;
         }
 
@@ -187,12 +199,11 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
           .object({ value: z.any(), timestamp: z.number() })
           .safeParse(response);
         if (outputError) {
-          // Todo: Use telemetry client instead
-          console.error(
-            "Failed to validate the initial context value for plugin",
-            this._definition.name,
-            outputError,
-          );
+          this.#telemetry.log.error({
+            message: "Failed to validate the initial context value for plugin",
+            error: outputError,
+            attributes: { plugin: this._definition.name },
+          });
           return;
         }
 

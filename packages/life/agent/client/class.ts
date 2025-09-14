@@ -1,8 +1,10 @@
 import type z from "zod";
+import type { LifeServerApiClient } from "@/client/api";
 import type { PluginClientBase } from "@/plugins/client/class";
 import type { PluginClientDefinition } from "@/plugins/client/types";
-import type { LifeServer } from "@/server";
 import * as op from "@/shared/operation";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/browser";
 import { TransportBrowserClient } from "@/transport/client/browser";
 import type { agentClientConfig } from "../client/config";
 import { type AgentClientAtoms, createAgentClientAtoms } from "./atoms";
@@ -14,10 +16,11 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   readonly id: string;
   readonly transport: TransportBrowserClient;
   readonly atoms: AgentClientAtoms;
-  readonly #serverUrl: string;
+  readonly config: z.output<typeof agentClientConfig.schema>;
+  readonly api: LifeServerApiClient;
   readonly #sessionToken: string;
   readonly #transportRoom: { name: string; token: string };
-  readonly #config: z.output<typeof agentClientConfig.schema>;
+  readonly #telemetry: TelemetryClient;
 
   constructor(params: {
     id: string;
@@ -27,16 +30,25 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     sessionToken: string;
     transportRoom: { name: string; token: string };
     config: z.output<typeof agentClientConfig.schema>;
+    api: LifeServerApiClient;
   }) {
-    this.id = params.id;
     this._definition = params.definition;
-    this.#serverUrl = params.serverUrl ?? "ws://localhost:8080";
+    this.id = params.id;
+    this.config = params.config;
+    this.api = params.api;
     this.#sessionToken = params.sessionToken;
     this.#transportRoom = params.transportRoom;
-    this.#config = params.config;
+
+    // Initialize telemetry
+    this.#telemetry = createTelemetryClient("agent.client", {
+      agentId: this.id,
+      agentName: this._definition.name,
+      agentConfig: this.config,
+      transportProviderName: this.config.transport.provider,
+    });
 
     // Initialize transport
-    this.transport = new TransportBrowserClient({ config: this.#config.transport });
+    this.transport = new TransportBrowserClient({ config: this.config.transport });
 
     // Initialize atoms
     this.atoms = createAgentClientAtoms(this);
@@ -106,30 +118,22 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    */
   async start() {
     try {
-      const [apiResponse] = await Promise.all([
-        fetch(`${this.#serverUrl}/agent/start`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            agentId: this.id,
-            sessionToken: this.#sessionToken,
-          }),
-        }).then((res) => res.json()),
+      // Send a call to the server to start the agent and join the transport room
+      const [apiResult, roomResult] = await Promise.all([
+        this.api.call("agent.start", {
+          agentId: this.id,
+          sessionToken: this.#sessionToken,
+        }),
         this.transport.joinRoom(this.#transportRoom.name, this.#transportRoom.token),
       ]);
 
-      if (!apiResponse.success) {
-        return op.failure({
-          code: "Unknown",
-          message: "Failed to start agent",
-          error: apiResponse,
-        });
-      }
+      // Return error if any occurs
+      if (apiResult[0]) return op.failure(apiResult[0]);
+      if (roomResult[0]) return op.failure(roomResult[0]);
 
       return op.success();
     } catch (error) {
+      this.#telemetry.log.error({ message: "Failed to start agent", error });
       return op.failure({ code: "Unknown", error });
     }
   }
@@ -141,26 +145,22 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    */
   async stop() {
     try {
-      const [apiResponse] = await Promise.all([
-        fetch(`${this.#serverUrl}/agent/stop`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            agentId: this.id,
-            sessionToken: this.#sessionToken,
-          }),
-        }).then((res) => res.json()),
+      // Send a call to the server to stop the agent and leave the transport room
+      const [apiResult, roomResult] = await Promise.all([
+        this.api.call("agent.stop", {
+          agentId: this.id,
+          sessionToken: this.#sessionToken,
+        }),
         this.transport.leaveRoom(),
       ]);
 
-      if (!apiResponse.success) {
-        return op.failure({ code: "Unknown", message: "Failed to stop agent", error: apiResponse });
-      }
+      // Return error if any occurs
+      if (apiResult[0]) return op.failure(apiResult[0]);
+      if (roomResult[0]) return op.failure(roomResult[0]);
 
       return op.success();
     } catch (error) {
+      this.#telemetry.log.error({ message: "Failed to stop agent", error });
       return op.failure({ code: "Unknown", error });
     }
   }
@@ -168,11 +168,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   /**
    * Restart the agent by stopping and starting it
    */
-  async restart(): Promise<
-    | Awaited<ReturnType<LifeServer["stopAgentProcess"]>>
-    | Awaited<ReturnType<LifeServer["startAgentProcess"]>>
-    | { success: false; message: string; error: unknown }
-  > {
+  async restart() {
     try {
       const [errStop] = await this.stop();
       if (errStop) return op.failure(errStop);
@@ -180,12 +176,8 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
       if (errStart) return op.failure(errStart);
       return op.success();
     } catch (error) {
-      return {
-        success: false,
-        message:
-          error instanceof Error ? error.message : "Unknown error occurred while restarting agent",
-        error,
-      };
+      this.#telemetry.log.error({ message: "Failed to restart agent", error });
+      return op.failure({ code: "Unknown", error });
     }
   }
 
@@ -194,37 +186,21 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    * @returns Agent information including status and metrics
    * @throws Error if unable to retrieve agent info
    */
-  async info(): Promise<
-    | Awaited<ReturnType<LifeServer["getAgentProcessInfo"]>>
-    | { success: false; message: string; error: unknown }
-  > {
+  async info() {
     try {
-      const response = await fetch(`${this.#serverUrl}/agent/info`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          agentId: this.id,
-          sessionToken: this.#sessionToken,
-        }),
+      // Send a call to the server to get agent information
+      const [err, data] = await this.api.call("agent.info", {
+        agentId: this.id,
+        sessionToken: this.#sessionToken,
       });
 
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || "Failed to get agent info");
-      }
+      // Return error if any occurs
+      if (err) return op.failure(err);
 
-      return data;
+      return op.success(data);
     } catch (error) {
-      return {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unknown error occurred while fetching agent info",
-        error,
-      };
+      this.#telemetry.log.error({ message: "Failed to get agent info", error });
+      return op.failure({ code: "Unknown", error });
     }
   }
 }
