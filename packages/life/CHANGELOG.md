@@ -1,5 +1,17 @@
 # life
 
+## 0.21.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [af0bc99](https://github.com/lifejs/lifejs/commit/af0bc99c3a4fed49fb3631c1e8cd339208a67d68) — Adapt the `life dev` command to work with the new LifeServer
+- [@LilaRest](https://github.com/LilaRest) in [00ef344](https://github.com/lifejs/lifejs/commit/00ef3441e1daa3cee32ae90374d905bd933abdb7) — Auto-install / upgrade local LiveKit server on MacOS and Linux when running `life dev`
+- [@LilaRest](https://github.com/LilaRest) in [00ef344](https://github.com/lifejs/lifejs/commit/00ef3441e1daa3cee32ae90374d905bd933abdb7) — Add clean error display + logs when an error occur while starting `life dev`
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [f1e20c6](https://github.com/lifejs/lifejs/commit/f1e20c6fd54da7ed0deb03af9143a7bcea662d7c) — Fix `life dev` progress bar not rendered
+
 ## 0.20.0
 
 ### Minor Changes
