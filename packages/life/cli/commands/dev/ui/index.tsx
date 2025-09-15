@@ -1,21 +1,22 @@
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { defaultTheme, extendTheme, ThemeProvider } from "@inkjs/ui";
 import { MouseProvider } from "@zenobius/ink-mouse";
 import chalk from "chalk";
 import figures from "figures";
-import { Box, type BoxProps, type TextProps, useInput } from "ink";
+import { Box, type BoxProps, Text, type TextProps, useInput } from "ink";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { getVersion, type VersionInfo } from "@/cli/utils/version";
 import { LifeServer } from "@/server";
 import type { AgentProcess } from "@/server/agent-process/parent";
-import type { TelemetryClient } from "@/telemetry/clients/base";
-import stripAnsi from "@/telemetry/helpers/strip-ansi";
 import { formatLogForTerminal } from "@/telemetry/helpers/terminal";
 import { theme } from "../../../utils/theme";
 import type { DevOptions } from "../action";
+import { Divider } from "../components/divider";
 import { FullScreenBox } from "../components/fullscreen-box.js";
+import { checkLivekitInstall } from "../helpers/check-livekit-install";
+import { cleanStdData } from "../helpers/clean-std-data";
 import { DevContent } from "./content";
 import { DevFooter } from "./footer";
 import { DevLoader } from "./loader";
@@ -25,19 +26,6 @@ import { DevSidebar } from "./sidebar";
 const ConditionalMouseProvider = (params: { children: ReactNode; enabled: boolean }) => {
   if (params.enabled) return <MouseProvider>{params.children}</MouseProvider>;
   return <>{params.children}</>;
-};
-
-/**
- * Cleans log output by stripping ANSI codes and replacing tab characters
- */
-const cleanStdData = (rawOutput: Buffer): string[] => {
-  const text = rawOutput.toString("utf8");
-  const strippedText = stripAnsi(text);
-  const cleanedLines = strippedText
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.replaceAll("\t", " "));
-  return cleanedLines;
 };
 
 // Define a custom Ink UI theme for progress bar
@@ -66,17 +54,12 @@ const customInkUITheme = extendTheme(defaultTheme, {
 
 export const DEFAULT_TABS = ["server", "webrtc"];
 
-export const DevUI = ({
-  options,
-  telemetry,
-}: {
-  options: DevOptions;
-  telemetry: TelemetryClient;
-}) => {
+export const DevUI = ({ options }: { options: DevOptions }) => {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [server, setServer] = useState<LifeServer | null>(null);
   const [agentProcesses, setAgentProcesses] = useState<Map<string, AgentProcess>>(new Map());
@@ -89,31 +72,138 @@ export const DevUI = ({
   const intervals = useRef<NodeJS.Timeout[]>([]);
 
   async function init() {
+    // Helper function to return a loading error
+    const initError = async (message: string) => {
+      setLoadingError(message);
+      await cleanup();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      process.exit(1);
+    };
+    // Helper function to execute commands and capture output
+    const executeWithLogging = (command: string) => {
+      try {
+        const output = execSync(command, {
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+        if (output) {
+          const lines = cleanStdData(output);
+          setDebugLogs((prev) => [...prev, ...lines]);
+        }
+        return { success: true, output: output.toString("utf-8") };
+      } catch (error) {
+        let errorMessage = "Command failed";
+        if (error instanceof Error) {
+          // Node's execSync error includes stderr property when command fails
+          const execError = error as Error & { stderr?: Buffer };
+          errorMessage = execError.stderr?.toString("utf-8") || error.message || "Command failed";
+        }
+        setDebugLogs((prev) => [...prev, `Error: ${errorMessage}`]);
+        return { success: false, error: errorMessage };
+      }
+    };
+
     // Retrieve server token from options or environment variable
     const serverToken = options.token ?? process.env.LIFE_SERVER_TOKEN;
-    if (!serverToken) {
-      setLoadingError(
+    if (!serverToken)
+      return await initError(
         `Server token is required.\nUse the --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
       );
-      return;
-    }
     setLoadingProgress(10);
 
     // Check Livekit Server version
     setLoadingStatus("Checking LiveKit server version...");
-    // TODO
+    let lkInstall = await checkLivekitInstall();
     setLoadingProgress(20);
 
-    // Download LiveKit server if not installed
-    setLoadingStatus("Installing LiveKit server...");
-    //     console.log("Installing LiveKit …");
-    //     // MacOS
-    //     execSync("brew update && brew install livekit", { stdio: "inherit" });
-    setLoadingProgress(20);
+    // Install/Upgrade LiveKit server
+    if (!lkInstall.installed) {
+      setLoadingStatus("Installing LiveKit server...");
+      // - MacOS
+      if (process.platform === "darwin") {
+        setDebugLogs((prev) => [...prev, "Running: brew update && brew install livekit"]);
+        const result = executeWithLogging("brew update && brew install livekit");
+        if (!result.success) {
+          return await initError(
+            "Failed to install LiveKit server via Homebrew.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+          );
+        }
+      }
+      // - Linux
+      else if (process.platform === "linux") {
+        setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
+        const result = executeWithLogging("curl -sSL https://get.livekit.io | bash");
+        if (!result.success) {
+          return await initError(
+            "Failed to install LiveKit server.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+          );
+        }
+      }
+      // - Windows
+      else if (process.platform === "win32") {
+        return await initError(
+          "Server requires the 'livekit-server' command to be installed.\nAutomatic installation is not supported on Windows yet.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+        );
+      }
+      // - Unsupported
+      else {
+        return await initError(
+          "Server requires the 'livekit-server' command to be installed.\nAutomatic installation is not supported on this platform yet.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+        );
+      }
 
-    // Upgrade LiveKit server if outdated
-    setLoadingStatus("Upgrading LiveKit server...");
-    // TODO
+      // Check the install again
+      lkInstall = await checkLivekitInstall();
+      if (!lkInstall.installed) {
+        return await initError(
+          "Server requires the 'livekit-server' command to be installed.\nAutomatic installation failed.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+        );
+      }
+    }
+
+    const minLivekitVersionPrefix = "1.10";
+    if (!lkInstall.version?.startsWith(minLivekitVersionPrefix)) {
+      setLoadingStatus("Upgrading LiveKit server...");
+      // - MacOS
+      if (process.platform === "darwin") {
+        setDebugLogs((prev) => [...prev, "Running: brew update && brew upgrade livekit"]);
+        const result = executeWithLogging("brew update && brew upgrade livekit");
+        if (!result.success) {
+          return await initError(
+            "Failed to upgrade LiveKit server via Homebrew.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+          );
+        }
+      }
+      // - Linux
+      else if (process.platform === "linux") {
+        setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
+        const result = executeWithLogging("curl -sSL https://get.livekit.io | bash");
+        if (!result.success) {
+          return await initError(
+            "Failed to upgrade LiveKit server.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
+          );
+        }
+      }
+      // - Windows
+      else if (process.platform === "win32") {
+        return await initError(
+          `Server requires the 'livekit-server' command version >= ${minLivekitVersionPrefix}.* (current version: ${lkInstall.version}).\nAutomatic upgrade is not supported on Windows yet.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/`,
+        );
+      }
+      // - Unsupported
+      else {
+        return await initError(
+          `Server requires the 'livekit-server' command version >= ${minLivekitVersionPrefix}.* (current version: ${lkInstall.version}).\nAutomatic upgrade is not supported on this platform yet.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/`,
+        );
+      }
+
+      // Check the install again
+      lkInstall = await checkLivekitInstall();
+      if (!(lkInstall.installed && lkInstall.version?.startsWith(minLivekitVersionPrefix))) {
+        return await initError(
+          `Server requires the 'livekit-server' command version >= ${minLivekitVersionPrefix}.* (current version: ${lkInstall.version}).\nAutomatic upgrade failed.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/`,
+        );
+      }
+    }
     setLoadingProgress(30);
 
     // Start LiveKit server
@@ -127,18 +217,18 @@ export const DevUI = ({
     livekitServer.stderr?.on("data", (data) => {
       logInTab("webrtc", cleanStdData(data));
     });
-    setLoadingProgress(30);
+    setLoadingProgress(40);
 
     // Download AI models
     setLoadingStatus("Downloading AI models...");
     // TODO
-    setLoadingProgress(40);
+    setLoadingProgress(50);
 
     // Obtain Life.js version
     setLoadingStatus("Checking Life.js version...");
     const version_ = await getVersion();
     setVersion(version_);
-    setLoadingProgress(50);
+    setLoadingProgress(60);
 
     // Initialize server
     setLoadingStatus("Initializing server...");
@@ -150,7 +240,7 @@ export const DevUI = ({
       port: options.port,
     });
     setServer(newServer);
-    setLoadingProgress(60);
+    setLoadingProgress(70);
 
     // Consume server telemetry logs
     newServer.telemetry.registerConsumer({
@@ -169,11 +259,10 @@ export const DevUI = ({
     setLoadingStatus("Starting Life.js server...");
     const [errStart] = await newServer.start();
     if (errStart)
-      telemetry.log.error({
-        message: "An error occurred while starting the development server.",
-        error: errStart,
-      });
-    setLoadingProgress(70);
+      setLoadingError(
+        `An error occurred while starting the development server.\nError: ${errStart.message}`,
+      );
+    setLoadingProgress(80);
 
     // Listen for agent processes changes
     setLoadingStatus("Preparing for agent processes...");
@@ -181,14 +270,16 @@ export const DevUI = ({
       setAgentProcesses(newServer.agentProcesses);
     }, 1000);
     intervals.current.push(intervalId);
-    setLoadingProgress(80);
+    setLoadingProgress(90);
 
     // Done
     setLoadingStatus("Done!");
-    setLoadingProgress(90);
     setTimeout(() => {
       setLoadingProgress(100);
     }, 200);
+
+    // Reset debug logs
+    setDebugLogs([]);
   }
 
   async function cleanup() {
@@ -274,7 +365,7 @@ export const DevUI = ({
   }, [agentProcesses]);
 
   // Enter fullscreen mode if not in copy mode
-  const Container = copyMode ? Box : FullScreenBox;
+  const Container = copyMode || loadingError ? Box : FullScreenBox;
 
   return (
     <ThemeProvider theme={customInkUITheme}>
@@ -282,9 +373,10 @@ export const DevUI = ({
         {/* Loader */}
         {loadingProgress < 100 && (
           <DevLoader
+            loadingError={loadingError}
             loadingProgress={loadingProgress}
             loadingStatus={loadingStatus}
-            loadingError={loadingError}
+            options={options}
           />
         )}
 
@@ -308,6 +400,21 @@ export const DevUI = ({
           </ConditionalMouseProvider>
         )}
       </Container>
+      {loadingError && options.debug && (
+        <Box flexDirection="column" padding={1}>
+          {debugLogs.length > 0 && (
+            <>
+              <Text>Debug logs:</Text>
+              <Divider color={theme.orange} minWidth={"100%"} width="100%" />
+              {debugLogs.map((log, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: expected
+                <Text key={`loading-log-${i}`}>{log}</Text>
+              ))}
+            </>
+          )}
+          {debugLogs.length === 0 && <Text>No debug logs.</Text>}
+        </Box>
+      )}
     </ThemeProvider>
   );
 };
