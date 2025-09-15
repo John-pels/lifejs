@@ -27,10 +27,9 @@ export const executeStart = async (telemetry: TelemetryClient, options: StartOpt
     // Retrieve server token from options or environment variable
     const serverToken = options.token ?? process.env.LIFE_SERVER_TOKEN;
     if (!serverToken) {
-      telemetry.log.error({
-        message: `Server token is required. Please provide it via --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
+      return telemetry.log.error({
+        message: `Server token is required.\nUse the --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
       });
-      return;
     }
 
     // Initialize server

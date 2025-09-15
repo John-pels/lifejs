@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import type { TelemetryClient } from "@/telemetry/clients/base";
-import type { DevOptions } from "./ui";
-import { executeDev } from "./ui";
+import { type DevOptions, executeDev } from "./action";
 
 export function createDevCommand(telemetry: TelemetryClient) {
   const command = new Command("dev")
@@ -9,8 +8,12 @@ export function createDevCommand(telemetry: TelemetryClient) {
     .helpOption("--help", "Display help for command.")
     .option("-p, --port <port>", "Port to run the server on.", "3000")
     .option("-h, --host <host>", "Host to bind the server to.", "localhost")
-    .option("-c, --config <path>", "Path to life.config.ts file.")
-    .option("--no-tui", "Disable the terminal UI.")
+    .option("-r, --root <dir>", "Project root directory.", process.cwd())
+    .option(
+      "-t, --token <token>",
+      "Token to authenticate with the server. You can also set LIFE_SERVER_TOKEN environment variable.",
+    )
+    .option("--debug", "Enable debug mode logs, same as LOG_LEVEL=debug.")
     .action((options: DevOptions) => executeDev(telemetry, options));
 
   return command;

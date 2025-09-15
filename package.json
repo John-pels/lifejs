@@ -16,25 +16,24 @@
     "test": "turbo run test --concurrency=100% --log-order=stream --filter=!playground"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.2",
-    "@changesets/cli": "^2.29.6",
-    "@types/bun": "^1.2.21",
-    "npm-check-updates": "^18.0.3",
+    "@biomejs/biome": "^2.2.4",
+    "@changesets/cli": "^2.29.7",
+    "@types/bun": "^1.2.22",
+    "npm-check-updates": "^18.1.1",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2",
-    "ultracite": "^5.2.14"
+    "ultracite": "^5.3.4"
   },
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "bun@1.2.21",
+  "packageManager": "bun@1.2.22",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "patchedDependencies": {
-    "tailwindcss-capsize@4.0.0": "patches/tailwindcss-capsize@4.0.0.patch",
-    "ink@6.2.3": "patches/ink@6.2.3.patch"
+    "ink@6.3.0": "patches/ink@6.3.0.patch"
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.49.0",

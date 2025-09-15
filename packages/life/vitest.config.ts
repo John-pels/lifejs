@@ -43,9 +43,7 @@ export default defineConfig({
           },
           conditions: ["browser"],
         },
-        esbuild: { target: "es2016" }, // or "es2016"
       }),
     ],
   },
-  esbuild: { target: "es2016" }, // or "es2016"
 });

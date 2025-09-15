@@ -8,7 +8,6 @@ export function createStartCommand(telemetry: TelemetryClient) {
     .helpOption("--help", "Display help for command.")
     .option("-p, --port <port>", "Port to run the server on.", "3003")
     .option("-h, --host <host>", "Host to bind the server to.", "localhost")
-    .option("-b, --build <path>", "Path to build directory.")
     .option("-r, --root <dir>", "Project root directory.", process.cwd())
     .option("-w, --watch", "Watch for changes and hot-reload automatically.")
     .option(

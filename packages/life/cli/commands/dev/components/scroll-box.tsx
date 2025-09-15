@@ -126,7 +126,7 @@ export const ScrollBox = ({ children, showScrollbar = true, ...props }: ScrollAr
       </Box>
 
       {/* Debug */}
-      {/* <Box position="absolute" top={0} right={0} flexDirection="row" justifyContent="flex-start">
+      {/* <Box flexDirection="row" justifyContent="flex-start" position="absolute" right={0} top={0}>
         <Text backgroundColor="yellow">
           {`scroll:${scroll}-follow:${follow.toString()}-ov:${contentIsOverflowing.toString()}`}
         </Text>

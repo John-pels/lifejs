@@ -27,7 +27,7 @@ export class LifeServer {
   telemetry: TelemetryClient;
   watcher: FSWatcher | null = null;
   api: LifeApi;
-  readonly #agentProcesses = new Map<string, AgentProcess>();
+  readonly agentProcesses = new Map<string, AgentProcess>();
   readonly #processStats = new ProcessStats();
   readonly #fileHashes = new Map<string, string>();
   #startedAt: number | null = null;
@@ -101,7 +101,7 @@ export class LifeServer {
 
         // Stop the agent processes
         const results = await Promise.all(
-          Array.from(this.#agentProcesses.values()).map((process) =>
+          Array.from(this.agentProcesses.values()).map((process) =>
             this.stopAgentProcess(process.id, process.sessionToken),
           ),
         );
@@ -242,7 +242,7 @@ export class LifeServer {
 
               // Find all running processes for this agent
               const processesToRestart: AgentProcess[] = [];
-              for (const [, process] of this.#agentProcesses) {
+              for (const [, process] of this.agentProcesses) {
                 if (process.name === agentName && process.status === "running") {
                   processesToRestart.push(process);
                 }
@@ -316,21 +316,6 @@ export class LifeServer {
     }
   }
 
-  listAgentProcesses() {
-    try {
-      return op.success(
-        Array.from(this.#agentProcesses.values()).map((process) => ({
-          id: process.id,
-          name: process.name,
-          status: process.status,
-          lastStartedAt: process.lastStartedAt,
-        })),
-      );
-    } catch (error) {
-      return op.failure({ code: "Unknown", error });
-    }
-  }
-
   async createAgentProcess({
     name,
     scope,
@@ -389,7 +374,7 @@ export class LifeServer {
         });
 
         // Add the agent process to the map
-        this.#agentProcesses.set(process.id, process);
+        this.agentProcesses.set(process.id, process);
 
         // Return infos for the user client to connect to the agent
         return op.success({
@@ -407,12 +392,27 @@ export class LifeServer {
     });
   }
 
+  listAgentProcesses() {
+    try {
+      return op.success(
+        Array.from(this.agentProcesses.values()).map((process) => ({
+          id: process.id,
+          name: process.name,
+          status: process.status,
+          lastStartedAt: process.lastStartedAt,
+        })),
+      );
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
+  }
+
   getAgentProcess(id: string, sessionToken: string) {
     return this.telemetry.trace("getAgentProcess()", (span) => {
       span.setAttributes({ id });
 
       try {
-        const process = this.#agentProcesses.get(id);
+        const process = this.agentProcesses.get(id);
         if (!process) {
           return op.failure({ code: "NotFound", message: `Agent process '${id}' not found.` });
         }

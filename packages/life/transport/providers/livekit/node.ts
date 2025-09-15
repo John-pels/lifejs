@@ -1,20 +1,3 @@
-// Import LiveKit RTC Node in production mode to avoid DEBUG-level logs
-const prev = process.env.NODE_ENV;
-process.env.NODE_ENV = "production";
-const lk = require("@livekit/rtc-node") as typeof import("@livekit/rtc-node");
-const {
-  Room,
-  RoomEvent,
-  TrackPublishOptions,
-  TrackSource,
-  AudioFrame,
-  AudioSource,
-  AudioStream,
-  dispose,
-  LocalAudioTrack,
-} = lk;
-process.env.NODE_ENV = prev;
-
 import { type RemoteTrack, type Room as RoomType, TrackKind } from "@livekit/rtc-node";
 import z from "zod";
 import { createConfig } from "@/shared/config";
@@ -50,10 +33,11 @@ export const livekitNodeConfig = createConfig({
 export class LiveKitNodeClient extends TransportProviderClientBase<
   typeof livekitNodeConfig.schema
 > {
+  lk = LiveKitNodeClient.loadLiveKitRTCNode();
   isConnected = false;
   room: RoomType | null = null;
   listeners: Partial<Record<TransportEvent["type"], ((event: TransportEvent) => void)[]>> = {};
-  source = new AudioSource(16_000, 1, 1_000_000);
+  source = new this.lk.AudioSource(16_000, 1, 1_000_000);
 
   private audioBuffer: Int16Array = new Int16Array(0);
   private readonly FRAME_DURATION_MS = 10; // 10ms frames
@@ -63,6 +47,15 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
 
   constructor(config: z.input<typeof livekitNodeConfig.schema>) {
     super(livekitNodeConfig.schema, config);
+  }
+
+  static loadLiveKitRTCNode() {
+    // Import LiveKit RTC Node in production mode to avoid DEBUG-level logs
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const lk = require("@livekit/rtc-node") as typeof import("@livekit/rtc-node");
+    process.env.NODE_ENV = prev;
+    return lk;
   }
 
   ensureConnected(name: string, connector: LiveKitNodeClient) {
@@ -80,19 +73,19 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
 
   #initializeListeners(room: RoomType) {
     // audio-chunk
-    room.on(RoomEvent.TrackSubscribed, async (track) => {
+    room.on(this.lk.RoomEvent.TrackSubscribed, async (track) => {
       if (track.kind !== TrackKind.KIND_AUDIO) return;
 
       // Listen for unsubscribing
       let isUnsubscribed = false;
       const unsubscribeHandler = (unsubscribedTrack: RemoteTrack) => {
         if (unsubscribedTrack.sid === track.sid) isUnsubscribed = true;
-        room.off(RoomEvent.TrackUnsubscribed, unsubscribeHandler);
+        room.off(this.lk.RoomEvent.TrackUnsubscribed, unsubscribeHandler);
       };
-      room.on(RoomEvent.TrackUnsubscribed, unsubscribeHandler);
+      room.on(this.lk.RoomEvent.TrackUnsubscribed, unsubscribeHandler);
 
       // Stream audio chunks until the track is unsubscribed
-      const audio = new AudioStream(track, { sampleRate: 16_000 });
+      const audio = new this.lk.AudioStream(track, { sampleRate: 16_000 });
       // @ts-expect-error - AudioStream extends ReadableStream which has Symbol.asyncIterator at runtime
       for await (const frame of audio) {
         if (isUnsubscribed) break;
@@ -115,7 +108,7 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       }
 
       // Create the room and set up event listeners
-      this.room = new Room();
+      this.room = new this.lk.Room();
 
       // Initialize listeners
       this.#initializeListeners(this.room);
@@ -128,9 +121,9 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       this.isConnected = true;
 
       // Publish the track
-      const track = LocalAudioTrack.createAudioTrack("audio", this.source);
-      const options = new TrackPublishOptions();
-      options.source = TrackSource.SOURCE_MICROPHONE;
+      const track = this.lk.LocalAudioTrack.createAudioTrack("audio", this.source);
+      const options = new this.lk.TrackPublishOptions();
+      options.source = this.lk.TrackSource.SOURCE_MICROPHONE;
       await this.room.localParticipant?.publishTrack(track, options);
 
       return op.success();
@@ -144,7 +137,7 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
       const [errEnsure, connector] = this.ensureConnected("leaveRoom", this);
       if (errEnsure) return op.failure(errEnsure);
       await connector.room.disconnect();
-      await dispose();
+      await this.lk.dispose();
       this.isConnected = false;
       return op.success();
     } catch (error) {
@@ -199,7 +192,12 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
   async flushAudioBuffer() {
     try {
       if (!this.audioBuffer?.length) return;
-      const audioFrame = new AudioFrame(this.audioBuffer, 16_000, 1, this.audioBuffer.length);
+      const audioFrame = new this.lk.AudioFrame(
+        this.audioBuffer,
+        16_000,
+        1,
+        this.audioBuffer.length,
+      );
       try {
         await this.source.captureFrame(audioFrame);
       } catch (error) {
@@ -228,7 +226,7 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
         const frameData = this.audioBuffer.slice(0, this.SAMPLES_PER_FRAME);
         this.audioBuffer = this.audioBuffer.slice(this.SAMPLES_PER_FRAME);
 
-        const audioFrame = new AudioFrame(frameData, 16_000, 1, this.SAMPLES_PER_FRAME);
+        const audioFrame = new this.lk.AudioFrame(frameData, 16_000, 1, this.SAMPLES_PER_FRAME);
         // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
         const [errCapture] = await op.attempt(
           async () => await this.source.captureFrame(audioFrame),

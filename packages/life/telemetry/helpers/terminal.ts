@@ -4,7 +4,7 @@ import type { TelemetryLog } from "@/telemetry/types";
 import { telemetryBrowserScopesDefinition } from "../scopes/browser";
 import { telemetryNodeScopesDefinition } from "../scopes/node";
 
-export async function formatLogForTerminal(log: TelemetryLog) {
+export function formatLogForTerminal(log: TelemetryLog) {
   // Get symbol and color based on level
 
   // Format the log header
@@ -31,7 +31,7 @@ export async function formatLogForTerminal(log: TelemetryLog) {
     // Format ESBuild errors
     if (log.attributes?.isEsbuild) {
       const esbuildError = log.error as BuildFailure;
-      const messages = await esbuild.formatMessages(esbuildError.errors, {
+      const messages = esbuild.formatMessagesSync(esbuildError.errors, {
         kind: "error",
         color: true,
       });

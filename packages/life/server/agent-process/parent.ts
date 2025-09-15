@@ -8,6 +8,7 @@ import { canon, type SerializableValue } from "@/shared/canon";
 import type { LifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
+import type { TelemetrySignal } from "@/telemetry/types";
 import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
 
@@ -29,6 +30,7 @@ export class AgentProcess {
   #readyResolve: (() => void) | null = null;
   #child: BirpcReturn<ChildMethods, ParentMethods> | null = null;
   #handleChildExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
+  #telemetryCallbacks: Set<(signal: TelemetrySignal) => void | Promise<void>> = new Set();
 
   constructor({
     name,
@@ -122,6 +124,19 @@ export class AgentProcess {
             syncTelemetry: (signal) => {
               try {
                 this.#server.telemetry.sendSignal(signal);
+                // Forward signal to all registered callbacks
+                for (const callback of this.#telemetryCallbacks) {
+                  try {
+                    const result = callback(signal);
+                    if (result instanceof Promise) {
+                      result.catch((err) => {
+                        console.error("Error in telemetry callback:", err);
+                      });
+                    }
+                  } catch (err) {
+                    console.error("Error in telemetry callback:", err);
+                  }
+                }
                 this.lastSeenAt = Date.now();
                 return op.success();
               } catch (error) {
@@ -398,5 +413,21 @@ export class AgentProcess {
         error,
       });
     }
+  }
+
+  /**
+   * Register a callback to receive telemetry signals from the child process.
+   * The callback will be invoked whenever a syncTelemetry signal is received.
+   *
+   * @param callback - Function to be called with each telemetry signal
+   * @returns A cleanup function that removes the callback when called
+   */
+  onChildTelemetrySignal(callback: (signal: TelemetrySignal) => void | Promise<void>) {
+    this.#telemetryCallbacks.add(callback);
+
+    // Return a cleanup function that removes this callback
+    return () => {
+      this.#telemetryCallbacks.delete(callback);
+    };
   }
 }

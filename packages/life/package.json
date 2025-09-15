@@ -84,62 +84,29 @@
         "types": "./dist/exports/react.d.ts",
         "default": "./dist/exports/react.js"
       }
-    },
-    "./build/client": {
-      "import": {
-        "types": "./dist/exports/build/client.d.ts",
-        "default": "./dist/exports/build/client.mjs"
-      },
-      "require": {
-        "types": "./dist/exports/build/client.d.ts",
-        "default": "./dist/exports/build/client.js"
-      }
-    },
-    "./build/server": {
-      "import": {
-        "types": "./dist/exports/build/server.d.ts",
-        "default": "./dist/exports/build/server.mjs"
-      },
-      "require": {
-        "types": "./dist/exports/build/server.d.ts",
-        "default": "./dist/exports/build/server.js"
-      }
-    },
-    "./build/import-server": {
-      "import": {
-        "types": "./dist/exports/build/import-server.d.ts",
-        "default": "./dist/exports/build/import-server.mjs"
-      },
-      "require": {
-        "types": "./dist/exports/build/import-server.d.ts",
-        "default": "./dist/exports/build/import-server.js"
-      }
     }
   },
   "dependencies": {
-    "@ast-grep/napi": "^0.39.4",
-    "@hono/node-server": "^1.19.1",
+    "@ast-grep/napi": "^0.39.5",
+    "@hono/node-server": "^1.19.2",
     "@hono/node-ws": "^1.2.0",
-    "@hono/zod-validator": "^0.7.2",
-    "@huggingface/transformers": "^3.7.2",
+    "@huggingface/transformers": "^3.7.3",
     "@inkjs/ui": "^2.0.0",
-    "@livekit/protocol": "^1.41.0",
     "@livekit/rtc-node": "^0.13.18",
     "@nanostores/react": "^1.0.0",
     "@paralleldrive/cuid2": "^2.2.2",
     "@zenobius/ink-mouse": "^1.0.3",
     "birpc": "^2.5.0",
-    "chalk": "^5.6.0",
+    "chalk": "^5.6.2",
     "chokidar": "^4.0.3",
-    "commander": "^14.0.0",
-    "defu": "^6.1.4",
+    "commander": "^14.0.1",
     "dotenv": "^17.2.2",
     "esbuild": "^0.25.9",
     "fast-npm-meta": "^0.4.6",
     "globby": "^14.1.0",
-    "hono": "^4.9.5",
-    "ink": "^6.2.3",
-    "livekit-client": "^2.15.6",
+    "hono": "^4.9.7",
+    "ink": "^6.3.0",
+    "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.3",
     "nanostores": "^1.0.1",
     "onnxruntime-node": "^1.22.0-rev",
@@ -155,13 +122,13 @@
   "devDependencies": {
     "@cartesia/cartesia-js": "^2.2.5",
     "@deepgram/sdk": "4.11.2",
-    "@mistralai/mistralai": "^1.9.18",
+    "@mistralai/mistralai": "^1.10.0",
     "@playwright/test": "^1.55.0",
-    "@types/bun": "^1.2.21",
+    "@types/bun": "^1.2.22",
     "@types/ws": "^8.18.1",
     "@vitest/browser": "^3.2.4",
     "dotenv-cli": "^10.0.0",
-    "openai": "^5.16.0",
+    "openai": "^5.20.2",
     "playwright": "^1.55.0",
     "tsup": "^8.5.0",
     "vitest": "^3.2.4"

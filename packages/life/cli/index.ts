@@ -13,9 +13,11 @@ import { applyHelpFormatting } from "./utils/help-formatter";
 import { formatVersion, getVersion } from "./utils/version";
 
 async function main() {
-  // Stream formatted telemetry logs to the terminal
+  // Stream formatted telemetry logs to the terminal (except for dev command without --no-tui flag)
   let logLevel = process.argv.includes("--debug") ? "debug" : undefined;
+  // const isDevCommand = process.argv.includes("dev") && !process.argv.includes("--no-tui");
   logLevel = logLevel ?? (process.env.LOG_LEVEL as TelemetryLogLevel) ?? "info";
+  // if (!isDevCommand)
   TelemetryClient.registerGlobalConsumer({
     async start(queue) {
       for await (const item of queue) {
@@ -45,7 +47,8 @@ async function main() {
   };
   process.on("SIGINT", () => setImmediate(cleanup));
   process.on("SIGTERM", () => setImmediate(cleanup));
-  process.on("beforeExit", () => cleanup);
+  process.on("beforeExit", cleanup);
+  process.on("exit", cleanup);
 
   // Create the CLI telemety client
   const cliTelemetry = createTelemetryClient("cli", {

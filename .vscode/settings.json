@@ -69,7 +69,8 @@
     "**/CLAUDE.md": false,
     "**/.life": false,
     "**/.claude": false,
-    "**/AGENTS.md": false
+    "**/AGENTS.md": false,
+    "**/vitest.config.ts": false
   },
   "tailwindCSS.experimental.classRegex": [
     ["cva\\(([^;]*)[\\);]", "[`'\"`]([^'\"`;]*)[`'\"`]"],
