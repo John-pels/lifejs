@@ -33,7 +33,7 @@ export const DevLoader: FC<DevLoaderProps> = ({
         <>
           <Text color={theme.orange}>Life.js</Text>
           <Box width={40}>
-            <ProgressBar value={loadingProgress ?? 0} />
+            <ProgressBar value={loadingProgress} />
           </Box>
           <Text color={theme.gray.medium}>{loadingStatus}</Text>
         </>

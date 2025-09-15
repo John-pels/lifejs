@@ -1,4 +1,4 @@
-import { execSync, spawn } from "node:child_process";
+import { execSync as exec, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { defaultTheme, extendTheme, ThemeProvider } from "@inkjs/ui";
 import { MouseProvider } from "@zenobius/ink-mouse";
@@ -55,8 +55,8 @@ const customInkUITheme = extendTheme(defaultTheme, {
 export const DEFAULT_TABS = ["server", "webrtc"];
 
 export const DevUI = ({ options }: { options: DevOptions }) => {
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingStatus, setLoadingStatus] = useState<string | null>(null);
+  const [loadingProgress, setLoadingProgress] = useState(1);
+  const [loadingStatus, setLoadingStatus] = useState<string | null>("Initializing...");
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
@@ -80,9 +80,9 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       process.exit(1);
     };
     // Helper function to execute commands and capture output
-    const executeWithLogging = (command: string) => {
+    const executeWithLogging = async (command: string) => {
       try {
-        const output = execSync(command, {
+        const output = await exec(command, {
           stdio: ["pipe", "pipe", "pipe"],
         });
         if (output) {
@@ -103,25 +103,31 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     };
 
     // Retrieve server token from options or environment variable
+    setLoadingStatus("Checking server token...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const serverToken = options.token ?? process.env.LIFE_SERVER_TOKEN;
     if (!serverToken)
       return await initError(
         `Server token is required.\nUse the --token flag or set LIFE_SERVER_TOKEN environment variable.\n\nHere is one generated for you :)\n\n${chalk.bold(`LIFE_SERVER_TOKEN=${randomBytes(32).toString("base64url")}`)}\n\nJust put it in your .env file.`,
       );
     setLoadingProgress(10);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Check Livekit Server version
     setLoadingStatus("Checking LiveKit server version...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     let lkInstall = await checkLivekitInstall();
     setLoadingProgress(20);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Install/Upgrade LiveKit server
     if (!lkInstall.installed) {
       setLoadingStatus("Installing LiveKit server...");
+      await new Promise((resolve) => setTimeout(resolve, 10));
       // - MacOS
       if (process.platform === "darwin") {
         setDebugLogs((prev) => [...prev, "Running: brew update && brew install livekit"]);
-        const result = executeWithLogging("brew update && brew install livekit");
+        const result = await executeWithLogging("brew update && brew install livekit");
         if (!result.success) {
           return await initError(
             "Failed to install LiveKit server via Homebrew.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
@@ -131,7 +137,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       // - Linux
       else if (process.platform === "linux") {
         setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
-        const result = executeWithLogging("curl -sSL https://get.livekit.io | bash");
+        const result = await executeWithLogging("curl -sSL https://get.livekit.io | bash");
         if (!result.success) {
           return await initError(
             "Failed to install LiveKit server.\nPlease install it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
@@ -160,13 +166,14 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       }
     }
 
-    const minLivekitVersionPrefix = "1.10";
+    const minLivekitVersionPrefix = "1.9";
     if (!lkInstall.version?.startsWith(minLivekitVersionPrefix)) {
       setLoadingStatus("Upgrading LiveKit server...");
+      await new Promise((resolve) => setTimeout(resolve, 10));
       // - MacOS
       if (process.platform === "darwin") {
         setDebugLogs((prev) => [...prev, "Running: brew update && brew upgrade livekit"]);
-        const result = executeWithLogging("brew update && brew upgrade livekit");
+        const result = await executeWithLogging("brew update && brew upgrade livekit");
         if (!result.success) {
           return await initError(
             "Failed to upgrade LiveKit server via Homebrew.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
@@ -176,7 +183,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       // - Linux
       else if (process.platform === "linux") {
         setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
-        const result = executeWithLogging("curl -sSL https://get.livekit.io | bash");
+        const result = await executeWithLogging("curl -sSL https://get.livekit.io | bash");
         if (!result.success) {
           return await initError(
             "Failed to upgrade LiveKit server.\nPlease upgrade it manually by visiting https://docs.livekit.io/home/self-hosting/local/",
@@ -205,9 +212,11 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       }
     }
     setLoadingProgress(30);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Start LiveKit server
     setLoadingStatus("Starting LiveKit server...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const livekitServer = spawn("livekit-server", ["--dev"], {
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -218,20 +227,26 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       logInTab("webrtc", cleanStdData(data));
     });
     setLoadingProgress(40);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Download AI models
     setLoadingStatus("Downloading AI models...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     // TODO
     setLoadingProgress(50);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Obtain Life.js version
     setLoadingStatus("Checking Life.js version...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const version_ = await getVersion();
     setVersion(version_);
     setLoadingProgress(60);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Initialize server
     setLoadingStatus("Initializing server...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const newServer = new LifeServer({
       projectDirectory: options.root,
       token: serverToken,
@@ -241,6 +256,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     });
     setServer(newServer);
     setLoadingProgress(70);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Consume server telemetry logs
     newServer.telemetry.registerConsumer({
@@ -257,23 +273,25 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
 
     // Start Life.js server
     setLoadingStatus("Starting Life.js server...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const [errStart] = await newServer.start();
-    if (errStart)
-      setLoadingError(
-        `An error occurred while starting the development server.\nError: ${errStart.message}`,
-      );
+    if (errStart) return await initError(errStart.message);
     setLoadingProgress(80);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Listen for agent processes changes
     setLoadingStatus("Preparing for agent processes...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     const intervalId = setInterval(() => {
       setAgentProcesses(newServer.agentProcesses);
     }, 1000);
     intervals.current.push(intervalId);
     setLoadingProgress(90);
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Done
     setLoadingStatus("Done!");
+    await new Promise((resolve) => setTimeout(resolve, 10));
     setTimeout(() => {
       setLoadingProgress(100);
     }, 200);
