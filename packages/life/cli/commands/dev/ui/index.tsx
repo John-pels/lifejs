@@ -1,4 +1,4 @@
-import { execSync as exec, spawn } from "node:child_process";
+import { type ChildProcess, execSync as exec, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { defaultTheme, extendTheme, ThemeProvider } from "@inkjs/ui";
 import { MouseProvider } from "@zenobius/ink-mouse";
@@ -8,8 +8,10 @@ import { Box, type BoxProps, Text, type TextProps, useInput } from "ink";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { getVersion, type VersionInfo } from "@/cli/utils/version";
+import { LifeCompiler } from "@/compiler";
 import { LifeServer } from "@/server";
 import type { AgentProcess } from "@/server/agent-process/parent";
+import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
 import { formatLogForTerminal } from "@/telemetry/helpers/terminal";
 import { theme } from "../../../utils/theme";
 import type { DevOptions } from "../action";
@@ -52,22 +54,28 @@ const customInkUITheme = extendTheme(defaultTheme, {
   },
 });
 
-export const DEFAULT_TABS = ["server", "webrtc"];
+export const DEFAULT_TABS = ["server", "compiler", "webrtc"];
 
 export const DevUI = ({ options }: { options: DevOptions }) => {
   const [loadingProgress, setLoadingProgress] = useState(1);
   const [loadingStatus, setLoadingStatus] = useState<string | null>("Initializing...");
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const server = useRef<LifeServer | null>(null);
+  const compiler = useRef<LifeCompiler | null>(null);
+  const livekitProcess = useRef<ChildProcess | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
-  const [server, setServer] = useState<LifeServer | null>(null);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [agentProcesses, setAgentProcesses] = useState<Map<string, AgentProcess>>(new Map());
 
   const [copyMode, setCopyMode] = useState(false);
   const [tabs, setTabs] = useState<string[]>(DEFAULT_TABS);
   const [selectedTab, setSelectedTab] = useState("server");
-  const [logs, setLogs] = useState<Record<string, string[]>>({ server: [], webrtc: [] });
+  const [logs, setLogs] = useState<Record<string, string[]>>({
+    server: [],
+    compiler: [],
+    webrtc: [],
+  });
 
   const intervals = useRef<NodeJS.Timeout[]>([]);
 
@@ -220,6 +228,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     const livekitServer = spawn("livekit-server", ["--dev"], {
       stdio: ["ignore", "pipe", "pipe"],
     });
+    livekitProcess.current = livekitServer;
     livekitServer.stdout?.on("data", (data) => {
       logInTab("webrtc", cleanStdData(data));
     });
@@ -244,6 +253,46 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     setLoadingProgress(60);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
+    // Initialize compiler
+    setLoadingStatus("Initializing compiler...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const newCompiler = new LifeCompiler({
+      projectDirectory: options.root,
+      outputDirectory: ".life",
+      watch: true,
+      optimize: true,
+    });
+    compiler.current = newCompiler;
+    setLoadingProgress(65);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Consume compiler telemetry logs
+    newCompiler.telemetry.registerConsumer({
+      async start(queue) {
+        for await (const item of queue) {
+          if (item.type !== "log") continue;
+
+          // Ignore logs lower than the requested log level
+          if (logLevelPriority(item.level) < logLevelPriority(options.debug ? "debug" : "info"))
+            continue;
+
+          // Format and record the logs
+          setLogs((prev) => ({
+            ...prev,
+            compiler: [...(prev.compiler ?? []), formatLogForTerminal(item)],
+          }));
+        }
+      },
+    });
+
+    // Start compiler
+    setLoadingStatus("Starting Life.js compiler...");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const [errCompiler] = await newCompiler.start();
+    if (errCompiler) return await initError(errCompiler.message);
+    setLoadingProgress(70);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Initialize server
     setLoadingStatus("Initializing server...");
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -254,15 +303,21 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       host: options.host,
       port: options.port,
     });
-    setServer(newServer);
-    setLoadingProgress(70);
+    server.current = newServer;
+    setLoadingProgress(75);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Consume server telemetry logs
     newServer.telemetry.registerConsumer({
       async start(queue) {
         for await (const item of queue) {
-          if (item.type !== "log") return;
+          if (item.type !== "log") continue;
+
+          // Ignore logs lower than the requested log level
+          if (logLevelPriority(item.level) < logLevelPriority(options.debug ? "debug" : "info"))
+            continue;
+
+          // Format and record the logs
           setLogs((prev) => ({
             ...prev,
             server: [...(prev.server ?? []), formatLogForTerminal(item)],
@@ -274,9 +329,9 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     // Start Life.js server
     setLoadingStatus("Starting Life.js server...");
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const [errStart] = await newServer.start();
-    if (errStart) return await initError(errStart.message);
-    setLoadingProgress(80);
+    const [errServer] = await newServer.start();
+    if (errServer) return await initError(errServer.message);
+    setLoadingProgress(85);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Listen for agent processes changes
@@ -301,7 +356,9 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
   }
 
   async function cleanup() {
-    await server?.stop();
+    await server.current?.stop();
+    await compiler.current?.stop();
+    livekitProcess.current?.kill();
     for (const interval of intervals.current) clearInterval(interval);
   }
 
@@ -369,12 +426,20 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       // Telemetry logs
       process.onChildTelemetrySignal((signal) => {
         if (signal.type !== "log") return;
+
+        // Ignore logs lower than the requested log level
+        if (logLevelPriority(signal.level) < logLevelPriority(options.debug ? "debug" : "info"))
+          return;
+
+        // Format and record the logs
         logInTab(process.id, formatLogForTerminal(signal));
       });
+
       // STDOUT
       process.nodeProcess?.stdout?.on("data", (newOutput: Buffer) => {
         logInTab(process.id, cleanStdData(newOutput));
       });
+
       // STDERR
       process.nodeProcess?.stderr?.on("data", (newOutput: Buffer) => {
         logInTab(process.id, cleanStdData(newOutput));

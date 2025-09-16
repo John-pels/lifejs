@@ -537,7 +537,7 @@ export abstract class TelemetryClient {
           });
           return;
         }
-        this.#emitLog(level, { ...input, span } as TelemetryLogInput, true);
+        this.#emitLog(level, { ...input, span } as TelemetryLogInput);
       };
     const log: TelemetryLogHandle = {
       debug: createSpanLogMethod("debug"),
@@ -557,7 +557,7 @@ export abstract class TelemetryClient {
   /**
    * Internal log method that handles all log levels
    */
-  #emitLog(level: TelemetryLog["level"], input: TelemetryLogInput, isFromSpan = false): void {
+  #emitLog(level: TelemetryLog["level"], input: TelemetryLogInput): void {
     try {
       const spanData = input.span?._getWritableData() ?? this.getCurrentSpanData();
 
@@ -571,7 +571,7 @@ export abstract class TelemetryClient {
         this.log.error({
           message:
             "No message provided in log input or error. This is unexpected and must be fixed.",
-          attributes: { level, input, isFromSpan, fromEmitLog: true },
+          attributes: { level, input, fromEmitLog: true },
         });
       }
 
@@ -592,7 +592,7 @@ export abstract class TelemetryClient {
       };
 
       // Add to current span context if exists
-      if (isFromSpan && spanData) spanData.logs.push(log);
+      if (input.span && spanData) spanData.logs.push(log);
 
       // Send to consumer queues
       this.sendSignal({ type: "log", ...log });
@@ -601,7 +601,7 @@ export abstract class TelemetryClient {
       this.log.error({
         message: "Error emitting log.",
         error,
-        attributes: { level, input, isFromSpan },
+        attributes: { level, input },
       });
     }
   }

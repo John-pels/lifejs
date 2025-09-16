@@ -87,19 +87,22 @@ export class LifeCompiler {
         }
 
         // 4. Start an initial compilation of all agents
-        await this.telemetry.trace("initial-compilation", async (spanCompilation) => {
-          await Promise.all(this.entryPaths.configs.map((p) => this.compileConfig(p, false))); // configs are compiled first, because required by agents compilations
-          await Promise.all([
-            ...this.entryPaths.servers.map((p) => this.compileAgentServer(p)),
-            ...this.entryPaths.clients.map((p) => this.compileAgentClient(p)),
-          ]);
-          await Promise.all([this.generateServerBundle(), this.generateClientBundle()]);
-
-          // Log operation with timing
-          spanCompilation.end();
-          span.log.info({
-            message: `Agents compiled in ${chalk.bold(`${ns.toMs(spanCompilation.getData().duration)}ms`)}.`,
-          });
+        const duration = await this.telemetry.trace(
+          "initial-compilation",
+          async (spanCompilation) => {
+            await Promise.all(this.entryPaths.configs.map((p) => this.compileConfig(p, false))); // configs are compiled first, because required by agents compilations
+            await Promise.all([
+              ...this.entryPaths.servers.map((p) => this.compileAgentServer(p)),
+              ...this.entryPaths.clients.map((p) => this.compileAgentClient(p)),
+            ]);
+            await Promise.all([this.generateServerBundle(), this.generateClientBundle()]);
+            // Log operation with timing
+            spanCompilation.end();
+            return spanCompilation.getData().duration;
+          },
+        );
+        span.log.info({
+          message: `Agents compiled in ${chalk.bold(`${ns.toMs(duration)}ms`)}.`,
         });
 
         // 5. Watch for new/deleted entry paths if watch mode is enabled

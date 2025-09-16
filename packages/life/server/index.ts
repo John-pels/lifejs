@@ -140,6 +140,7 @@ export class LifeServer {
 
         // Check if client index exists
         const clientIndex = join(buildDir, "client", "index.ts");
+        console.log("CLIENT INDEX", clientIndex);
         if (!existsSync(clientIndex)) {
           return op.failure({
             code: "NotFound",
@@ -149,6 +150,7 @@ export class LifeServer {
 
         // Check if server dist index exists
         const serverIndex = join(buildDir, "server", "dist", "index.js");
+        console.log("SERVER INDEX", serverIndex);
         if (!existsSync(serverIndex)) {
           return op.failure({
             code: "NotFound",

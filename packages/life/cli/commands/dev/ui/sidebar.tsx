@@ -56,7 +56,7 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
                   color={selectedTab === tab ? theme.orange : theme.gray.medium}
                   key={tab}
                 >
-                  {tab === "server" ? "Server" : "WebRTC"}
+                  {{ server: "Server", compiler: "Compiler", webrtc: "WebRTC" }[tab]}
                 </Text>
               ))}
           </Box>

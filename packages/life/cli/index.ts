@@ -21,17 +21,16 @@ async function main() {
   TelemetryClient.registerGlobalConsumer({
     async start(queue) {
       for await (const item of queue) {
-        if (item.type === "log") {
-          // Ignore logs lower than the requested log level
-          if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel))
-            continue;
+        if (item.type !== "log") continue;
+        // Ignore logs lower than the requested log level
+        if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel))
+          continue;
 
-          // Format and print the log
-          try {
-            console.log(await formatLogForTerminal(item));
-          } catch {
-            console.log(item.message);
-          }
+        // Format and print the log
+        try {
+          console.log(formatLogForTerminal(item));
+        } catch {
+          console.log(item.message);
         }
       }
     },
