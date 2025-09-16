@@ -1,5 +1,5 @@
 import type z from "zod";
-import type { LifeServerApiClient } from "@/client/api";
+import type { LifeClient } from "@/client/client";
 import type { PluginClientBase } from "@/plugins/client/class";
 import type { PluginClientDefinition } from "@/plugins/client/types";
 import * as op from "@/shared/operation";
@@ -7,37 +7,39 @@ import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/browser";
 import { TransportBrowserClient } from "@/transport/client/browser";
 import type { agentClientConfig } from "../client/config";
+import type { AgentScope } from "../server/types";
 import { type AgentClientAtoms, createAgentClientAtoms } from "./atoms";
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "./types";
 
 export class AgentClient<const Definition extends AgentClientDefinition> {
   readonly _isAgentClient = true;
   readonly _definition: Definition;
+
   readonly id: string;
-  readonly transport: TransportBrowserClient;
   readonly atoms: AgentClientAtoms;
   readonly config: z.output<typeof agentClientConfig.schema>;
-  readonly api: LifeServerApiClient;
-  readonly #sessionToken: string;
-  readonly #transportRoom: { name: string; token: string };
+  readonly transport: TransportBrowserClient;
+
+  readonly #life: LifeClient;
   readonly #telemetry: TelemetryClient;
+
+  #sessionToken?: string;
+  #transportRoom?: { name: string; token: string };
+  #scope?: AgentScope<Definition["$serverDef"]["scope"]>;
+
+  isStarted = false;
 
   constructor(params: {
     id: string;
     definition: Definition;
-    plugins: AgentClientPluginsMapping;
-    serverUrl: string;
-    sessionToken: string;
-    transportRoom: { name: string; token: string };
     config: z.output<typeof agentClientConfig.schema>;
-    api: LifeServerApiClient;
+    life: LifeClient;
+    plugins: AgentClientPluginsMapping;
   }) {
     this._definition = params.definition;
     this.id = params.id;
     this.config = params.config;
-    this.api = params.api;
-    this.#sessionToken = params.sessionToken;
-    this.#transportRoom = params.transportRoom;
+    this.#life = params.life;
 
     // Initialize telemetry
     this.#telemetry = createTelemetryClient("agent.client", {
@@ -116,20 +118,26 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    * @returns Server response on successful start
    * @throws Error if the agent fails to start
    */
-  async start() {
+  async start(scope: AgentScope<Definition["$serverDef"]["scope"]>) {
     try {
-      // Send a call to the server to start the agent and join the transport room
-      const [apiResult, roomResult] = await Promise.all([
-        this.api.call("agent.start", {
-          agentId: this.id,
-          sessionToken: this.#sessionToken,
-        }),
-        this.transport.joinRoom(this.#transportRoom.name, this.#transportRoom.token),
-      ]);
+      // Send a call to the server to start the agent
+      const [errStart, data] = await this.#life.api.call("agent.start", { id: this.id, scope });
+      if (errStart) return op.failure(errStart);
+      this.#sessionToken = data.sessionToken;
+      this.#transportRoom = data.transportRoom;
+      this.#scope = scope;
 
-      // Return error if any occurs
-      if (apiResult[0]) return op.failure(apiResult[0]);
-      if (roomResult[0]) return op.failure(roomResult[0]);
+      // Join the transport room
+      const [errJoin] = await this.transport.joinRoom(
+        this.#transportRoom.name,
+        this.#transportRoom.token,
+      );
+      if (errJoin) return op.failure(errJoin);
+
+      this.isStarted = true;
+
+      // Refetch info atom
+      this.atoms.info().refetch();
 
       return op.success();
     } catch (error) {
@@ -145,10 +153,15 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    */
   async stop() {
     try {
+      // Ensure sessionToken is set
+      if (!this.#sessionToken) {
+        return op.failure({ code: "Conflict", message: "Agent is not started." });
+      }
+
       // Send a call to the server to stop the agent and leave the transport room
       const [apiResult, roomResult] = await Promise.all([
-        this.api.call("agent.stop", {
-          agentId: this.id,
+        this.#life.api.call("agent.stop", {
+          id: this.id,
           sessionToken: this.#sessionToken,
         }),
         this.transport.leaveRoom(),
@@ -157,6 +170,11 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
       // Return error if any occurs
       if (apiResult[0]) return op.failure(apiResult[0]);
       if (roomResult[0]) return op.failure(roomResult[0]);
+
+      this.isStarted = false;
+
+      // Refetch info atom
+      this.atoms.info().refetch();
 
       return op.success();
     } catch (error) {
@@ -172,7 +190,10 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     try {
       const [errStop] = await this.stop();
       if (errStop) return op.failure(errStop);
-      const [errStart] = await this.start();
+      if (!this.#scope) {
+        return op.failure({ code: "Conflict", message: "Agent is not started." });
+      }
+      const [errStart] = await this.start(this.#scope);
       if (errStart) return op.failure(errStart);
       return op.success();
     } catch (error) {
@@ -188,9 +209,14 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
    */
   async info() {
     try {
+      // Ensure sessionToken is set
+      if (!this.#sessionToken) {
+        return op.failure({ code: "Conflict", message: "Agent is not started." });
+      }
+
       // Send a call to the server to get agent information
-      const [err, data] = await this.api.call("agent.info", {
-        agentId: this.id,
+      const [err, data] = await this.#life.api.call("agent.info", {
+        id: this.id,
         sessionToken: this.#sessionToken,
       });
 

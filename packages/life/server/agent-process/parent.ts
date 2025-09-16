@@ -1,4 +1,5 @@
 import { type ChildProcess, fork } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type BirpcReturn, createBirpc } from "birpc";
@@ -13,42 +14,41 @@ import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
 
 export class AgentProcess {
-  readonly id: string = newId("agent");
+  readonly id: string;
   readonly name: string;
-  readonly scope: AgentScope;
-  readonly transportRoom: { name: string; token: string };
-  readonly sessionToken: string;
+  readonly sessionToken = randomBytes(32).toString("base64url");
   readonly #server: LifeServer;
-  readonly #pluginsContexts = {} as Record<string, SerializableValue>;
+
+  lastScope: AgentScope | null = null;
+  lastTransportRoom: { name: string; token: string } | null = null;
+
+  // Health infos
   status: "stopped" | "stopping" | "starting" | "running" = "stopped";
   lastStartedAt?: number;
   lastSeenAt?: number;
   restartCount = 0;
   nodeProcess: ChildProcess | null = null;
+
+  //
+  readonly #pluginsContexts = {} as Record<string, SerializableValue>;
+  #child: BirpcReturn<ChildMethods, ParentMethods> | null = null;
   #pingInterval: NodeJS.Timeout | null = null;
   #restartTimeout: NodeJS.Timeout | null = null;
   #readyResolve: (() => void) | null = null;
-  #child: BirpcReturn<ChildMethods, ParentMethods> | null = null;
   #handleChildExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
   #telemetryCallbacks: Set<(signal: TelemetrySignal) => void | Promise<void>> = new Set();
 
   constructor({
+    id,
     name,
     server,
-    scope,
-    transportRoom,
-    sessionToken,
   }: {
+    id?: string;
     name: string;
     server: LifeServer;
-    scope: AgentScope;
-    transportRoom: { name: string; token: string };
-    sessionToken: string;
   }) {
+    this.id = id ?? newId("agent");
     this.name = name;
-    this.scope = scope;
-    this.transportRoom = transportRoom;
-    this.sessionToken = sessionToken;
     this.#server = server;
   }
 
@@ -66,7 +66,13 @@ export class AgentProcess {
     });
   }
 
-  async start() {
+  async start({
+    scope,
+    transportRoom,
+  }: {
+    scope: AgentScope;
+    transportRoom: { name: string; token: string };
+  }) {
     return await this.#server.telemetry.trace("AgentProcess.start()", async (span) => {
       span.setAttributes({ agentId: this.id });
       try {
@@ -91,6 +97,10 @@ export class AgentProcess {
         const waitReady = new Promise<void>((resolve) => {
           this.#readyResolve = resolve;
         });
+
+        // Update the scope and transport room
+        this.lastScope = scope;
+        this.lastTransportRoom = transportRoom;
 
         // Get the agent definition
         const [errGet, definition] = await this.getDefinition();
@@ -171,8 +181,8 @@ export class AgentProcess {
         const [errStart] = await this.#child.start({
           id: this.id,
           name: this.name,
-          scope: this.scope,
-          transportRoom: this.transportRoom,
+          scope: this.lastScope,
+          transportRoom,
           pluginsContexts: this.#pluginsContexts,
           isRestart: this.restartCount > 0,
         });
@@ -301,8 +311,17 @@ export class AgentProcess {
       try {
         const [errStop] = await this.stop();
         if (errStop) return op.failure(errStop);
+        if (!(this.lastScope && this.lastTransportRoom)) {
+          return op.failure({
+            code: "Conflict",
+            message: "Agent must be started before it can be restarted.",
+          });
+        }
         this.restartCount++;
-        const [errStart] = await this.start();
+        const [errStart] = await this.start({
+          scope: this.lastScope,
+          transportRoom: this.lastTransportRoom,
+        });
         if (errStart) return op.failure(errStart);
         return op.success();
       } catch (error) {

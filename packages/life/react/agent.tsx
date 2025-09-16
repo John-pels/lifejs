@@ -1,42 +1,7 @@
-import { createContext, type FC, type ReactNode, useContext, useMemo } from "react";
+import { useEffect, useState } from "react";
 import type { GeneratedAgentClient } from "@/agent/client/types";
 import type { ClientBuild } from "@/exports/build/client";
-
-// biome-ignore lint/suspicious/noExplicitAny: any type needed for dynamic import
-const createAgentClient: any = () => "";
-
-interface AgentContextValue {
-  client: ReturnType<typeof createAgentClient>;
-  name: keyof ClientBuild;
-  id?: string;
-}
-
-const AgentContext = createContext<AgentContextValue | null>(null);
-const AgentContextRegistry = new Map<string, React.Context<AgentContextValue | null>>();
-
-interface AgentProviderProps {
-  name: keyof ClientBuild;
-  children: ReactNode;
-  id?: string;
-}
-
-export const AgentProvider: FC<AgentProviderProps> = ({ name, children, id }) => {
-  const client = useMemo(() => createAgentClient(name, { id }), [name, id]);
-  const contextValue = useMemo(() => ({ client, name, id }), [client, name, id]);
-  const Context = useMemo(() => {
-    if (id) {
-      const contextKey = `${String(name)}:${id}`;
-      let context = AgentContextRegistry.get(contextKey);
-      if (!context) {
-        context = createContext<AgentContextValue | null>(null);
-        AgentContextRegistry.set(contextKey, context);
-      }
-      return context;
-    }
-    return AgentContext;
-  }, [name, id]);
-  return <Context.Provider value={contextValue}>{children}</Context.Provider>;
-};
+import { useLifeClient } from "./provider";
 
 interface UseAgentOptions {
   id?: string;
@@ -45,29 +10,17 @@ interface UseAgentOptions {
 export function useAgent<K extends keyof ClientBuild>(
   name: K,
   options?: UseAgentOptions,
-): GeneratedAgentClient<K> {
-  const contextKey = options?.id ? `${String(name)}:${options.id}` : null;
-  const SpecificContext = contextKey ? AgentContextRegistry.get(contextKey) : null;
+): GeneratedAgentClient<K> | null {
+  const client = useLifeClient();
+  const [agent, setAgent] = useState<GeneratedAgentClient<K> | null>(null);
 
-  const specificContextValue = useContext(SpecificContext || AgentContext);
-  const defaultContextValue = useContext(AgentContext);
+  const initAgent = async () => {
+    setAgent((await client.getOrCreateAgent(name, options)) as GeneratedAgentClient<K>);
+  };
 
-  const contextValue = options?.id ? specificContextValue : defaultContextValue;
+  useEffect(() => {
+    initAgent();
+  }, [name, options]);
 
-  if (!contextValue) {
-    if (options?.id) {
-      throw new Error(`No AgentProvider found for agent "${String(name)}" with id "${options.id}"`);
-    }
-    throw new Error(
-      `useAgent must be used within an AgentProvider. No provider found for agent "${String(name)}".`,
-    );
-  }
-
-  if (contextValue.name !== name) {
-    throw new Error(
-      `Agent name mismatch: expected "${String(name)}", got "${String(contextValue.name)}"`,
-    );
-  }
-
-  return contextValue.client as GeneratedAgentClient<K>;
+  return agent;
 }

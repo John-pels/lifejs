@@ -1,4 +1,3 @@
-export type { AgentClient } from "@/agent/client/class";
 export { defineAgentClient } from "@/agent/client/define";
 export { createLifeClient } from "@/client/create";
 export { definePluginClient } from "@/plugins/client/define";
@@ -29,3 +28,8 @@ export const defaults: { readonly plugins: ClientDefaults } = {
     },
   },
 } as const;
+
+// Types
+export type { AgentClient } from "@/agent/client/class";
+export type { LifeClient } from "@/client/client";
+export type { Message } from "@/shared/resources";

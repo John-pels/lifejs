@@ -1,4 +1,5 @@
 import { atom, onMount } from "nanostores";
+import type { Message } from "@/shared/resources";
 import { definePluginClient } from "../../client/define";
 import type { generationPlugin } from "./server";
 
@@ -48,33 +49,9 @@ export const generationPluginClient = definePluginClient<SimplifiedGenerationPlu
       thinking: boolean;
       speaking: boolean;
     } | null>(null);
+    const messages = atom<Message[]>([]);
 
-    server.methods.continue({});
-    // @ts-expect-error
-    server.methods.continuenot({});
-
-    // --------------
-    server.events.on(
-      {
-        include: ["messages.create", "messages.update", "agent.decide"],
-        exclude: ["messages.create", "messages.update"],
-      },
-      (event) => {
-        event.type;
-      },
-    );
-    server.events.on("*", (event) => {
-      event.type;
-    });
-    server.events.on("messages.create", (event) => {
-      event.type;
-    });
-    // @ts-expect-error
-    server.events.on(["messages.create", "doesn'texist"], (event) => {
-      event.type;
-    });
-
-    // Subscribe to context changes when the atom is mounted
+    // Subscribe to status changes
     onMount(status, () => {
       // Fetch initial status from context
       const [err, context] = server.context.safe.get();
@@ -91,5 +68,22 @@ export const generationPluginClient = definePluginClient<SimplifiedGenerationPlu
       return () => unsubscribe?.();
     });
 
-    return { status };
+    // Subscribe to messages changes
+    onMount(messages, () => {
+      // Fetch initial messages from context
+      const [err, context] = server.context.safe.get();
+      if (err) return;
+      messages.set(context.messages);
+
+      // Subscribe to messages changes from the context
+      const unsubscribe = server.context.onChange(
+        (ctx) => ctx.messages,
+        (ctx) => messages.set(ctx.messages),
+      );
+
+      // Return cleanup function
+      return () => unsubscribe?.();
+    });
+
+    return { status, messages };
   });

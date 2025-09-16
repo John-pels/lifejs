@@ -52,33 +52,33 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
       },
     },
     "agent.create": {
-      onCall: async ({ api, data, request }) => {
-        const { name, scope } = data;
-        return await api.server.createAgentProcess({ name, scope, request });
+      onCall: async ({ api, data }) => {
+        const { id, name } = data;
+        return await api.server.agent.create({ id, name });
       },
     },
     "agent.start": {
-      onCall: async ({ api, data }) => {
-        const { agentId, sessionToken } = data;
-        return await api.server.startAgentProcess(agentId, sessionToken);
+      onCall: async ({ api, data, request }) => {
+        const { id, scope } = data;
+        return await api.server.agent.start({ id, request, scope });
       },
     },
     "agent.stop": {
       onCall: async ({ api, data }) => {
-        const { agentId, sessionToken } = data;
-        return await api.server.stopAgentProcess(agentId, sessionToken);
+        const { id, sessionToken } = data;
+        return await api.server.agent.stop({ id, sessionToken });
       },
     },
     "agent.ping": {
       onCall: async ({ api, data }) => {
-        const { agentId, sessionToken } = data;
-        return await api.server.pingAgentProcess(agentId, sessionToken);
+        const { id, sessionToken } = data;
+        return await api.server.agent.ping({ id, sessionToken });
       },
     },
     "agent.info": {
       onCall: async ({ api, data }) => {
-        const { agentId, sessionToken } = data;
-        return await api.server.getAgentProcessInfo(agentId, sessionToken);
+        const { id, sessionToken } = data;
+        return await api.server.agent.info({ id, sessionToken });
       },
     },
     "server.ping": {
@@ -86,9 +86,14 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
         return op.success("pong");
       },
     },
+    "server.available": {
+      onCall: ({ api }) => {
+        return api.server.server.available();
+      },
+    },
     "server.info": {
       onCall: async ({ api }) => {
-        return await api.server.getServerInfo();
+        return await api.server.server.info();
       },
     },
     "agent.info-stream": {
@@ -99,15 +104,13 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
         // Handle subcriptions events
         for await (const event of queue) {
           if (event.action === "add") {
+            const { pollingIntervalMs, ...infoParams } = event?.data ?? {};
             subscribers.set(event.subscriptionId, {
               intervalId: setInterval(async () => {
-                const [errGet, info] = await api.server.getAgentProcessInfo(
-                  event.data.agentId,
-                  event.data.sessionToken,
-                );
+                const [errGet, info] = await api.server.agent.info(infoParams);
                 if (errGet) return event.send(op.failure(errGet));
                 event.send(op.success(info));
-              }, event.data.pollingIntervalMs),
+              }, pollingIntervalMs),
             });
           } else if (event.action === "remove") {
             clearInterval(subscribers.get(event.subscriptionId)?.intervalId);
@@ -126,7 +129,7 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
           if (event.action === "add") {
             subscribers.set(event.subscriptionId, {
               intervalId: setInterval(async () => {
-                const [errGet, info] = await api.server.getServerInfo();
+                const [errGet, info] = await api.server.server.info();
                 if (errGet) return event.send(op.failure(errGet));
                 event.send(op.success(info));
               }, event.data.pollingIntervalMs),
@@ -140,9 +143,10 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
     },
     "server.processes": {
       onCall: ({ api }) => {
-        return api.server.listAgentProcesses();
+        return api.server.server.processes();
       },
     },
+
     "server.processes-stream": {
       onStart: async ({ queue, api }) => {
         // Track subscribers
@@ -153,7 +157,7 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
           if (event.action === "add") {
             subscribers.set(event.subscriptionId, {
               intervalId: setInterval(() => {
-                const [errGet, processes] = api.server.listAgentProcesses();
+                const [errGet, processes] = api.server.server.processes();
                 if (errGet) return event.send(op.failure(errGet));
                 event.send(op.success(processes));
               }, event.data.pollingIntervalMs),

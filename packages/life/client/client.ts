@@ -38,14 +38,11 @@ export class LifeClient {
    * @param scope - Agent scope configuration
    * @returns AgentClient instance if creation successful
    */
-  async createAgent<Name extends keyof ClientBuild>(
-    name: Name,
-    scope: Record<string, unknown> = {},
-  ) {
+  async createAgent<Name extends keyof ClientBuild>(name: Name, options: { id?: string } = {}) {
     return await this.#telemetry.trace("createAgent()", async (span) => {
       try {
         // Send a call to the server to create the agent
-        const [err, data] = await this.api.call("agent.create", { name, scope });
+        const [err, data] = await this.api.call("agent.create", { name, id: options.id });
         if (err) return op.failure(err);
 
         // Load the client build if not already loaded
@@ -61,18 +58,16 @@ export class LifeClient {
 
         // Create agent client with proper definition and plugins from build
         const agentClient = new AgentClient({
-          id: data.agentId,
+          id: data.id,
           definition: agentBuild.definition,
           plugins: agentBuild.plugins,
-          serverUrl: this.#serverUrl,
-          api: this.api,
-          sessionToken: data.sessionToken,
-          transportRoom: data.transportRoom,
+          life: this,
           config:
-            data.clientSideConfig ??
-            ({ transport: {} } as z.output<typeof agentClientConfig.schema>),
+            data.clientConfig ?? ({ transport: {} } as z.output<typeof agentClientConfig.schema>),
+          // sessionToken: data.sessionToken,
+          // transportRoom: data.transportRoom,
         }) as GeneratedAgentClient<Name>;
-        this.#agents.set(data.agentId, agentClient);
+        this.#agents.set(data.id, agentClient);
 
         // Return the agent client
         return op.success(op.toPublic(agentClient));
@@ -131,7 +126,7 @@ export class LifeClient {
    */
   async getOrCreateAgent<Name extends keyof ClientBuild>(
     name: Name,
-    scope: Record<string, unknown> = {},
+    options: { id?: string } = {},
   ) {
     return await this.#telemetry.trace("getOrCreateAgent()", async (span) => {
       try {
@@ -142,14 +137,14 @@ export class LifeClient {
         if (existingAgent) return op.success(existingAgent as GeneratedAgentClient<Name>);
 
         // Else, create a new agent
-        const [err, agent] = await this.createAgent(name, scope);
+        const [err, agent] = await this.createAgent(name, options);
         if (err) return op.failure(err);
         return op.success(agent);
       } catch (error) {
         span.log.error({
           message: "Unknown error while getting or creating agent.",
           error,
-          attributes: { name, scope },
+          attributes: { name, options },
         });
         return op.failure({ code: "Unknown", error });
       }

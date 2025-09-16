@@ -1,22 +1,43 @@
 import { useStore } from "@nanostores/react";
+import { atom } from "nanostores";
 import type { AgentClientDefinition, AgentClientWithPlugins } from "@/agent/client/types";
 import type { AgentClient } from "@/exports/client";
 import type { generationPluginClient } from "../plugins/defaults/generation/client";
 
-export const useAgentGenerationStatus = <
-  Client extends AgentClientWithPlugins<
-    AgentClient<AgentClientDefinition>,
-    {
-      generation: {
-        definition: typeof generationPluginClient._definition;
-      };
-    }
-  >,
->(
-  client: Client,
+type AgentWithGenerationPlugin = AgentClientWithPlugins<
+  AgentClient<AgentClientDefinition>,
+  {
+    generation: {
+      definition: typeof generationPluginClient._definition;
+    };
+  }
+>;
+
+/**
+ * ('generation' plugin) Reactively consume context.status.
+ *
+ * @param agentClient - AgentClient instance
+ * @example
+ * ```typescript
+ * const status = useAgentStatus(agent); // { listening: boolean; thinking: boolean; speaking: boolean } | null
+ * console.log(status);
+ * console.log(status?.listening);
+ * ```
+ */
+export const useAgentStatus = <Client extends AgentWithGenerationPlugin | null>(
+  agentClient: Client,
 ) => {
-  if (!("core" in client))
-    throw new Error("useAgentStatus() must be used with agents having the 'core' plugin.");
-  const data = useStore(client.generation.atoms.status);
-  return { data };
+  const data = useStore(agentClient?.generation.atoms.status ?? atom(null));
+  if (agentClient && !("generation" in agentClient))
+    throw new Error("useAgentStatus() must be used with agents having the 'generation' plugin.");
+  return data;
+};
+
+export const useAgentMessages = <Client extends AgentWithGenerationPlugin | null>(
+  agentClient: Client,
+) => {
+  const data = useStore(agentClient?.generation.atoms.messages ?? atom([]));
+  if (agentClient && !("generation" in agentClient))
+    throw new Error("useAgentMessages() must be used with agents having the 'generation' plugin.");
+  return data;
 };

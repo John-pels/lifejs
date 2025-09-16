@@ -1,5 +1,5 @@
 import { createLifeClient } from "life/client";
 
 export const life = createLifeClient({
-  serverUrl: "ws://localhost:3003",
+  serverUrl: "http://localhost:3003",
 });

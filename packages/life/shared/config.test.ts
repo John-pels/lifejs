@@ -335,11 +335,13 @@ describe("createConfig", () => {
 
   test("should handle computed telemetry values", () => {
     const schema = z.object({
-      items: z.array(z.object({
-        name: z.string(),
-        price: z.number(),
-        quantity: z.number(),
-      })),
+      items: z.array(
+        z.object({
+          name: z.string(),
+          price: z.number(),
+          quantity: z.number(),
+        }),
+      ),
     });
 
     const config = createConfig({
@@ -479,9 +481,18 @@ describe("createConfigUnion", () => {
 
     const union = createConfigUnion("animal", configs);
 
-    expect(union.schema.parse({ animal: "dog", bark: true })).toEqual({ animal: "dog", bark: true });
-    expect(union.schema.parse({ animal: "cat", meow: true })).toEqual({ animal: "cat", meow: true });
-    expect(union.schema.parse({ animal: "bird", fly: true })).toEqual({ animal: "bird", fly: true });
+    expect(union.schema.parse({ animal: "dog", bark: true })).toEqual({
+      animal: "dog",
+      bark: true,
+    });
+    expect(union.schema.parse({ animal: "cat", meow: true })).toEqual({
+      animal: "cat",
+      meow: true,
+    });
+    expect(union.schema.parse({ animal: "bird", fly: true })).toEqual({
+      animal: "bird",
+      fly: true,
+    });
   });
 
   test("should validate union member structure", () => {

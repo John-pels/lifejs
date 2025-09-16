@@ -229,11 +229,23 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       stdio: ["ignore", "pipe", "pipe"],
     });
     livekitProcess.current = livekitServer;
+
+    const cleanLivekitLogs = (lines: string[]): string[] => {
+      return lines
+        .map((line) =>
+          // Remove datetime like "2025-09-16T07:29:29.693-0700"
+          line
+            .replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s*/, "")
+            .trim(),
+        )
+        .filter(Boolean);
+    };
+
     livekitServer.stdout?.on("data", (data) => {
-      logInTab("webrtc", cleanStdData(data));
+      logInTab("webrtc", cleanLivekitLogs(cleanStdData(data)));
     });
     livekitServer.stderr?.on("data", (data) => {
-      logInTab("webrtc", cleanStdData(data));
+      logInTab("webrtc", cleanLivekitLogs(cleanStdData(data)));
     });
     setLoadingProgress(40);
     await new Promise((resolve) => setTimeout(resolve, 10));

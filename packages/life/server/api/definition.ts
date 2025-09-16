@@ -20,29 +20,31 @@ export const definition = {
     type: "call",
     protected: false,
     inputDataSchema: z.object({
+      id: z.string().optional(),
       name: z.string(),
-      scope: z.object({}),
     }),
     outputDataSchema: z.object({
-      agentId: z.string(),
-      sessionToken: z.string(),
-      transportRoom: z.object({ name: z.string(), token: z.string() }),
-      clientSideConfig: agentClientConfig.schema,
+      id: z.string(),
+      clientConfig: agentClientConfig.schema,
     }),
   },
   "agent.start": {
     type: "call",
     protected: false,
     inputDataSchema: z.object({
-      agentId: z.string(),
+      id: z.string(),
+      scope: z.object({}),
+    }),
+    outputDataSchema: z.object({
       sessionToken: z.string(),
+      transportRoom: z.object({ name: z.string(), token: z.string() }),
     }),
   },
   "agent.stop": {
     type: "call",
     protected: false,
     inputDataSchema: z.object({
-      agentId: z.string(),
+      id: z.string(),
       sessionToken: z.string(),
     }),
   },
@@ -50,7 +52,7 @@ export const definition = {
     type: "call",
     protected: false,
     inputDataSchema: z.object({
-      agentId: z.string(),
+      id: z.string(),
       sessionToken: z.string(),
     }),
     outputDataSchema: z.literal("pong"),
@@ -59,14 +61,14 @@ export const definition = {
     type: "call",
     protected: false,
     inputDataSchema: z.object({
-      agentId: z.string(),
+      id: z.string(),
       sessionToken: z.string(),
     }),
     outputDataSchema: z.object({
       id: z.string(),
       name: z.string(),
       scope: z.record(z.string(), z.unknown()),
-      status: z.string(),
+      status: z.enum(["stopped", "starting", "running", "stopping"]),
       lastStartedAt: z.number().optional(),
       lastSeenAt: z.number().optional(),
       restartCount: z.number(),
@@ -86,7 +88,7 @@ export const definition = {
     type: "stream",
     protected: false,
     inputDataSchema: z.object({
-      agentId: z.string(),
+      id: z.string(),
       sessionToken: z.string(),
       pollingIntervalMs: z.number().min(1000).max(30_000).default(5000),
     }),
@@ -114,6 +116,11 @@ export const definition = {
     type: "call",
     protected: true,
     outputDataSchema: z.literal("pong"),
+  },
+  "server.available": {
+    type: "call",
+    protected: true,
+    outputDataSchema: z.array(z.object({ name: z.string(), scopeKeys: z.array(z.string()) })),
   },
   "server.info": {
     type: "call",

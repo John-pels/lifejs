@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
@@ -60,8 +60,10 @@ export class LifeServer {
         this.#startedAt = Date.now();
 
         // 3. Start watching build directory if in watch mode
-        const [errWatch] = await this.watchBuildDirectory();
-        if (errWatch) return op.failure(errWatch);
+        if (this.options.watch) {
+          const [errWatch] = await this.watchBuildDirectory();
+          if (errWatch) return op.failure(errWatch);
+        }
 
         // 4. Listen for SIGINT and SIGTERM to gracefully stop the server
         const handleShutdown = async (signal: string) => {
@@ -74,6 +76,15 @@ export class LifeServer {
 
         // Count the server starts
         this.telemetry.counter("server_started").increment();
+
+        // Log operation with timing
+        span.end();
+        this.telemetry.log.info({
+          message: `Server started in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+        });
+        if (this.options.watch) {
+          this.telemetry.log.info({ message: "Watching for changes..." });
+        }
 
         return op.success();
       } catch (error) {
@@ -102,7 +113,7 @@ export class LifeServer {
         // Stop the agent processes
         const results = await Promise.all(
           Array.from(this.agentProcesses.values()).map((process) =>
-            this.stopAgentProcess(process.id, process.sessionToken),
+            this.agent.stop({ id: process.id, sessionToken: process.sessionToken }),
           ),
         );
         const err = results.find((result) => result[0])?.[0];
@@ -301,129 +312,36 @@ export class LifeServer {
     });
   }
 
-  async listAvailableAgents() {
-    try {
-      const [errImport, build] = await op.attempt(async () => await importServerBuild(true));
-      if (errImport) return op.failure(errImport);
-      return op.success(
-        Object.entries(build).map(([name, { definition }]) => ({
-          name,
-          scopeKeys: definition?.scope?.schema?.shape
-            ? Object.keys(definition.scope.schema.shape)
-            : [],
-        })),
-      );
-    } catch (error) {
-      return op.failure({ code: "Unknown", error });
-    }
-  }
-
-  async createAgentProcess({
-    name,
-    scope,
-    request,
-  }: {
-    name: string;
-    scope: AgentScope;
-    request: Request;
-  }) {
-    return await this.telemetry.trace("createAgentProcess()", async (span) => {
-      span.setAttributes({ name, scope });
+  checkSessionToken(id: string, sessionToken: string) {
+    return this.telemetry.trace("checkSessionToken()", (span) => {
+      span.setAttributes({ id });
 
       try {
-        // Ensure the request agent exists
-        const build = await importServerBuild(true);
-        const definition = build[name as keyof typeof build]?.definition;
-        if (!definition) {
-          return op.failure({ code: "NotFound", message: `Agent '${name}' not found.` });
+        const [errGet, process] = this.getAgentProcess(id);
+        if (errGet) return op.failure(errGet);
+
+        if (process.sessionToken !== sessionToken) {
+          return op.failure({
+            code: "Forbidden",
+            message: `Invalid session token for agent process '${id}'.`,
+          });
         }
 
-        // Ensure the request emitter has access to this agent and scope
-        if (!(await definition.scope.hasAccess({ request, scope }))) {
-          return op.failure({ code: "Forbidden", message: `Access denied for agent '${name}'.` });
-        }
-
-        // Generate a room name for the WebRTC session
-        const roomName = newId("room");
-
-        // Generate transport tokens for both the agent and the user
-        const transportProvider = definition.config.transport.provider;
-        const transportGetToken =
-          transportProviderGetToken[transportProvider as keyof typeof transportProviderGetToken];
-        const [errAgentToken, agentToken] = await transportGetToken(
-          definition.config.transport,
-          roomName,
-          "agent",
-        );
-        if (errAgentToken) return op.failure(errAgentToken);
-        const [errUserToken, userToken] = await transportGetToken(
-          definition.config.transport,
-          roomName,
-          "user",
-        );
-        if (errUserToken) return op.failure(errUserToken);
-
-        // Generate a session token to authenticate the user client when talking to the agent
-        const sessionToken = randomBytes(32).toString("base64url");
-
-        // Create the agent process
-        const process = new AgentProcess({
-          name,
-          scope,
-          server: this,
-          transportRoom: { name: roomName, token: agentToken },
-          sessionToken,
-        });
-
-        // Add the agent process to the map
-        this.agentProcesses.set(process.id, process);
-
-        // Return infos for the user client to connect to the agent
-        return op.success({
-          agentId: process.id,
-          sessionToken,
-          transportRoom: { name: roomName, token: userToken },
-          // Pipe first through server config to ensure client config is a subset of server config
-          clientSideConfig: agentServerConfig.schema
-            .pipe(agentClientConfig.schema)
-            .parse(definition.config),
-        });
+        return op.success(process);
       } catch (error) {
         return op.failure({ code: "Unknown", error });
       }
     });
   }
 
-  listAgentProcesses() {
-    try {
-      return op.success(
-        Array.from(this.agentProcesses.values()).map((process) => ({
-          id: process.id,
-          name: process.name,
-          status: process.status,
-          lastStartedAt: process.lastStartedAt,
-        })),
-      );
-    } catch (error) {
-      return op.failure({ code: "Unknown", error });
-    }
-  }
-
-  getAgentProcess(id: string, sessionToken: string) {
+  getAgentProcess(id: string) {
     return this.telemetry.trace("getAgentProcess()", (span) => {
       span.setAttributes({ id });
 
       try {
         const process = this.agentProcesses.get(id);
-        if (!process) {
+        if (!process)
           return op.failure({ code: "NotFound", message: `Agent process '${id}' not found.` });
-        }
-        if (process.sessionToken !== sessionToken) {
-          return op.failure({
-            code: "Validation",
-            message: `Invalid session token for agent process '${id}'.`,
-          });
-        }
         return op.success(process);
       } catch (error) {
         return op.failure({
@@ -435,176 +353,343 @@ export class LifeServer {
     });
   }
 
-  async startAgentProcess(id: string, sessionToken: string) {
-    return await this.telemetry.trace("startAgentProcess()", async (span) => {
-      span.setAttributes({ id });
-
-      try {
-        const [errGet, process] = this.getAgentProcess(id, sessionToken);
-        if (errGet) return op.failure(errGet);
-
-        // Track timing for starting the process
-        await this.telemetry.trace("start-process", async (spanStart) => {
-          spanStart.setAttributes({ id, agentName: process.name });
-
-          // Start the process
-          const [errStart] = await process.start();
-          if (errStart) return op.failure(errStart);
-
-          // Log operation with timing
-          spanStart.end();
-          const formattedName = chalk.bold.italic(process.name);
-          span.log.info({
-            message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStart.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+  server = {
+    //
+    available: async () => {
+      return await this.telemetry.trace("server.available()", async () => {
+        try {
+          const [errImport, build] = await op.attempt(async () => await importServerBuild(true));
+          if (errImport) return op.failure(errImport);
+          return op.success(
+            Object.entries(build).map(([name, { definition }]) => ({
+              name,
+              scopeKeys: definition?.scope?.schema?.shape
+                ? Object.keys(definition.scope.schema.shape)
+                : [],
+            })),
+          );
+        } catch (error) {
+          return op.failure({ code: "Unknown", error });
+        }
+      });
+    },
+    //
+    ping: () => {
+      return this.telemetry.trace("server.ping()", () => {
+        try {
+          const [errStats, stats] = this.#processStats.get();
+          if (errStats) return op.failure(errStats);
+          return op.success({
+            lifeVersion: packageJson.version,
+            nodeVersion: process.version,
+            // biome-ignore lint/style/noNonNullAssertion: cannot be null here
+            startedAt: this.#startedAt!,
+            ...(stats ?? {}),
           });
-        });
-
-        return op.success();
-      } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to start agent process '${id}'.`,
-          error,
-        });
-      }
-    });
-  }
-
-  async stopAgentProcess(id: string, sessionToken: string) {
-    return await this.telemetry.trace("stopAgentProcess()", async (span) => {
-      span.setAttributes({ id });
-      try {
-        const [errGet, process] = this.getAgentProcess(id, sessionToken);
-        if (errGet) return op.failure(errGet);
-
-        // Track timing for stopping the process
-        await this.telemetry.trace("stop-process", async (spanStop) => {
-          spanStop.setAttributes({ id, agentName: process.name });
-
-          // Stop the process
-          const [errStop] = await process.stop();
-          if (errStop) return op.failure(errStop);
-
-          // Log operation with timing
-          spanStop.end();
-          const formattedName = chalk.bold.italic(process.name);
-          span.log.info({
-            message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStop.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+        } catch (error) {
+          return op.failure({ code: "Unknown", message: "Failed to get server info", error });
+        }
+      });
+    },
+    //
+    processes: () => {
+      return this.telemetry.trace("server.processes()", () => {
+        try {
+          return op.success(
+            Array.from(this.agentProcesses.values()).map((process) => ({
+              id: process.id,
+              name: process.name,
+              status: process.status,
+              lastStartedAt: process.lastStartedAt,
+            })),
+          );
+        } catch (error) {
+          return op.failure({ code: "Unknown", error });
+        }
+      });
+    },
+    // info
+    info: () => {
+      return this.telemetry.trace("server.info()", () => {
+        try {
+          const [errStats, stats] = this.#processStats.get();
+          if (errStats) return op.failure(errStats);
+          return op.success({
+            lifeVersion: packageJson.version,
+            nodeVersion: process.version,
+            // biome-ignore lint/style/noNonNullAssertion: cannot be null here
+            startedAt: this.#startedAt!,
+            ...(stats ?? {}),
           });
-        });
+        } catch (error) {
+          return op.failure({ code: "Unknown", message: "Failed to get server info", error });
+        }
+      });
+    },
+  };
 
-        return op.success();
-      } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to stop agent process '${id}'.`,
-          error,
-        });
-      }
-    });
-  }
+  agent = {
+    //
+    create: async ({ id, name }: { id?: string; name: string }) => {
+      return await this.telemetry.trace("agent.create()", async (span) => {
+        try {
+          // Ensure the request agent exists
+          const build = await importServerBuild(true);
+          const definition = build[name as keyof typeof build]?.definition;
+          if (!definition)
+            return op.failure({ code: "NotFound", message: `Agent '${name}' not found.` });
 
-  async restartAgentProcess(id: string, sessionToken: string) {
-    return await this.telemetry.trace("restartAgentProcess()", async (span) => {
-      span.setAttributes({ id });
-      try {
-        const [errGet, process] = this.getAgentProcess(id, sessionToken);
-        if (errGet) return op.failure(errGet);
+          // Create the agent process
+          const process = new AgentProcess({ id, name, server: this });
+          span.setAttributes({ id: process.id, name });
 
-        // Track timing for restarting the process
-        await this.telemetry.trace("restart-process", async (spanRestart) => {
-          spanRestart.setAttributes({ id, agentName: process.name });
+          // Add the agent process to the map
+          this.agentProcesses.set(process.id, process);
 
-          // Restart the process
-          const [errRestart] = await process.restart();
-          if (errRestart) return op.failure(errRestart);
+          // Clean the agent process if not started after 10 minutes
+          setTimeout(
+            async () => {
+              if (process.status === "stopped" && process.restartCount === 0) {
+                await process.stop();
+                this.agentProcesses.delete(process.id);
+              }
+            },
+            10 * 60 * 1000,
+          );
 
-          // Log operation with timing
-          spanRestart.end();
-          const formattedName = chalk.bold.italic(process.name);
-          span.log.info({
-            message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanRestart.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+          // Return the agent's client-side config
+          return op.success({
+            id: process.id,
+            clientConfig: agentServerConfig.schema
+              .pipe(agentClientConfig.schema)
+              .parse(definition.config),
           });
-        });
+        } catch (error) {
+          return op.failure({ code: "Unknown", error });
+        }
+      });
+    },
+    //
+    start: async ({ id, request, scope }: { id: string; request: Request; scope: AgentScope }) => {
+      return await this.telemetry.trace("agent.start()", async (span) => {
+        span.setAttributes({ id });
 
-        return op.success();
-      } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to restart agent process '${id}'.`,
-          error,
-        });
-      }
-    });
-  }
+        try {
+          const [errGet, process] = this.getAgentProcess(id);
+          if (errGet) return op.failure(errGet);
 
-  async getAgentProcessInfo(id: string, sessionToken: string) {
-    return await this.telemetry.trace("getAgentProcessInfo()", async (span) => {
-      span.setAttributes({ id });
+          // Ensure the request emitter has access to this agent and scope
+          const [errDefinition, definition] = await process.getDefinition();
+          if (errDefinition) return op.failure(errDefinition);
 
-      try {
-        const [errGet, process] = this.getAgentProcess(id, sessionToken);
-        if (errGet) return op.failure(errGet);
-        const [errStats, stats] = await process.getProcessStats();
-        if (errStats) return op.failure(errStats);
-        return op.success({
-          id,
-          name: process.name,
-          scope: process.scope,
-          status: process.status,
-          lastStartedAt: process.lastStartedAt,
-          lastSeenAt: process.lastSeenAt,
-          restartCount: process.restartCount,
-          ...(stats ?? {}),
-        });
-      } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to get info for agent process '${id}'.`,
-          error,
-        });
-      }
-    });
-  }
+          if (!(await definition.scope.hasAccess({ request, scope }))) {
+            return op.failure({
+              code: "Forbidden",
+              message: `Access denied for agent '${process.name}'.`,
+            });
+          }
 
-  async pingAgentProcess(id: string, sessionToken: string) {
-    return await this.telemetry.trace("pingAgentProcess()", async (span) => {
-      span.setAttributes({ id });
+          // Generate a room name for the WebRTC session
+          const roomName = newId("room");
 
-      try {
-        const [errGet, process] = this.getAgentProcess(id, sessionToken);
-        if (errGet) return op.failure(errGet);
-        const [errPing] = await process.ping();
-        if (errPing) return op.failure(errPing);
-        return op.success("pong");
-      } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to ping agent process '${id}'.`,
-          error,
-        });
-      }
-    });
-  }
+          // Generate transport tokens for both the agent and the user
+          const transportProvider = definition.config.transport.provider;
+          const transportGetToken =
+            transportProviderGetToken[transportProvider as keyof typeof transportProviderGetToken];
+          const [errAgentToken, agentToken] = await transportGetToken(
+            definition.config.transport,
+            roomName,
+            "agent",
+          );
+          if (errAgentToken) return op.failure(errAgentToken);
+          const [errUserToken, userToken] = await transportGetToken(
+            definition.config.transport,
+            roomName,
+            "user",
+          );
+          if (errUserToken) return op.failure(errUserToken);
 
-  getServerInfo() {
-    return this.telemetry.trace("getServerInfo()", () => {
-      try {
-        const [errStats, stats] = this.#processStats.get();
-        if (errStats) return op.failure(errStats);
-        return op.success({
-          lifeVersion: packageJson.version,
-          nodeVersion: process.version,
-          // biome-ignore lint/style/noNonNullAssertion: cannot be null here
-          startedAt: this.#startedAt!,
-          ...(stats ?? {}),
-        });
-      } catch (error) {
-        return op.failure({ code: "Unknown", message: "Failed to get server info", error });
-      }
-    });
-  }
+          // Staet the process
+          await this.telemetry.trace("start-process", async (spanStart) => {
+            spanStart.setAttributes({ id, agentName: process.name });
+
+            const [errStart] = await process.start({
+              scope,
+              transportRoom: { name: roomName, token: agentToken },
+            });
+            if (errStart) return op.failure(errStart);
+
+            // Log operation with timing
+            spanStart.end();
+            const formattedName = chalk.bold.italic(process.name);
+            span.log.info({
+              message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStart.getData().duration)}ms`)}.`,
+              attributes: { id, agentName: process.name },
+            });
+          });
+
+          return op.success({
+            sessionToken: process.sessionToken,
+            transportRoom: { name: roomName, token: userToken },
+          });
+        } catch (error) {
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to start agent process '${id}'.`,
+            error,
+          });
+        }
+      });
+    },
+    //
+    stop: async ({ id, sessionToken }: { id: string; sessionToken: string }) => {
+      return await this.telemetry.trace("agent.stop()", async (span) => {
+        span.setAttributes({ id });
+
+        try {
+          // Get the agent process
+          const [errGet, process] = this.getAgentProcess(id);
+          if (errGet) return op.failure(errGet);
+
+          // Ensure the session token is valid
+          const [errCheckSessionToken] = await this.checkSessionToken(id, sessionToken);
+          if (errCheckSessionToken) return op.failure(errCheckSessionToken);
+
+          // Track timing for stopping the process
+          await this.telemetry.trace("stop-process", async (spanStop) => {
+            spanStop.setAttributes({ id, agentName: process.name });
+
+            // Stop the process
+            const [errStop] = await process.stop();
+            if (errStop) return op.failure(errStop);
+
+            // Remove the process from the map
+            this.agentProcesses.delete(process.id);
+
+            // Log operation with timing
+            spanStop.end();
+            const formattedName = chalk.bold.italic(process.name);
+            span.log.info({
+              message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStop.getData().duration)}ms`)}.`,
+              attributes: { id, agentName: process.name },
+            });
+          });
+
+          return op.success();
+        } catch (error) {
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to stop agent process '${id}'.`,
+            error,
+          });
+        }
+      });
+    },
+    //
+    restart: async ({ id, sessionToken }: { id: string; sessionToken: string }) => {
+      return await this.telemetry.trace("agent.restart()", async (span) => {
+        span.setAttributes({ id });
+
+        try {
+          // Get the agent process
+          const [errGet, process] = this.getAgentProcess(id);
+          if (errGet) return op.failure(errGet);
+
+          // Ensure the session token is valid
+          const [errCheckSessionToken] = await this.checkSessionToken(id, sessionToken);
+          if (errCheckSessionToken) return op.failure(errCheckSessionToken);
+
+          // Track timing for restarting the process
+          await this.telemetry.trace("restart-process", async (spanRestart) => {
+            spanRestart.setAttributes({ id, agentName: process.name });
+
+            // Restart the process
+            const [errRestart] = await process.restart();
+            if (errRestart) return op.failure(errRestart);
+
+            // Log operation with timing
+            spanRestart.end();
+            const formattedName = chalk.bold.italic(process.name);
+            span.log.info({
+              message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanRestart.getData().duration)}ms`)}.`,
+              attributes: { id, agentName: process.name },
+            });
+          });
+
+          return op.success();
+        } catch (error) {
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to restart agent process '${id}'.`,
+            error,
+          });
+        }
+      });
+    },
+    //
+    ping: async ({ id, sessionToken }: { id: string; sessionToken: string }) => {
+      return await this.telemetry.trace("agent.ping()", async (span) => {
+        span.setAttributes({ id });
+
+        try {
+          // Get the agent process
+          const [errGet, process] = this.getAgentProcess(id);
+          if (errGet) return op.failure(errGet);
+
+          // Ensure the session token is valid
+          const [errCheckSessionToken] = await this.checkSessionToken(id, sessionToken);
+          if (errCheckSessionToken) return op.failure(errCheckSessionToken);
+
+          // Ping the process
+          const [errPing] = await process.ping();
+          if (errPing) return op.failure(errPing);
+
+          return op.success("pong");
+        } catch (error) {
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to ping agent process '${id}'.`,
+            error,
+          });
+        }
+      });
+    },
+    //
+    info: async ({ id, sessionToken }: { id: string; sessionToken: string }) => {
+      return await this.telemetry.trace("agent.info()", async (span) => {
+        span.setAttributes({ id });
+
+        try {
+          // Get the agent process
+          const [errGet, process] = this.getAgentProcess(id);
+          if (errGet) return op.failure(errGet);
+
+          // Ensure the session token is valid
+          const [errCheckSessionToken] = await this.checkSessionToken(id, sessionToken);
+          if (errCheckSessionToken) return op.failure(errCheckSessionToken);
+
+          // Get the process stats
+          const [errStats, stats] = await process.getProcessStats();
+          if (errStats) return op.failure(errStats);
+
+          return op.success({
+            id,
+            name: process.name,
+            scope: process.lastScope,
+            status: process.status,
+            lastStartedAt: process.lastStartedAt,
+            lastSeenAt: process.lastSeenAt,
+            restartCount: process.restartCount,
+            ...(stats ?? {}),
+          });
+        } catch (error) {
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to get info for agent process '${id}'.`,
+            error,
+          });
+        }
+      });
+    },
+  };
 }

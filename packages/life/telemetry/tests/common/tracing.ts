@@ -667,8 +667,8 @@ export function createTracingTests(context: TestContext) {
         });
 
         expect(capturedSpans).toHaveLength(2);
-        const outer = capturedSpans.find(s => s.name === "outer");
-        const timeoutSpan = capturedSpans.find(s => s.name === "timeout-span");
+        const outer = capturedSpans.find((s) => s.name === "outer");
+        const timeoutSpan = capturedSpans.find((s) => s.name === "timeout-span");
 
         // In Node.js, context IS maintained through setTimeout
         expect(timeoutSpan?.parentSpanId).toBe(outer?.id);
@@ -690,8 +690,8 @@ export function createTracingTests(context: TestContext) {
         });
 
         expect(capturedSpans).toHaveLength(2);
-        const outer = capturedSpans.find(s => s.name === "outer");
-        const immediateSpan = capturedSpans.find(s => s.name === "immediate-span");
+        const outer = capturedSpans.find((s) => s.name === "outer");
+        const immediateSpan = capturedSpans.find((s) => s.name === "immediate-span");
 
         // In Node.js, context IS maintained through setImmediate
         expect(immediateSpan?.parentSpanId).toBe(outer?.id);
@@ -740,8 +740,8 @@ export function createTracingTests(context: TestContext) {
         await waitForSignals(2);
 
         expect(capturedSpans).toHaveLength(2);
-        const syncParent = capturedSpans.find(s => s.name === "sync-parent");
-        const unwaitedAsync = capturedSpans.find(s => s.name === "unwaited-async");
+        const syncParent = capturedSpans.find((s) => s.name === "sync-parent");
+        const unwaitedAsync = capturedSpans.find((s) => s.name === "unwaited-async");
 
         // In Node.js, context is maintained even for unwaited async
         expect(unwaitedAsync?.parentSpanId).toBe(syncParent?.id);
