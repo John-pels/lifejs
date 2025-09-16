@@ -1,5 +1,12 @@
 # life
 
+## 0.21.1
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [a80c074](https://github.com/lifejs/lifejs/commit/a80c074c03e0326e75925afdefbab0592263f7b5) — Properly support --debug in `life dev`
+- [@LilaRest](https://github.com/LilaRest) in [a80c074](https://github.com/lifejs/lifejs/commit/a80c074c03e0326e75925afdefbab0592263f7b5) — Fix telemetry consumers in `life dev` returning early
+
 ## 0.21.0
 
 ### Minor Changes
