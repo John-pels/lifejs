@@ -1,5 +1,15 @@
 # life
 
+## 0.22.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [2a4c394](https://github.com/lifejs/lifejs/commit/2a4c394d5d38c0cc10fd861e7243bdc049244012) — Adapt `useAgent()` and `useLifeClient()` hooks to most recent code, and add `useAgentStatus()` and `useAgentMessages()`
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [dbe1334](https://github.com/lifejs/lifejs/commit/dbe133437f910b5cc23f293e7489b9fe6b4de388) — A lot of DX, stability, and docs improvement
+
 ## 0.21.1
 
 ### Patch Changes
