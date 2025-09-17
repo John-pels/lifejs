@@ -3,7 +3,7 @@ import type { PluginConfig, PluginDefinition } from "@/plugins/server/types";
 import type { agentServerConfig } from "./config";
 import type { AgentBuilder } from "./define";
 
-export type AgentScopeDefinition<Schema extends z.AnyZodObject = z.AnyZodObject> = {
+export type AgentScopeDefinition<Schema extends z.ZodObject = z.ZodObject> = {
   schema: Schema;
   hasAccess: (params: { request: Request; scope: z.output<Schema> }) => boolean | Promise<boolean>;
 };

@@ -13,7 +13,7 @@ import { STTBase, type STTGenerateJob } from "../base";
 export const deepgramSTTConfig = createConfig({
   schema: z.object({
     provider: z.literal("deepgram"),
-    apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.DEEPGRAM_API_KEY ?? ""),
     model: z
       .enum([
         "nova-3",
@@ -51,8 +51,8 @@ export const deepgramSTTConfig = createConfig({
         "whisper-medium",
         "whisper-large",
       ])
-      .default("nova-2-general"),
-    language: z.string().default("en"),
+      .prefault("nova-2-general"),
+    language: z.string().prefault("en"),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields

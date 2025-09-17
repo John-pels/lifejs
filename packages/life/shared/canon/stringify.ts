@@ -7,7 +7,6 @@
 
 import * as op from "@/shared/operation";
 import { deserialize, type SerializableValue, serialize } from "./serialize";
-
 // biome-ignore-start lint/style: reason
 // biome-ignore-start lint/suspicious: reason
 // biome-ignore-start lint/complexity: reason
@@ -27,7 +26,7 @@ export function stableDeepStringify(data: any, opts?: any): string {
     })(opts.cmp);
 
   var seen: any[] = [];
-  return (function stringify_(node: any) {
+  return (function stringify_(node: any): string {
     if (node && node.toJSON && typeof node.toJSON === "function") {
       node = node.toJSON();
     }
@@ -38,12 +37,9 @@ export function stableDeepStringify(data: any, opts?: any): string {
 
     var i, out;
     if (Array.isArray(node)) {
-      out = "[";
-      for (i = 0; i < node.length; i++) {
-        if (i) out += ",";
-        out += stringify_(node[i]) || "null";
-      }
-      return out + "]";
+      // Sort array elements by their stringified representation for deterministic output
+      const sortedItems = node.map((item) => stringify_(item) || "null").sort();
+      return "[" + sortedItems.join(",") + "]";
     }
 
     if (node === null) return "null";

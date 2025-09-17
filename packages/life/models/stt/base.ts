@@ -23,7 +23,7 @@ export type STTGenerateJob = {
 /**
  * Base class for all STT providers.
  */
-export abstract class STTBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class STTBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {

@@ -102,7 +102,6 @@
     "commander": "^14.0.1",
     "dotenv": "^17.2.2",
     "esbuild": "^0.25.9",
-    "esbuild-plugin-preserve-directives": "^0.0.11",
     "fast-npm-meta": "^0.4.6",
     "globby": "^14.1.0",
     "hono": "^4.9.7",
@@ -116,11 +115,10 @@
     "superjson": "^2.2.2",
     "to-words": "^4.7.0",
     "yjs": "^13.6.27",
-    "zod": "^3.25.58",
-    "zod-compare": "^1.1.0",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
+    "esbuild-plugin-preserve-directives": "^0.0.11",
     "@cartesia/cartesia-js": "^2.2.5",
     "@deepgram/sdk": "4.11.2",
     "@mistralai/mistralai": "^1.10.0",

@@ -296,7 +296,7 @@ export class LifeApi {
         handlerId = rawInput.handlerId;
 
         // Validate the input
-        let schema: z.AnyZodObject;
+        let schema: z.ZodObject;
         if (handlerDef.type === "stream") schema = lifeApiStreamInputSchema;
         else if (handlerDef.type === "call") schema = lifeApiCallInputSchema;
         else if (handlerDef.type === "cast") schema = lifeApiCastInputSchema;

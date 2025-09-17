@@ -12,15 +12,15 @@ const transformers = import("@huggingface/transformers");
 export const livekitEOUConfig = createConfig({
   schema: z.object({
     provider: z.literal("livekit"),
-    quantized: z.boolean().default(true),
+    quantized: z.boolean().prefault(true),
     /**
      * Quick benchmarks have shown that Livekit models are very optimized for multi-turn
      * inferences, the most balanced value considering inference time and accuracy was
      * in the 2-5 messages range for the quantized version. Carefully benchmark the change
      * if you consider increasing / decreasing this value outside of that range.
      */
-    maxMessages: z.number().default(3),
-    maxTokens: z.number().default(512),
+    maxMessages: z.number().prefault(3),
+    maxTokens: z.number().prefault(512),
   }),
 });
 

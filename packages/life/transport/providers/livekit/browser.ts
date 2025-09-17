@@ -8,10 +8,8 @@ import { type TransportEvent, TransportProviderClientBase } from "../base";
 export const livekitBrowserConfig = createConfig({
   schema: z.object({
     provider: z.literal("livekit"),
-    serverUrl: z
-      .string()
-      .url()
-      .default(globalThis.process?.env?.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
+    serverUrl: z.url()
+      .prefault(globalThis.process?.env?.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
   }),
   toTelemetryAttribute: (config) => {
     // Remember if the server is a dev server

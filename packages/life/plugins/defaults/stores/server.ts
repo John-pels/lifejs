@@ -29,7 +29,7 @@ export const storesPlugin = definePlugin("stores")
   ])
   .config({
     schema: z.object({
-      items: z.array(z.custom<{ _definition: StoreDefinition }>()).default([]),
+      items: z.array(z.custom<{ _definition: StoreDefinition }>()).prefault([]),
     }),
     toTelemetryAttribute: (config) => {
       // Rewrite items to only keep their configs
@@ -55,7 +55,7 @@ export const storesPlugin = definePlugin("stores")
   })
   .context(
     z.object({
-      storesData: z.record(z.string(), z.any()).default({}),
+      storesData: z.record(z.string(), z.any()).prefault({}),
     }),
   )
   .addService("crdt-manager", async ({ queue, events, config }) => {

@@ -47,7 +47,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     string,
     {
       id: string;
-      selector: (context: PluginContext<Definition["context"], "output">) => SerializableValue;
+      selector: (context: PluginContext<Definition["context"], "output">) => unknown;
       callback: (newValue: SerializableValue, oldValue: SerializableValue) => void | Promise<void>;
     }
   >();
@@ -72,7 +72,10 @@ export class PluginServer<const Definition extends PluginDefinition> {
     this._definition = definition;
     this.#agent = agent;
     this.#config = config;
-    this.#context = definition.context.parse(context);
+    this.#context = definition.context.parse(context) as PluginContext<
+      Definition["context"],
+      "output"
+    >;
     this.#telemetry = createTelemetryClient("plugin.server", {
       agentId: agent.id,
       agentSha: agent.sha,
@@ -110,7 +113,13 @@ export class PluginServer<const Definition extends PluginDefinition> {
         output: z.object({ id: z.string() }),
       },
       execute: (input) => {
-        const [err, id] = this.#events.emit(input as PluginEvent<Definition["events"], "input">);
+        const [err, id] = this.#events.emit({
+          type: input.type as keyof Definition["events"] extends string
+            ? keyof Definition["events"]
+            : never,
+          data: input.data,
+          urgent: input.urgent,
+        });
         if (err) return op.failure(err);
         return op.success({ id });
       },
@@ -152,7 +161,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     // Handle context synchronization via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
-      schema: { output: z.object({}) },
+      schema: { output: z.object() },
       execute: () => op.success(this.#context),
     });
   }
@@ -226,7 +235,10 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   // Obtain a cloned snapshot of the context
   #getContext(): PluginContext<Definition["context"], "output"> {
-    return op.attempt(() => deepClone(this.#context));
+    return op.attempt(() => deepClone(this.#context)) as PluginContext<
+      Definition["context"],
+      "output"
+    >;
   }
 
   // Context setter
@@ -264,7 +276,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
   // Subscribe to context changes
   onContextChange(
-    selector: (context: PluginContext<Definition["context"], "output">) => SerializableValue,
+    selector: (context: PluginContext<Definition["context"], "output">) => unknown,
     callback: (newValue: SerializableValue, oldValue: SerializableValue) => void,
   ) {
     const id = newId("listener");
@@ -284,8 +296,8 @@ export class PluginServer<const Definition extends PluginDefinition> {
   async #notifyContextListeners(oldContextValue: PluginContext<Definition["context"], "output">) {
     await Promise.all([
       Array.from(this.#contextListeners.values()).map(async (listener) => {
-        const newSelectedValue = listener.selector(this.#context);
-        const oldSelectedValue = listener.selector(oldContextValue);
+        const newSelectedValue = listener.selector(this.#context) as SerializableValue;
+        const oldSelectedValue = listener.selector(oldContextValue) as SerializableValue;
         // Only call if value actually changed
         if (!canon.equal(newSelectedValue, oldSelectedValue)) {
           await listener.callback(newSelectedValue, oldSelectedValue);

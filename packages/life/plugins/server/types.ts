@@ -1,7 +1,6 @@
 import type z from "zod";
 import type { AgentServer } from "@/agent/server/class";
 import type { AsyncQueue } from "@/shared/async-queue";
-import type { SerializableValue } from "@/shared/canon";
 import type { Config } from "@/shared/config";
 import type * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
@@ -27,7 +26,7 @@ export type PluginDependencies<Definition extends PluginDependenciesDefinition> 
 };
 
 // - Config
-export type PluginConfigDefinition = Config<z.AnyZodObject>;
+export type PluginConfigDefinition = Config<z.ZodObject>;
 
 export type PluginConfig<
   ConfigDef extends PluginConfigDefinition,
@@ -35,7 +34,7 @@ export type PluginConfig<
 > = T extends "input" ? z.input<ConfigDef["schema"]> : z.output<ConfigDef["schema"]>;
 
 // - Context
-export type PluginContextDefinition = z.AnyZodObject;
+export type PluginContextDefinition = z.ZodObject;
 
 export type PluginContext<
   Schema extends PluginContextDefinition,
@@ -48,7 +47,7 @@ export type PluginContextHandler<
 > = {
   /** Subscribe to changes in the context. Returns a function to unsubscribe. */
   onChange(
-    selector: (context: Context) => SerializableValue,
+    selector: (context: Context) => unknown,
     callback: (newContext: Context, oldContext: Context) => void,
   ): op.OperationResult<() => void>;
   /** Returns a cloned snapshot of the context. */
@@ -127,7 +126,7 @@ export interface PluginEventsHandler<EventsDef extends PluginEventsDefinition> {
 }
 
 // - Methods
-export type PluginMethodSchemas = { input: z.AnyZodObject; output: z.AnyZodObject };
+export type PluginMethodSchemas = { input: z.ZodObject; output: z.ZodObject };
 export type PluginMethodDefinition<
   Definition extends PluginDefinition,
   Schemas extends PluginMethodSchemas,
@@ -142,7 +141,7 @@ export type PluginMethodDefinition<
       events: op.ToPublic<PluginEventsHandler<Definition["events"]>>;
       telemetry: TelemetrySpanHandle;
     },
-    input: Schemas["input"] extends z.AnyZodObject ? z.infer<Schemas["input"]> : never,
+    input: Schemas["input"] extends z.ZodObject ? z.infer<Schemas["input"]> : never,
   ) => MaybePromise<z.infer<Schemas["output"]> | op.OperationResult<z.infer<Schemas["output"]>>>;
 };
 // Type for method schemas definition (consistent with tools definition)

@@ -9,7 +9,7 @@ import type {
 } from "./schemas";
 
 // - Scope
-export type TelemetryScopeDefinition<Schema extends z.AnyZodObject = z.AnyZodObject> = {
+export type TelemetryScopeDefinition<Schema extends z.ZodObject = z.ZodObject> = {
   requiredAttributesSchema: Schema;
   displayName?: string | ((attributes: z.infer<Schema>) => string);
   isFromBrowser?: boolean;

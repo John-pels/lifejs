@@ -461,7 +461,7 @@ export class LifeServer {
           return op.success({
             id: process.id,
             clientConfig: agentServerConfig.schema
-              .pipe(agentClientConfig.schema)
+              .and(agentClientConfig.schema)
               .parse(definition.config),
           });
         } catch (error) {

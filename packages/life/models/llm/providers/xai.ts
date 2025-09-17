@@ -1,15 +1,14 @@
 import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { createConfig } from "@/shared/config";
 import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob } from "../base";
+import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 
 export const xaiLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("xai"),
-    apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.XAI_API_KEY ?? ""),
     model: z
       .enum([
         "grok-3",
@@ -21,8 +20,8 @@ export const xaiLLMConfig = createConfig({
         "grok-beta",
         "grok-vision-beta",
       ])
-      .default("grok-3-mini"),
-    temperature: z.number().min(0).max(2).default(0.5),
+      .prefault("grok-3-mini"),
+    temperature: z.number().min(0).max(2).prefault(0.5),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -97,7 +96,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: zodToJsonSchema(tool.schema.input),
+        parameters: z.toJSONSchema(tool.schema.input),
       },
     };
   }
@@ -196,15 +195,15 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
     return job;
   }
 
-  async generateObject(
-    params: Parameters<typeof LLMBase.prototype.generateObject>[0],
-  ): ReturnType<typeof LLMBase.prototype.generateObject> {
+  async generateObject<T extends z.ZodObject>(params: {
+    messages: Message[];
+    schema: T;
+  }): Promise<LLMObjectGenerationChunk<T>> {
     // Prepare messages in OpenAI format
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
     // Prepare JSON schema
-    const { definitions } = zodToJsonSchema(params.schema, { name: "schema" });
-    const schema = definitions?.schema;
+    const jsonSchema = z.toJSONSchema(params.schema);
 
     // Generate the object
     const response = await this.#client.chat.completions.create({
@@ -213,7 +212,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       temperature: this.config.temperature,
       response_format: {
         type: "json_schema",
-        json_schema: { name: "avc", schema },
+        json_schema: { name: "avc", schema: jsonSchema },
       },
     });
 

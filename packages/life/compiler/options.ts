@@ -2,9 +2,9 @@ import z from "zod";
 
 export const compilerOptionsSchema = z.object({
   projectDirectory: z.string(),
-  outputDirectory: z.string().default(".life"),
-  watch: z.boolean().default(false),
-  optimize: z.boolean().default(true),
+  outputDirectory: z.string().prefault(".life"),
+  watch: z.boolean().prefault(false),
+  optimize: z.boolean().prefault(true),
 });
 
 export type CompilerOptions<T extends "input" | "output"> = T extends "input"

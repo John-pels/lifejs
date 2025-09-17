@@ -15,7 +15,7 @@ const baseAgentClientAttributesSchema = z.object({
  */
 export const telemetryBrowserScopesDefinition = defineScopes({
   client: {
-    requiredAttributesSchema: z.object({}),
+    requiredAttributesSchema: z.object(),
     displayName: "Client",
   },
   "agent.client": {
@@ -31,7 +31,7 @@ export const telemetryBrowserScopesDefinition = defineScopes({
     displayName: (attributes) => `Client > Plugin (${attributes?.pluginName})`,
   },
   react: {
-    requiredAttributesSchema: z.object({}),
+    requiredAttributesSchema: z.object(),
     displayName: "React",
   },
 });

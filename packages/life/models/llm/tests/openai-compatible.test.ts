@@ -55,9 +55,11 @@ function createSearchTool(): ToolDefinition {
         result: z.string().describe("The search result"),
       }),
     },
-    run: async (input: unknown) => ({
+    run: (input) => ({
       success: true,
-      output: { result: `Mock search result for: ${(input as { query: string }).query}` },
+      output: {
+        result: `Mock search result for: ${(input as unknown as { query: string }).query}`,
+      },
     }),
   };
 }
@@ -74,7 +76,7 @@ function createCalculatorTool(): ToolDefinition {
         result: z.number().describe("The calculation result"),
       }),
     },
-    run: async (_input: unknown) => ({
+    run: (_input) => ({
       success: true,
       output: { result: 42 },
     }),
@@ -94,7 +96,7 @@ function createWeatherTool(): ToolDefinition {
         condition: z.string().describe("Weather condition"),
       }),
     },
-    run: async (_input: unknown) => ({
+    run: (_input) => ({
       success: true,
       output: { temperature: 22, condition: "Sunny" },
     }),

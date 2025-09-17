@@ -54,7 +54,7 @@ export class PluginBuilder<
     return builder as Omit<typeof builder, ExcludedMethods | "dependencies">;
   }
 
-  config<const Schema extends z.AnyZodObject>({
+  config<const Schema extends z.ZodObject>({
     schema,
     toTelemetryAttribute = () => ({}),
   }: {
@@ -74,7 +74,7 @@ export class PluginBuilder<
     return builder as Omit<typeof builder, ExcludedMethods | "config">;
   }
 
-  context<Schema extends z.AnyZodObject>(schema: Schema) {
+  context<Schema extends z.ZodObject>(schema: Schema) {
     const builder = new PluginBuilder({
       ...this._definition,
       context: schema,
@@ -273,8 +273,8 @@ export function definePlugin<const Name extends string>(name: Name) {
   return new PluginBuilder({
     name,
     dependencies: {},
-    config: createConfig({ schema: z.object({}) }),
-    context: z.object({}),
+    config: createConfig({ schema: z.object() }),
+    context: z.object(),
     events: {},
     lifecycle: {},
     effects: {},

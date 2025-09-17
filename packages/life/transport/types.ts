@@ -37,13 +37,13 @@ export type RPCResponse<Result = op.OperationResult<SerializableValue>> = Omit<
 };
 
 // RPC procedure
-export type RPCProcedureSchema = { input?: z.AnyZodObject; output?: z.AnyZodObject };
+export type RPCProcedureSchema = { input?: z.ZodObject; output?: z.ZodObject };
 export type RPCProcedure<Schema extends RPCProcedureSchema = RPCProcedureSchema> = {
   name: string;
   schema: Schema;
   execute: (
-    input: Schema["input"] extends z.AnyZodObject ? z.infer<Schema["input"]> : undefined,
+    input: Schema["input"] extends z.ZodObject ? z.infer<Schema["input"]> : undefined,
   ) => MaybePromise<
-    op.OperationResult<Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : void>
+    op.OperationResult<Schema["output"] extends z.ZodObject ? z.infer<Schema["output"]> : void>
   >;
 };

@@ -1,18 +1,17 @@
 import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { createConfig } from "@/shared/config";
 import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob } from "../base";
+import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 
 // Config
 export const openAILLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("openai"),
-    apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
-    model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
-    temperature: z.number().min(0).max(2).default(0.5),
+    apiKey: z.string().prefault(process.env.OPENAI_API_KEY ?? ""),
+    model: z.enum(["gpt-4o-mini", "gpt-4o"]).prefault("gpt-4o-mini"),
+    temperature: z.number().min(0).max(2).prefault(0.5),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -85,7 +84,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: zodToJsonSchema(tool.schema.input),
+        parameters: z.toJSONSchema(tool.schema.input),
       },
     };
   }
@@ -182,15 +181,15 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
     return job;
   }
 
-  async generateObject(
-    params: Parameters<typeof LLMBase.prototype.generateObject>[0],
-  ): ReturnType<typeof LLMBase.prototype.generateObject> {
+  async generateObject<T extends z.ZodObject>(params: {
+    messages: Message[];
+    schema: T;
+  }): Promise<LLMObjectGenerationChunk<T>> {
     // Prepare messages in OpenAI format
     const openaiMessages = this.#toOpenAIMessages(params.messages);
 
     // Prepare JSON schema
-    const { definitions } = zodToJsonSchema(params.schema, { name: "schema" });
-    const schema = definitions?.schema;
+    const jsonSchema = z.toJSONSchema(params.schema);
 
     // Generate the object
     const response = await this.#client.chat.completions.create({
@@ -199,14 +198,14 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
       temperature: this.config.temperature,
       response_format: {
         type: "json_schema",
-        json_schema: { name: "avc", schema },
+        json_schema: { name: "avc", schema: jsonSchema },
       },
     });
 
     // Parse the response
-    const obj = JSON.parse(response.choices[0]?.message?.content || "{}");
+    const data = JSON.parse(response.choices[0]?.message?.content || "{}");
 
     // Return the object
-    return { success: true, data: obj };
+    return { success: true, data };
   }
 }

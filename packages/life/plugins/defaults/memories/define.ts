@@ -13,7 +13,7 @@ type MemoryDependenciesDefinition =
 
 // - Config
 export const memoryConfigSchema = z.object({
-  behavior: z.enum(["blocking", "non-blocking"]).default("blocking"),
+  behavior: z.enum(["blocking", "non-blocking"]).prefault("blocking"),
 });
 
 export type MemoryConfig<T extends "input" | "output"> = T extends "input"

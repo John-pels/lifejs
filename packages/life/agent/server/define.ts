@@ -40,7 +40,7 @@ export class AgentBuilder<
     >;
   }
 
-  scope<Schema extends z.AnyZodObject>(scopeDef: AgentScopeDefinition<Schema>) {
+  scope<Schema extends z.ZodObject>(scopeDef: AgentScopeDefinition<Schema>) {
     // Create a new builder instance with the provided scope
     const builder = new AgentBuilder({
       ...this._definition,
@@ -129,6 +129,6 @@ export function defineAgent<const Name extends string>(name: Name) {
     config: defineConfig({}).withDefaults,
     plugins: {},
     pluginConfigs: {},
-    scope: { schema: z.object({}), hasAccess: () => true },
+    scope: { schema: z.object(), hasAccess: () => true },
   });
 }

@@ -26,7 +26,7 @@ export type PluginClientDependencies<Definition extends PluginClientDependencies
 };
 
 // - Config
-export type PluginClientConfigDefinition = Config<z.AnyZodObject>;
+export type PluginClientConfigDefinition = Config<z.ZodObject>;
 
 export type PluginClientConfig<
   Schema extends PluginClientConfigDefinition,

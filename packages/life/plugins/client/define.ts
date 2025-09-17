@@ -39,7 +39,7 @@ export class PluginClientBuilder<
     return builder as Omit<typeof builder, ExcludedMethods | "dependencies">;
   }
 
-  config<const Schema extends z.AnyZodObject>({
+  config<const Schema extends z.ZodObject>({
     schema,
     toTelemetryAttribute = () => ({}),
   }: {
@@ -103,7 +103,7 @@ export function definePluginClient<const ServerPlugin extends { _definition: Plu
       <_ServerConfig, _ClientConfig>() =>
         class Client extends Base<PluginClientDefinition> {}
     )({}, PluginClientBase),
-    config: createConfig({ schema: z.object({}) }),
+    config: createConfig({ schema: z.object() }),
     dependencies: {},
     $serverDef: {} as ServerPlugin["_definition"],
   } as const satisfies PluginClientDefinition;

@@ -3,9 +3,9 @@ import z from "zod";
 export const serverOptionsSchema = z.object({
   projectDirectory: z.string(),
   token: z.string(),
-  watch: z.boolean().default(false),
-  host: z.string().default("localhost"),
-  port: z.string().default("3003"),
+  watch: z.boolean().prefault(false),
+  host: z.string().prefault("localhost"),
+  port: z.string().prefault("3003"),
 });
 
 export type ServerOptions<T extends "input" | "output"> = T extends "input"

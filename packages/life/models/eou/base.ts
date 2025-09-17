@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { Message } from "@/shared/resources";
 
-export abstract class EOUBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class EOUBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {

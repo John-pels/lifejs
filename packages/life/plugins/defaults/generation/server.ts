@@ -20,9 +20,9 @@ const configSchema = z.object({
   tools: z.array(toolSchema),
   voiceDetection: z
     .object({
-      scoreInThreshold: z.number().default(0.5),
-      scoreOutThreshold: z.number().default(0.25),
-      prePaddingChunks: z.number().default(50),
+      scoreInThreshold: z.number().prefault(0.5),
+      scoreOutThreshold: z.number().prefault(0.25),
+      prePaddingChunks: z.number().prefault(50),
       /**
        * Many STT models listen at silent chunks after voice chunks before returning
        * their final transcription result. Deepgram for example, even with `endpointing: 0` and
@@ -38,17 +38,17 @@ const configSchema = z.object({
        * You could considering lowering this value to 50 depending on how your STT provider behaves.
        * As always, benchmark carefully the change.
        */
-      postPaddingChunks: z.number().default(200),
-      interruptMinDurationMs: z.number().default(50),
+      postPaddingChunks: z.number().prefault(200),
+      interruptMinDurationMs: z.number().prefault(50),
     })
-    .default({}),
+    .prefault({}),
   endOfTurnDetection: z
     .object({
-      threshold: z.number().default(0.6),
-      minTimeoutMs: z.number().default(300),
-      maxTimeoutMs: z.number().default(5000),
+      threshold: z.number().prefault(0.6),
+      minTimeoutMs: z.number().prefault(300),
+      maxTimeoutMs: z.number().prefault(5000),
     })
-    .default({}),
+    .prefault({}),
 });
 
 export const generationPlugin = definePlugin("generation")
@@ -140,21 +140,21 @@ export const generationPlugin = definePlugin("generation")
   })
   .context(
     z.object({
-      messages: z.array(messageSchema).default([]),
+      messages: z.array(messageSchema).prefault([]),
       status: z
         .object({
-          listening: z.boolean().default(true),
-          thinking: z.boolean().default(false),
-          speaking: z.boolean().default(false),
+          listening: z.boolean().prefault(true),
+          thinking: z.boolean().prefault(false),
+          speaking: z.boolean().prefault(false),
         })
-        .default({}),
-      voiceEnabled: z.boolean().default(true),
+        .prefault({}),
+      voiceEnabled: z.boolean().prefault(true),
     }),
   )
   .methods({
     getMessages: {
       schema: {
-        input: z.object({}),
+        input: z.object(),
         output: z.object({ messages: z.array(messageSchema) }),
       },
       run: ({ context }) => {

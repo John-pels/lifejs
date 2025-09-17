@@ -23,7 +23,11 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
   readonly #agent: AgentClient<AgentClientDefinition>;
   readonly #telemetry: TelemetryClient;
-  server!: PluginClientServer<ClientDefinition["$serverDef"], "internal">;
+  server = {
+    methods: {},
+    context: {},
+    events: {},
+  } as PluginClientServer<ClientDefinition["$serverDef"], "internal">;
 
   get #dependencies() {
     const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
@@ -47,7 +51,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       id: string;
       selector: (
         context: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
-      ) => SerializableValue;
+      ) => unknown;
       callback: (
         newContext: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
         oldContext: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
@@ -178,7 +182,13 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#contextListeners.delete(listenerId);
       });
     };
-    this.server.context.get = () => op.attempt(() => deepClone(this.#contextValue));
+    this.server.context.get = () =>
+      op.attempt(
+        () =>
+          deepClone(this.#contextValue) as op.OperationResult<
+            PluginContext<ClientDefinition["$serverDef"]["context"], "output">
+          >,
+      );
     this.#agent.transport
       .call({
         name: `plugin.${this._definition.name}.context.get`,
@@ -212,7 +222,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         this.#contextValue = output.value ?? {};
 
         // Send a first notification to listeners
-        this.#notifyContextListeners({});
+        this.#notifyContextListeners(
+          {} as PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
+        );
       });
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.changed`,
@@ -236,8 +248,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   ) {
     await Promise.all(
       Array.from(this.#contextListeners.values()).map(async (listener) => {
-        const newSelectedValue = listener.selector(this.#contextValue);
-        const oldSelectedValue = listener.selector(oldContextValue);
+        const newSelectedValue = listener.selector(this.#contextValue) as SerializableValue;
+        const oldSelectedValue = listener.selector(oldContextValue) as SerializableValue;
         // Only call if value actually changed
         if (!canon.equal(newSelectedValue, oldSelectedValue)) {
           await listener.callback(deepClone(this.#contextValue), deepClone(oldContextValue));

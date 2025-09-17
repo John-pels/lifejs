@@ -14,14 +14,14 @@ const MAX_TOKENS = 256; // Hardcoded in the model
 export const turnSenseEOUConfig = createConfig({
   schema: z.object({
     provider: z.literal("turnsense"),
-    quantized: z.boolean().default(true),
+    quantized: z.boolean().prefault(true),
     /**
      * Quick benchmark have shown that Turnsense models are very optimized for single
      * message inferences, and their documentation shows single message inferences as
      * well. Hence why this value defaults to 1. Carefully benchmark the change if you
      * consider increasing this value.
      */
-    maxMessages: z.number().default(1),
+    maxMessages: z.number().prefault(1),
   }),
 });
 

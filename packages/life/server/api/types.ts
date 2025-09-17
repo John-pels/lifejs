@@ -8,22 +8,22 @@ import type { LifeApi } from ".";
 export type LifeApiCallDefinition = {
   type: "call";
   protected: boolean;
-  inputDataSchema?: z.ZodSchema;
-  outputDataSchema?: z.ZodSchema;
+  inputDataSchema?: z.ZodType;
+  outputDataSchema?: z.ZodType;
 };
 
 export type LifeApiCastDefinition = {
   type: "cast";
   protected: boolean;
-  inputDataSchema?: z.ZodSchema;
+  inputDataSchema?: z.ZodType;
   outputDataSchema?: never;
 };
 
 export type LifeApiStreamDefinition = {
   type: "stream";
   protected: boolean;
-  inputDataSchema?: z.ZodSchema;
-  outputDataSchema?: z.ZodSchema;
+  inputDataSchema?: z.ZodType;
+  outputDataSchema?: z.ZodType;
 };
 
 export type LifeApiHandlerDefinition =
@@ -55,13 +55,13 @@ export type LifeApiStreamInput = z.infer<typeof lifeApiStreamInputSchema>;
 
 // - Input Data
 export type LifeApiInputData<Def extends LifeApiHandlerDefinition> =
-  Def["inputDataSchema"] extends z.ZodSchema ? z.infer<Def["inputDataSchema"]> : never;
+  Def["inputDataSchema"] extends z.ZodType ? z.infer<Def["inputDataSchema"]> : never;
 
 // - Output
 export type LifeApiOutput<Def extends LifeApiHandlerDefinition> = Def extends
   | LifeApiCallDefinition
   | LifeApiStreamDefinition
-  ? Def["outputDataSchema"] extends z.ZodSchema
+  ? Def["outputDataSchema"] extends z.ZodType
     ? op.OperationResult<z.infer<Def["outputDataSchema"]>>
     : op.OperationResult<void>
   : op.OperationResult<void>;

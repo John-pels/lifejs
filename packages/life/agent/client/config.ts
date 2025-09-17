@@ -4,8 +4,8 @@ import { transportBrowserConfig } from "@/transport/config/browser";
 
 export const agentClientConfig = createConfig({
   schema: z.object({
-    transport: transportBrowserConfig.schema.default({ provider: "livekit" }),
-    experimental: z.object({}).default({}),
+    transport: transportBrowserConfig.schema.prefault({ provider: "livekit" }),
+    experimental: z.object().prefault({}),
   }),
   toTelemetryAttribute: (config) => {
     return config;

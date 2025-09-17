@@ -6,7 +6,7 @@ export type TransportEvent = {
   chunk: Int16Array;
 };
 
-export abstract class TransportProviderClientBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class TransportProviderClientBase<ConfigSchema extends z.ZodObject> {
   config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {

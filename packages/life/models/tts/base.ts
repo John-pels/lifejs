@@ -30,7 +30,7 @@ export interface TTSGenerateJob {
 /**
  * Base class for all TTS providers.
  */
-export abstract class TTSBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
   config: z.infer<ConfigSchema>;
 
   /** ms per token */

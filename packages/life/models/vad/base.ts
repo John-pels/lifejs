@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-export abstract class VADBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class VADBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {

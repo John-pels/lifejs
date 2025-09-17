@@ -32,7 +32,7 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Not allowed to access this resource.",
     httpEquivalent: 403,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when an operation took too long and timed out.
@@ -41,7 +41,7 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Operation timed out.",
     httpEquivalent: 504,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when the user has exceeded the rate limit for a resource.
@@ -50,7 +50,7 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Rate limit exceeded.",
     httpEquivalent: 429,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when a resource was not found or missing.
@@ -59,7 +59,7 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Resource not found.",
     httpEquivalent: 404,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when an operation is about to conflict with another.
@@ -69,7 +69,7 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Operation conflicted.",
     httpEquivalent: 409,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when an upstream service or resource fails.
@@ -79,7 +79,7 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Upstream error.",
     httpEquivalent: 502,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
   /**
    * Used when an unexpected error is thrown.
@@ -92,7 +92,7 @@ export const lifeErrorCodes = {
       /**
        * The unhandled thrown value.
        */
-      error: z.any(),
+      error: z.any().or(z.unknown()).optional(),
     }),
   },
   /**
@@ -103,7 +103,7 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Internal error.",
     httpEquivalent: 500,
-    extraSchema: z.object({}),
+    extraSchema: z.object(),
   },
 } as const satisfies Record<string, LifeErrorCodeDefinition>;
 
@@ -232,10 +232,7 @@ export type CreateLifeErrorParams<Code extends LifeErrorCode> = {
   attributes?: LifeErrorAttributes;
   retryAfterMs?: number;
   isPublic?: boolean;
-} & ((typeof lifeErrorCodes)[Code]["extraSchema"] extends LifeErrorCodeDefinition["extraSchema"]
-  ? z.output<(typeof lifeErrorCodes)[Code]["extraSchema"]>
-  : // biome-ignore lint/complexity/noBannedTypes: fine here
-    {});
+} & z.input<(typeof lifeErrorCodes)[Code]["extraSchema"]>;
 
 /**
  * Creates a new LifeError instance.
@@ -272,9 +269,9 @@ const serializedLifeErrorSchema = z.object({
   code: z.string(),
   stack: z.string().optional(),
   message: z.string(),
-  attributes: z.record(z.string(), z.unknown()).optional(),
+  attributes: z.object().optional(),
   retryAfterMs: z.number().optional(),
-  _extra: z.record(z.string(), z.unknown()),
+  _extra: z.object(),
 });
 
 /**
@@ -335,11 +332,11 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeErrorUni
  */
 export function makePublic<Code extends LifeErrorCode = LifeErrorCode>(
   error: LifeError<Code>,
-): LifeError<Code> | LifeErrorUnion {
+): LifeErrorUnion {
   // Return raw error in development
-  if (process.env.NODE_ENV === "development") return error;
+  if (process.env.NODE_ENV === "development") return error as LifeErrorUnion;
 
-  let publicError: LifeError<Code> | LifeErrorUnion;
+  let publicError: LifeError;
 
   // If the error is already public, just copy it
   if (error.isPublic) {
@@ -349,7 +346,8 @@ export function makePublic<Code extends LifeErrorCode = LifeErrorCode>(
       attributes: error.attributes,
       retryAfterMs: error.retryAfterMs,
       isPublic: true,
-      ...error._extra,
+      // biome-ignore lint/suspicious/noExplicitAny: fine
+      ...(error._extra as any),
     });
   }
 
@@ -368,5 +366,5 @@ export function makePublic<Code extends LifeErrorCode = LifeErrorCode>(
   publicError.stack = undefined;
 
   // Return the public error
-  return publicError;
+  return publicError as LifeErrorUnion;
 }

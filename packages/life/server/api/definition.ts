@@ -90,7 +90,7 @@ export const definition = {
     inputDataSchema: z.object({
       id: z.string(),
       sessionToken: z.string(),
-      pollingIntervalMs: z.number().min(1000).max(30_000).default(5000),
+      pollingIntervalMs: z.number().min(1000).max(30_000).prefault(5000),
     }),
     outputDataSchema: z.object({
       id: z.string(),
@@ -145,7 +145,7 @@ export const definition = {
     type: "stream",
     protected: true,
     inputDataSchema: z.object({
-      pollingIntervalMs: z.number().min(1000).max(30_000).default(5000),
+      pollingIntervalMs: z.number().min(1000).max(30_000).prefault(5000),
     }),
     outputDataSchema: z.object({
       lifeVersion: z.string(),
@@ -179,7 +179,7 @@ export const definition = {
     type: "stream",
     protected: true,
     inputDataSchema: z.object({
-      pollingIntervalMs: z.number().min(1000).max(30_000).default(5000),
+      pollingIntervalMs: z.number().min(1000).max(30_000).prefault(5000),
     }),
     outputDataSchema: z.array(
       z.object({

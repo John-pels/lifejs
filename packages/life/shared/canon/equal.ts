@@ -27,10 +27,10 @@ import { stringify } from "./stringify";
  * canon.equal(new Date("2021-08-01"), "2021-08-01");      // → true
  * ```
  */
-export const equal = <T extends SerializableValue>(a: T, b: T) => {
-  const [err1, data1] = op.attempt(() => stringify(a));
+export const equal = (a: SerializableValue, b: SerializableValue) => {
+  const [err1, data1] = stringify(a);
   if (err1) return op.failure(err1);
-  const [err2, data2] = op.attempt(() => stringify(b));
+  const [err2, data2] = stringify(b);
   if (err2) return op.failure(err2);
   return op.success(data1 === data2);
 };

@@ -5,7 +5,6 @@ import * as op from "@/shared/operation";
 import {
   deserializeLifeError,
   isLifeError,
-  type LifeErrorClass,
   type LifeErrorUnion,
   serializeLifeError,
 } from "../error";
@@ -14,7 +13,7 @@ import {
 // biome-ignore lint/suspicious/noExplicitAny: Record<string, unknown> is serializable
 superjson.registerCustom<LifeErrorUnion, any>(
   {
-    isApplicable: (v): v is LifeErrorClass => isLifeError(v),
+    isApplicable: (v): v is LifeErrorUnion => isLifeError(v),
     serialize: (err) => serializeLifeError(err),
     deserialize: (data) => deserializeLifeError(data),
   },

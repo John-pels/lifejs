@@ -10,22 +10,22 @@ import { transportNodeConfig } from "@/transport/config/node";
 
 export const agentServerConfig = createConfig({
   schema: z.object({
-    transport: transportNodeConfig.schema.default({ provider: "livekit" }),
+    transport: transportNodeConfig.schema.prefault({ provider: "livekit" }),
     models: z
       .object({
-        vad: vadProviderConfig.schema.default({ provider: "silero" }),
-        stt: sttProviderConfig.schema.default({ provider: "deepgram" }),
-        eou: eouProviderConfig.schema.default({ provider: "livekit" }),
-        llm: llmProviderConfig.schema.default({ provider: "openai" }),
-        tts: ttsProviderConfig.schema.default({ provider: "cartesia" }),
+        vad: vadProviderConfig.schema.prefault({ provider: "silero" }),
+        stt: sttProviderConfig.schema.prefault({ provider: "deepgram" }),
+        eou: eouProviderConfig.schema.prefault({ provider: "livekit" }),
+        llm: llmProviderConfig.schema.prefault({ provider: "openai" }),
+        tts: ttsProviderConfig.schema.prefault({ provider: "cartesia" }),
       })
-      .default({}),
+      .prefault({}),
     telemetry: z
       .object({
-        consumers: z.array(z.custom<TelemetryConsumer>()).default([]),
+        consumers: z.array(z.custom<TelemetryConsumer>()).prefault([]),
       })
-      .default({}),
-    experimental: z.object({}).default({}),
+      .prefault({}),
+    experimental: z.object().prefault({}),
   }),
   toTelemetryAttribute: (config) => {
     // Remember if there are custom telemetry consumers

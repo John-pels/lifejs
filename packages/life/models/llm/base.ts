@@ -22,14 +22,14 @@ export interface LLMGenerateMessageJob {
 }
 
 // LLMBase.generateObject()
-export type LLMObjectGenerationChunk<T extends z.AnyZodObject> =
+export type LLMObjectGenerationChunk<T extends z.ZodObject> =
   | { success: true; data: z.infer<T> }
   | { success: false; error: string };
 
 /**
  * Base class for all LLMs providers.
  */
-export abstract class LLMBase<ConfigSchema extends z.AnyZodObject> {
+export abstract class LLMBase<ConfigSchema extends z.ZodObject> {
   config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
@@ -57,7 +57,7 @@ export abstract class LLMBase<ConfigSchema extends z.AnyZodObject> {
     tools: ToolDefinition[];
   }): Promise<LLMGenerateMessageJob>;
 
-  abstract generateObject<T extends z.AnyZodObject>(params: {
+  abstract generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
   }): Promise<LLMObjectGenerationChunk<T>>;

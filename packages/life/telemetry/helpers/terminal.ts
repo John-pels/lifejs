@@ -14,10 +14,9 @@ function formatErrorForTerminal(error: Error | unknown): string {
 
   // Format LifeError
   if (isLifeError(error)) {
-    console.log("IS PUBLIC", error.isPublic);
     code = `LifeError (${chalk.bold(error.code)})`;
     message = error.message;
-    stack = error.stack ? error.stack.split("\n").slice(1).join("\n") : "";
+    stack = error.stack ? error.stack.split("\n").slice(3).join("\n") : "";
 
     if (error.code === "Validation" && error.zodError) {
       other += formatErrorForTerminal(error.zodError);
@@ -30,9 +29,10 @@ function formatErrorForTerminal(error: Error | unknown): string {
   // Format ZodError
   else if (error instanceof z.ZodError) {
     code = "ZodError";
-    message = error.message;
-    stack = error.stack ?? "";
-    // TODO: Use new Zod v4 formatter
+    message = z.prettifyError(error);
+    stack = error.stack
+      ? (error.stack.split("at new ZodError")?.[1]?.split("\n").slice(2).join("\n") ?? "")
+      : "";
   }
 
   // Format ESBuild errors
@@ -55,6 +55,7 @@ function formatErrorForTerminal(error: Error | unknown): string {
           .join("\n\n");
         code = "Build Error";
         message = `\n\n${formatted}`;
+        stack = error.stack ?? "";
       } catch (_) {
         /* Ignore, that wasn't an ESBuild error */
       }

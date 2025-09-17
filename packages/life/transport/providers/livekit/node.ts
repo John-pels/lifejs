@@ -9,12 +9,10 @@ import { type TransportEvent, TransportProviderClientBase } from "../base";
 export const livekitNodeConfig = createConfig({
   schema: z.object({
     provider: z.literal("livekit"),
-    serverUrl: z
-      .string()
-      .url()
-      .default(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
-    apiKey: z.string().default(process.env.LIVEKIT_API_KEY ?? "devkey"),
-    apiSecret: z.string().default(process.env.LIVEKIT_API_SECRET ?? "secret"),
+    serverUrl: z.url()
+      .prefault(process.env.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
+    apiKey: z.string().prefault(process.env.LIVEKIT_API_KEY ?? "devkey"),
+    apiSecret: z.string().prefault(process.env.LIVEKIT_API_SECRET ?? "secret"),
   }),
   toTelemetryAttribute: (config) => {
     // Remember if the server is a dev server

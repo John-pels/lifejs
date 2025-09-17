@@ -11,12 +11,12 @@ import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 
 // Helper types to extract input/output schemas
-type InferInput<T> = T extends { inputDataSchema: z.ZodSchema }
-  ? z.infer<T["inputDataSchema"]>
+type InferInput<T> = T extends { inputDataSchema: z.ZodType }
+  ? z.input<T["inputDataSchema"]>
   : undefined;
 
-type InferOutput<T> = T extends { outputDataSchema: z.ZodSchema }
-  ? z.infer<T["outputDataSchema"]>
+type InferOutput<T> = T extends { outputDataSchema: z.ZodType }
+  ? z.output<T["outputDataSchema"]>
   : undefined;
 
 // Extract handlers by type

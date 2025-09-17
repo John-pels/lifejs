@@ -7,10 +7,9 @@ import type {
   UserMessage,
 } from "@mistralai/mistralai/models/components";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { createConfig } from "@/shared/config";
 import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob } from "../base";
+import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 
 // Define Mistral-specific message types with required role properties
 type MistralUserMessage = UserMessage & { role: "user" };
@@ -27,7 +26,7 @@ type MistralMessage =
 export const mistralLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("mistral"),
-    apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.MISTRAL_API_KEY ?? ""),
     model: z
       .enum([
         "mistral-large-latest",
@@ -49,8 +48,8 @@ export const mistralLLMConfig = createConfig({
         "open-mixtral-8x7b",
         "open-mixtral-8x22b",
       ])
-      .default("mistral-small-latest"),
-    temperature: z.number().min(0).max(1).default(0.5),
+      .prefault("mistral-small-latest"),
+    temperature: z.number().min(0).max(1).prefault(0.5),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -124,7 +123,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: zodToJsonSchema(tool.schema.input),
+        parameters: z.toJSONSchema(tool.schema.input),
       },
     };
   }
@@ -247,30 +246,35 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
     }
   }
 
-  async generateObject(
-    params: Parameters<typeof LLMBase.prototype.generateObject>[0],
-  ): ReturnType<typeof LLMBase.prototype.generateObject> {
+  async generateObject<T extends z.ZodObject>(params: {
+    messages: Message[];
+    schema: T;
+  }): Promise<LLMObjectGenerationChunk<T>> {
     try {
       // Prepare messages in Mistral format
       const mistralMessages = this.#toMistralMessages(params.messages);
 
+      // Prepare JSON schema
+      const jsonSchema = z.toJSONSchema(params.schema);
+
       // Generate the object using schema-enforced parse method
       // This uses Mistral's built-in schema validation with the Zod schema
-      const response = await this.#client.chat.parse({
+      const response = await this.#client.chat.complete({
         model: this.config.model,
         messages: mistralMessages,
         temperature: this.config.temperature,
-        responseFormat: params.schema,
+
+        responseFormat: {
+          type: "json_schema",
+          jsonSchema: { name: "avc", schemaDefinition: jsonSchema },
+        },
       });
 
       // Extract parsed content from response - already validated by Mistral API
-      const parsed = response.choices?.[0]?.message?.parsed;
-      if (!parsed) {
-        return { success: false, error: "No parsed content in response" };
-      }
+      const data = JSON.parse((response.choices?.[0]?.message?.content as string) || "{}");
 
       // Return the validated object (no additional validation needed)
-      return { success: true, data: parsed };
+      return { success: true, data };
     } catch (error) {
       return {
         success: false,

@@ -24,22 +24,22 @@ export const DevLoader: FC<DevLoaderProps> = ({
       borderColor="gray"
       borderStyle="round"
       flexDirection="column"
-      gap={1}
       height="100%"
       justifyContent="center"
+      padding={3}
       width="100%"
     >
       {!loadingError && (
-        <>
+        <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
           <Text color={theme.orange}>Life.js</Text>
           <Box width={40}>
             <ProgressBar value={loadingProgress} />
           </Box>
           <Text color={theme.gray.medium}>{loadingStatus}</Text>
-        </>
+        </Box>
       )}
       {loadingError && (
-        <Box alignItems="center" flexDirection="column" justifyContent="center" padding={3}>
+        <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
           <Box
             alignItems="center"
             borderColor="red"
@@ -49,9 +49,7 @@ export const DevLoader: FC<DevLoaderProps> = ({
           >
             <Text color={"red"}>Error starting the Life.js development server</Text>
           </Box>
-          <Text>{"\n"}</Text>
           <Text color={"red"}>{loadingError}</Text>
-          <Text>{"\n"}</Text>
           {!options.debug && (
             <>
               <Divider borderDimColor={true} color={"red"} width={40} />

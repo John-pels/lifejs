@@ -1,10 +1,6 @@
 import z from "zod";
 
-export interface Config<
-  Schema extends
-    | z.AnyZodObject
-    | z.ZodDiscriminatedUnion<string, z.ZodDiscriminatedUnionOption<string>[]>,
-> {
+export interface Config<Schema extends z.ZodObject | z.ZodDiscriminatedUnion> {
   schema: Schema;
   schemaTelemetry: Schema;
 }
@@ -20,7 +16,7 @@ export type DeeplyEditable<T> = T extends Record<string, unknown>
  * @param excludedFromTelemetry - The selectors of the fields to exclude from telemetry data.
  * @returns The config schema and the schema prepared for telemetry.
  */
-export const createConfig = <Schema extends z.AnyZodObject>({
+export const createConfig = <Schema extends z.ZodObject>({
   schema,
   toTelemetryAttribute = () => ({}),
 }: {
@@ -34,10 +30,9 @@ export const createConfig = <Schema extends z.AnyZodObject>({
 
 export function createConfigUnion<
   Discriminator extends string,
-  const Configs extends readonly [
-    Config<ZodDiscriminatedUnionOption<Discriminator>>,
-    ...Config<ZodDiscriminatedUnionOption<Discriminator>>[],
-  ],
+  const Configs extends readonly Config<
+    z.ZodObject<z.ZodRawShape & { [K in Discriminator]: z.ZodTypeAny }>
+  >[],
 >(
   discriminator: Discriminator,
   configs: Configs,
@@ -56,27 +51,5 @@ export function createConfigUnion<
 
 export type ConfigUnionSchema<
   Discriminator extends string,
-  Configs extends readonly [
-    Config<ZodDiscriminatedUnionOption<Discriminator>>,
-    ...Config<ZodDiscriminatedUnionOption<Discriminator>>[],
-  ],
-> = z.ZodDiscriminatedUnion<
-  Discriminator,
-  ExtractSchemas<Configs> extends readonly [infer First, ...infer Rest]
-    ? First extends ZodDiscriminatedUnionOption<Discriminator>
-      ? Rest extends readonly ZodDiscriminatedUnionOption<Discriminator>[]
-        ? readonly [First, ...Rest]
-        : never
-      : never
-    : never
->;
-
-type ExtractSchemas<T extends readonly Config<z.AnyZodObject>[]> = {
-  [K in keyof T]: T[K] extends Config<infer S> ? S : never;
-};
-
-type ZodDiscriminatedUnionOption<Key extends string> = z.ZodObject<
-  z.ZodRawShape & { [K in Key]: z.ZodTypeAny },
-  z.UnknownKeysParam,
-  z.ZodTypeAny
->;
+  Configs extends readonly Config<z.ZodObject>[],
+> = z.ZodDiscriminatedUnion<Configs[number] extends Config<infer S> ? S[] : never, Discriminator>;

@@ -14,7 +14,7 @@ import {
 
 // Runtime-agnostic logic between transport classes
 export abstract class TransportClientBase {
-  readonly #provider: TransportProviderClientBase<z.AnyZodObject>;
+  readonly #provider: TransportProviderClientBase<z.ZodObject>;
   readonly #filterPublic: boolean;
   readonly #procedures = new Map<string, RPCProcedure>();
   readonly #resolveResults = new Map<
@@ -26,7 +26,7 @@ export abstract class TransportClientBase {
   constructor({
     provider,
     filterPublic = false,
-  }: { provider: TransportProviderClientBase<z.AnyZodObject>; filterPublic?: boolean }) {
+  }: { provider: TransportProviderClientBase<z.ZodObject>; filterPublic?: boolean }) {
     this.#provider = provider;
     this.#filterPublic = filterPublic;
   }
@@ -113,7 +113,7 @@ export abstract class TransportClientBase {
     inputSchema,
   }: {
     name: string;
-    input?: Schema["input"] extends z.AnyZodObject ? z.infer<Schema["input"]> : SerializableValue;
+    input?: Schema["input"] extends z.ZodObject ? z.infer<Schema["input"]> : SerializableValue;
     inputSchema?: Schema;
   }) {
     let timeoutId: NodeJS.Timeout | undefined;
@@ -137,23 +137,26 @@ export abstract class TransportClientBase {
 
       // Create a promise that resolves when the response is received
       const resultPromise = new Promise<
-        op.OperationResult<
-          Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never
-        >
+        op.OperationResult<Schema["output"] extends z.ZodObject ? z.infer<Schema["output"]> : never>
       >((resolve) => {
         this.#resolveResults.set(id, (res) => {
           clearTimeout(timeoutId);
           this.#resolveResults.delete(id);
           resolve(
             res as unknown as op.OperationResult<
-              Schema["output"] extends z.AnyZodObject ? z.infer<Schema["output"]> : never
+              Schema["output"] extends z.ZodObject ? z.infer<Schema["output"]> : never
             >,
           );
         });
       });
 
       // Send the request
-      const request = { type: "request", id, name, input } satisfies RPCRequest;
+      const request = {
+        type: "request",
+        id,
+        name,
+        input: input as SerializableValue,
+      } satisfies RPCRequest;
       await this.sendObject("rpc", request);
 
       // Capture whichever resolves first between timeout or result
@@ -267,9 +270,9 @@ export abstract class TransportClientBase {
     }
   }
 
-  on: TransportProviderClientBase<z.AnyZodObject>["on"] = (...args) => this.#provider.on(...args);
+  on: TransportProviderClientBase<z.ZodObject>["on"] = (...args) => this.#provider.on(...args);
 
-  joinRoom: TransportProviderClientBase<z.AnyZodObject>["joinRoom"] = async (...args) => {
+  joinRoom: TransportProviderClientBase<z.ZodObject>["joinRoom"] = async (...args) => {
     const [errJoin] = await this.#provider.joinRoom(...args);
     if (errJoin) return op.failure(errJoin);
     const [errStart] = this.#startRPC();
@@ -277,7 +280,7 @@ export abstract class TransportClientBase {
     return op.success();
   };
 
-  leaveRoom: TransportProviderClientBase<z.AnyZodObject>["leaveRoom"] = async (...args) => {
+  leaveRoom: TransportProviderClientBase<z.ZodObject>["leaveRoom"] = async (...args) => {
     const [errLeave] = await this.#provider.leaveRoom(...args);
     if (errLeave) return op.failure(errLeave);
     const [errStop] = this.#stopRPC();
@@ -285,18 +288,18 @@ export abstract class TransportClientBase {
     return op.success();
   };
 
-  streamText: TransportProviderClientBase<z.AnyZodObject>["streamText"] = (...args) =>
+  streamText: TransportProviderClientBase<z.ZodObject>["streamText"] = (...args) =>
     this.#provider.streamText(...args);
 
-  receiveStreamText: TransportProviderClientBase<z.AnyZodObject>["receiveStreamText"] = (...args) =>
+  receiveStreamText: TransportProviderClientBase<z.ZodObject>["receiveStreamText"] = (...args) =>
     this.#provider.receiveStreamText(...args);
 
-  enableMicrophone: TransportProviderClientBase<z.AnyZodObject>["enableMicrophone"] = (...args) =>
+  enableMicrophone: TransportProviderClientBase<z.ZodObject>["enableMicrophone"] = (...args) =>
     this.#provider.enableMicrophone(...args);
 
-  playAudio: TransportProviderClientBase<z.AnyZodObject>["playAudio"] = (...args) =>
+  playAudio: TransportProviderClientBase<z.ZodObject>["playAudio"] = (...args) =>
     this.#provider.playAudio(...args);
 
-  streamAudioChunk: TransportProviderClientBase<z.AnyZodObject>["streamAudioChunk"] = (...args) =>
+  streamAudioChunk: TransportProviderClientBase<z.ZodObject>["streamAudioChunk"] = (...args) =>
     this.#provider.streamAudioChunk(...args);
 }

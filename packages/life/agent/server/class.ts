@@ -1,4 +1,3 @@
-import { isSameType } from "zod-compare";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
 import { type STTProvider, sttProviders } from "@/models/stt";
@@ -6,7 +5,7 @@ import { type TTSProvider, ttsProviders } from "@/models/tts";
 import { type VADProvider, vadProviders } from "@/models/vad";
 import { PluginServer } from "@/plugins/server/class";
 import type { PluginDefinition } from "@/plugins/server/types";
-import type { SerializableValue } from "@/shared/canon";
+import { canon, type SerializableValue } from "@/shared/canon";
 import * as op from "@/shared/operation";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
@@ -137,7 +136,8 @@ export class AgentServer {
                 `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this._definition.name}')`,
               );
             }
-            if (!isSameType(expectedSchema, actualSchema)) {
+
+            if (!canon.equalSchema(expectedSchema, actualSchema)) {
               throw new Error(
                 `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this._definition.name}')`,
               );

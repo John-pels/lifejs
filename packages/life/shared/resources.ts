@@ -29,7 +29,7 @@ export type SystemMessage = z.infer<typeof systemMessageSchema>;
 export const toolRequestSchema = z.object({
   id: z.string(),
   name: z.string(),
-  input: z.record(z.any()),
+  input: z.record(z.string(), z.any()),
 });
 export const toolRequestsSchema = z.array(toolRequestSchema);
 
@@ -52,7 +52,7 @@ export const toolResponseMessageSchema = z.object({
   role: z.literal("tool-response"),
   toolId: z.string(),
   toolSuccess: z.boolean(),
-  toolOutput: z.record(z.any()).optional(),
+  toolOutput: z.record(z.string(), z.any()).optional(),
   toolError: z.string().optional(),
 });
 
@@ -97,25 +97,23 @@ export const toolSchema = z.object({
     input: z.instanceof(z.ZodObject),
     output: z.instanceof(z.ZodObject),
   }),
-  run: z
-    .function()
-    .args(z.record(z.any()))
-    .returns(
-      z.union([
+  run: z.function({
+    input: [z.record(z.string(), z.any())],
+    output: z.union([
+      z.object({
+        success: z.boolean(),
+        output: z.record(z.string(), z.any()).optional(),
+        error: z.string().optional(),
+      }),
+      z.promise(
         z.object({
           success: z.boolean(),
-          output: z.record(z.any()).optional(),
+          output: z.record(z.string(), z.any()).optional(),
           error: z.string().optional(),
         }),
-        z.promise(
-          z.object({
-            success: z.boolean(),
-            output: z.record(z.any()).optional(),
-            error: z.string().optional(),
-          }),
-        ),
-      ]),
-    ),
+      ),
+    ]),
+  }),
 });
 
 export type ToolDefinition = z.infer<typeof toolSchema>;

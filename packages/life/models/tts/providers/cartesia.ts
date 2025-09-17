@@ -9,8 +9,8 @@ import { TTSBase, type TTSGenerateJob } from "../base";
 export const cartesiaTTSConfig = createConfig({
   schema: z.object({
     provider: z.literal("cartesia"),
-    apiKey: z.string().default(process.env.CARTESIA_API_KEY ?? ""),
-    model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).default("sonic-2"),
+    apiKey: z.string().prefault(process.env.CARTESIA_API_KEY ?? ""),
+    model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).prefault("sonic-2"),
     language: z
       .enum([
         "en",
@@ -29,8 +29,8 @@ export const cartesiaTTSConfig = createConfig({
         "sv",
         "tr",
       ])
-      .default("en"),
-    voiceId: z.string().default("e8e5fffb-252c-436d-b842-8879b84445b6"),
+      .prefault("en"),
+    voiceId: z.string().prefault("e8e5fffb-252c-436d-b842-8879b84445b6"),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields

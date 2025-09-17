@@ -20,7 +20,7 @@ export const telemetryResourceSchema = z
         osVersion: z.string(),
         cpuCount: z.number(),
         cpuArchitecture: z.string(),
-        schemaVersion: z.string().default("1"),
+        schemaVersion: z.string().prefault("1"),
       }),
       z.object({
         platform: z.literal("browser"),
@@ -90,7 +90,7 @@ export const telemetryResourceSchema = z
         ]),
         isBot: z.boolean(),
         isAiBot: z.boolean(),
-        schemaVersion: z.string().default("1"),
+        schemaVersion: z.string().prefault("1"),
       }),
     ]),
   );

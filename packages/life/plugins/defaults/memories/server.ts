@@ -19,7 +19,7 @@ export const memoriesPlugin = definePlugin("memories")
   .dependencies([generationPlugin])
   .config({
     schema: z.object({
-      items: z.array(z.custom<{ _definition: MemoryDefinition }>()).default([]),
+      items: z.array(z.custom<{ _definition: MemoryDefinition }>()).prefault([]),
     }),
     toTelemetryAttribute: (config) => {
       // Rewrite items to only keep their configs
@@ -56,12 +56,12 @@ export const memoriesPlugin = definePlugin("memories")
   })
   .context(
     z.object({
-      memoriesLastResults: z.custom<Map<string, Message[]>>().default(new Map()),
-      memoriesLastTimestamp: z.custom<Map<string, number>>().default(new Map()),
-      processedRequestsIds: z.custom<Set<string>>().default(new Set<string>()),
+      memoriesLastResults: z.custom<Map<string, Message[]>>().prefault(new Map()),
+      memoriesLastTimestamp: z.custom<Map<string, number>>().prefault(new Map()),
+      processedRequestsIds: z.custom<Set<string>>().prefault(new Set<string>()),
       computedMemoriesCache: z
         .custom<Map<string, { hash: string; memories: Message[] }>>()
-        .default(new Map()),
+        .prefault(new Map()),
     }),
   )
   // Intercept the 'agent.resources-response' from generation plugin to emit blocking build-request
