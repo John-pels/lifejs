@@ -6,7 +6,7 @@ import { type BirpcReturn, createBirpc } from "birpc";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { canon, type SerializableValue } from "@/shared/canon";
-import type { LifeError } from "@/shared/error";
+import type { LifeErrorUnion } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { TelemetrySignal } from "@/telemetry/types";
@@ -255,7 +255,7 @@ export class AgentProcess {
           this.nodeProcess?.off("exit", this.#handleChildExitCallback);
 
         // Gracefully stop the agent (10s timeout)
-        let stopErr: LifeError | undefined;
+        let stopErr: LifeErrorUnion | undefined;
         let stopSuccess = false;
         try {
           await Promise.race([

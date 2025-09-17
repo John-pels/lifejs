@@ -1,3 +1,5 @@
+"use client";
+
 import { useAgent, useAgentStatus } from "life/react";
 
 export default function Page() {

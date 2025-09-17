@@ -44,10 +44,11 @@
 
 import z from "zod";
 import {
+  type CreateLifeErrorParams,
   isLifeError,
-  LifeError,
+  LifeErrorClass,
   type LifeErrorCode,
-  type LifeErrorParams,
+  type LifeErrorUnion,
   lifeError,
 } from "./error";
 import type { ClassShape } from "./types";
@@ -60,7 +61,7 @@ export const isResult = (value: unknown): value is OperationResult<OperationData
 
 type OperationSuccess<D extends OperationData> = readonly [error: undefined, data: D];
 type OperationFailure<_ extends OperationData = never> = readonly [
-  error: LifeError,
+  error: LifeErrorUnion,
   data: undefined,
 ];
 export type OperationResult<D extends OperationData> = OperationSuccess<D> | OperationFailure<D>;
@@ -116,7 +117,7 @@ export const success = <const DR extends OperationDataOrResult = void>(
  * ```
  */
 export const failure = <Code extends LifeErrorCode, D extends OperationData = never>(
-  errorOrDef: LifeErrorParams<Code>,
+  errorOrDef: CreateLifeErrorParams<Code>,
 ): OperationFailure<D> => {
   const error = isLifeError(errorOrDef) ? errorOrDef : lifeError(errorOrDef);
   const result = Object.assign([error, undefined] as const, {
@@ -225,7 +226,7 @@ type InstanceToPublic<Instance extends object> = {
   safe: {
     [K in keyof Instance as Instance[K] extends (
       ...args: infer _Args
-    ) => OperationResult<infer _Data> | Promise<OperationResult<infer __Data>>
+    ) => OperationResult<infer _D1> | Promise<OperationResult<infer _D2>>
       ? K
       : never]: Instance[K];
   };
@@ -266,7 +267,7 @@ const functionToPublic = <
     }
 
     // Handle sync functions
-    const [errorSync, dataSync] = result as OperationResult<unknown>;
+    const [errorSync, dataSync] = result as OperationResult<OperationData>;
     if (errorSync) throw errorSync;
     return dataSync;
   };
@@ -322,7 +323,7 @@ export type ToPublic<T> = T extends ClassShape
   ? ClassToPublic<T>
   : T extends (
         ...args: infer _Args
-      ) => OperationResult<infer _Data> | Promise<OperationResult<infer __Data>>
+      ) => OperationResult<infer _D1> | Promise<OperationResult<infer _D2>>
     ? FunctionToPublic<T>
     : T extends object
       ? InstanceToPublic<T>
@@ -363,7 +364,7 @@ export function toPublic<T>(input: T) {
 // Export a Zod schema for the OperationResult type
 export const resultSchema = z
   .tuple([z.null(), z.unknown()])
-  .or(z.tuple([z.instanceof(LifeError), z.null()]))
+  .or(z.tuple([z.instanceof(LifeErrorClass), z.null()]))
   .transform(
     (val): OperationResult<OperationData> => val as unknown as OperationResult<OperationData>,
   );
@@ -383,13 +384,13 @@ export const resultSchema = z
  */
 export function serializeResult<D extends OperationData>(
   result: OperationResult<D>,
-): { _isOperationResult: true; result: readonly [LifeError | undefined, D | undefined] } {
+): { _isOperationResult: true; result: OperationResult<D> } {
   if (!isResult(result)) {
     throw new Error("The provided value is not an OperationResult");
   }
   return {
     _isOperationResult: true,
-    result: [result[0], result[1]] as const,
+    result,
   };
 }
 
@@ -408,7 +409,7 @@ export function serializeResult<D extends OperationData>(
  */
 export function deserializeResult<D extends OperationData>(obj: {
   _isOperationResult: true;
-  result: readonly [LifeError | undefined, D | undefined];
+  result: OperationResult<D>;
 }): OperationResult<D> {
   if (!obj._isOperationResult) {
     throw new Error("The provided object is not a serialized OperationResult");

@@ -1,4 +1,5 @@
 "use client";
+
 import type { Message } from "life/client";
 import { useAgent, useAgentMessages } from "life/react";
 

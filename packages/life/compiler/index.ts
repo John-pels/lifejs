@@ -683,18 +683,22 @@ export class LifeCompiler {
         const sha = createHash("md5").update(treeHashes.join(":")).digest("hex");
 
         // 6. Generate agent server build content
+        const buildPath = path.join(this.options.outputDirectory, "server", "raw", `${name}.ts`);
+        const relServerPath = path.relative(path.dirname(buildPath), serverPath);
+        const relConfigPaths = configPaths.map((configPath) =>
+          path.relative(path.dirname(buildPath), configPath),
+        );
         const content = `
-        ${configPaths.map((configPath, i) => `import config${i} from "${configPath}";`).join("\n")}
-  import agent from "${serverPath}";
-  export default {
-    definition: agent._definition,
-    globalConfigs: [${configPaths.map((_, i) => `config${i}`).join(", ")}],
-    sha: "${sha}"
-  } as const;
+        ${relConfigPaths.map((configPath, i) => `import config${i} from "${configPath}";`).join("\n")}
+import agent from "${relServerPath}";
+export default {
+  definition: agent._definition,
+  globalConfigs: [${configPaths.map((_, i) => `config${i}`).join(", ")}],
+  sha: "${sha}"
+} as const;
         `.trim();
 
         // 7. Write the agent server build content
-        const buildPath = path.join(this.options.outputDirectory, "server", "raw", `${name}.ts`);
         await writeFile(buildPath, content, "utf-8");
         this.buildIndex.servers.add(buildPath);
 
@@ -782,18 +786,18 @@ export class LifeCompiler {
           })
           .join(",\n");
 
-        const content =
-          `import agentClient from "${clientPath.replace(path.extname(clientPath), "")}";
-  export default {
-    definition: agentClient._definition,
-    plugins: {
-  ${pluginEntries}
-    }
-  } as const;
+        const buildPath = path.join(this.options.outputDirectory, "client", `${name}.ts`);
+        const relClientPath = path.relative(path.dirname(buildPath), clientPath);
+        const content = `import agentClient from "${relClientPath.replace(".ts", "")}";
+export default {
+  definition: agentClient._definition,
+  plugins: {
+${pluginEntries}
+  }
+} as const;
         `.trim();
 
         // 6. Write the agent client build content
-        const buildPath = path.join(this.options.outputDirectory, "client", `${name}.ts`);
         await writeFile(buildPath, content, "utf-8");
         this.buildIndex.clients.add(buildPath);
 
@@ -821,16 +825,19 @@ export class LifeCompiler {
         }
 
         // 2. Produce the raw bundle index file
-        const indexContent = `${Object.entries(serversMap)
-          .map(([name, p]) => `import ${name} from "${p}";`)
-          .join("\n")}
-  export default {
-    ${Object.keys(serversMap)
-      .map((name) => `"${name}": ${name}`)
-      .join(",\n")}
-  }
-  `.trim();
         const indexPath = path.join(this.options.outputDirectory, "server", "raw", "index.ts");
+        const indexContent = `${Object.entries(serversMap)
+          .map(
+            ([name, p]) =>
+              `import ${name} from "./${path.relative(path.dirname(indexPath), p).replace(".ts", "")}";`,
+          )
+          .join("\n")}
+export default {
+  ${Object.keys(serversMap)
+    .map((name) => `"${name}": ${name}`)
+    .join(",\n")}
+}
+  `.trim();
         await writeFile(indexPath, indexContent, "utf-8");
 
         // 3. If an optimize build is not requested, use the raw index as bundle index
@@ -880,16 +887,19 @@ export class LifeCompiler {
         }
 
         // 2. Produce the raw bundle index file
-        const indexContent = `${Object.entries(clientsMap)
-          .map(([name, p]) => `import ${name} from "${p.replace(path.extname(p), "")}";`)
-          .join("\n")}
-  export default {
-    ${Object.keys(clientsMap)
-      .map((name) => `"${name}": ${name}`)
-      .join(",\n")}
-  }
-  `.trim();
         const indexPath = path.join(this.options.outputDirectory, "client", "index.ts");
+        const indexContent = `${Object.entries(clientsMap)
+          .map(
+            ([name, p]) =>
+              `import ${name} from "./${path.relative(path.dirname(indexPath), p).replace(".ts", "")}";`,
+          )
+          .join("\n")}
+export default {
+  ${Object.keys(clientsMap)
+    .map((name) => `"${name}": ${name}`)
+    .join(",\n")}
+}
+  `.trim();
         await writeFile(indexPath, indexContent, "utf-8");
       } catch (error) {
         span.log.error({ message: "Failed to generate client bundle. Unexpected error.", error });

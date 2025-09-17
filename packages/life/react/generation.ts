@@ -1,3 +1,5 @@
+"use client";
+
 import { useStore } from "@nanostores/react";
 import { atom } from "nanostores";
 import type { AgentClientDefinition, AgentClientWithPlugins } from "@/agent/client/types";

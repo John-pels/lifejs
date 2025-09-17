@@ -33,7 +33,7 @@ export const definition = {
     protected: false,
     inputDataSchema: z.object({
       id: z.string(),
-      scope: z.object({}),
+      scope: z.record(z.string(), z.unknown()),
     }),
     outputDataSchema: z.object({
       sessionToken: z.string(),
@@ -67,7 +67,7 @@ export const definition = {
     outputDataSchema: z.object({
       id: z.string(),
       name: z.string(),
-      scope: z.record(z.string(), z.unknown()),
+      scope: z.record(z.string(), z.unknown()).nullable(),
       status: z.enum(["stopped", "starting", "running", "stopping"]),
       lastStartedAt: z.number().optional(),
       lastSeenAt: z.number().optional(),
@@ -95,7 +95,7 @@ export const definition = {
     outputDataSchema: z.object({
       id: z.string(),
       name: z.string(),
-      scope: z.record(z.string(), z.unknown()),
+      scope: z.record(z.string(), z.unknown()).nullable(),
       status: z.string(),
       lastStartedAt: z.number().optional(),
       lastSeenAt: z.number().optional(),

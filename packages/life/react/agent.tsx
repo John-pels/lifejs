@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import type { GeneratedAgentClient } from "@/agent/client/types";
 import type { ClientBuild } from "@/exports/build/client";

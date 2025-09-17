@@ -80,7 +80,7 @@ export class LifeServer {
         // Log operation with timing
         span.end();
         this.telemetry.log.info({
-          message: `Server started in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+          message: `Server ready in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
         });
         if (this.options.watch) {
           this.telemetry.log.info({ message: "Watching for changes..." });

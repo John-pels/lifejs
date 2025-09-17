@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --enable-source-maps
+
 import { Command } from "commander";
 import { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
@@ -15,9 +16,7 @@ import { formatVersion, getVersion } from "./utils/version";
 async function main() {
   // Stream formatted telemetry logs to the terminal (except for dev command without --no-tui flag)
   let logLevel = process.argv.includes("--debug") ? "debug" : undefined;
-  // const isDevCommand = process.argv.includes("dev") && !process.argv.includes("--no-tui");
   logLevel = logLevel ?? (process.env.LOG_LEVEL as TelemetryLogLevel) ?? "info";
-  // if (!isDevCommand)
   TelemetryClient.registerGlobalConsumer({
     async start(queue) {
       for await (const item of queue) {

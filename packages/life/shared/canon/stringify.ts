@@ -5,9 +5,8 @@
  * Source: fast-json-stable-stringify (https://github.com/epoberezkin/fast-json-stable-stringify/blob/master/index.js)
  */
 
-import { deserialize, serialize } from "superjson";
 import * as op from "@/shared/operation";
-import type { SerializableValue } from "./serialize";
+import { deserialize, type SerializableValue, serialize } from "./serialize";
 
 // biome-ignore-start lint/style: reason
 // biome-ignore-start lint/suspicious: reason
@@ -99,7 +98,9 @@ export function stableDeepStringify(data: any, opts?: any): string {
  * ```
  */
 export const stringify = (value: SerializableValue) => {
-  return op.attempt(() => stableDeepStringify(serialize(value)));
+  const [err, res] = serialize(value);
+  if (err) return op.failure(err);
+  return op.attempt(() => stableDeepStringify(res));
 };
 
 /**
@@ -122,5 +123,7 @@ export const stringify = (value: SerializableValue) => {
  * ```
  */
 export const parse = (value: string): op.OperationResult<SerializableValue> => {
-  return op.attempt(() => deserialize(JSON.parse(value)));
+  const [err, res] = op.attempt(() => JSON.parse(value));
+  if (err) return op.failure(err);
+  return deserialize(res);
 };

@@ -1,6 +1,5 @@
 export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   readonly #buf: T[] = [];
-  // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #wakeUp?: () => void;
   #closed = false;
   #totalLength = 0;

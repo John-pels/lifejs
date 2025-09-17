@@ -67,7 +67,6 @@
     "**/CONTRIBUTING.md": false,
     "**/packages/releases": false,
     "**/CLAUDE.md": false,
-    "**/.life": false,
     "**/.claude": false,
     "**/AGENTS.md": false,
     "**/vitest.config.ts": false

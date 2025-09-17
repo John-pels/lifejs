@@ -9,7 +9,7 @@ import type { WSMessageReceive } from "hono/ws";
 import z from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
-import { type LifeError, makePublic } from "@/shared/error";
+import { type LifeErrorUnion, makePublic } from "@/shared/error";
 import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
 import type { LifeServer } from "..";
@@ -155,7 +155,7 @@ export class LifeApi {
     return await this.server.telemetry.trace("start()", (span) => {
       try {
         span.log.info({
-          message: `Starting API server on http://${this.server.options.host}:${this.server.options.port}`,
+          message: `API listening on http://${this.server.options.host}:${this.server.options.port}`,
         });
         this.#honoServer = serve({
           fetch: this.app.fetch,
@@ -207,7 +207,7 @@ export class LifeApi {
     inputStr: string | WSMessageReceive;
     request: Request;
     send?: (message: string) => void;
-  }): Promise<{ response: string; error?: LifeError | null }> {
+  }): Promise<{ response: string; error?: LifeErrorUnion | null }> {
     return await this.server.telemetry.trace("handleRequest()", async (span) => {
       span.setAttributes({ inputStr });
 
@@ -236,9 +236,20 @@ export class LifeApi {
         else if (status >= 400) statusChalk = chalk.yellow;
         else if (status >= 300) statusChalk = chalk.cyan;
         else if (status >= 200) statusChalk = chalk.green;
-        this.server.telemetry.log.info({
-          message: `${type.toUpperCase()} ${error ? error.code : "Valid"} ${type === "http" ? `(${statusChalk.bold(status)})` : ""} ${handlerId} [in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms]`)}`,
-        });
+
+        if (status < 400)
+          this.server.telemetry.log.info({
+            message: `Request /${handlerId} ${type === "http" ? `${statusChalk.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}`,
+          });
+        else {
+          this.server.telemetry.log.error({
+            message: `Request /${handlerId} ${type === "http" ? `${statusChalk.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}`,
+            error,
+          });
+          this.server.telemetry.log.debug({
+            message: `Failed request raw input: ${(typeof inputStr === "string" ? inputStr : "Non-string data.") ?? "No data."}`,
+          });
+        }
 
         // Return the sanitized result
         return sanitizeResult(result);

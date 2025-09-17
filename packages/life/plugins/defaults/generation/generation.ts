@@ -30,7 +30,6 @@ export class Generation {
   readonly #voiceEnabled: boolean;
   #llmJob: LLMGenerateMessageJob | null = null;
   #ttsJob: TTSGenerateJob | null = null;
-  // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #toolRequests: ToolRequests | null = null;
   readonly #statusChangeCallbacks: ((status: GenerationStatus) => void)[] = [];
 

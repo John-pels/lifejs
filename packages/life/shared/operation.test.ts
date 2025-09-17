@@ -62,11 +62,17 @@ describe("operation", () => {
     });
 
     test("includes extra data", () => {
+      // const [err, aaa] = attempt(() => {});
+      // if (err && err.code === "Validation" && err.zodError) {
+
+      // }
       const result = failure({
         code: "Unknown",
         error: new Error("Something went wrong"),
       });
-      expect(result[0]?._extra?.error).toBeInstanceOf(Error);
+      if (result[0]?.code === "Unknown") {
+        expect(result[0]?.error).toBeInstanceOf(Error);
+      }
     });
   });
 
@@ -225,7 +231,9 @@ describe("operation", () => {
         });
         expect(isLifeError(error)).toBe(true);
         expect(error?.code).toBe("Unknown");
-        expect(error?._extra?.error).toBeInstanceOf(Error);
+        if (error?.code === "Unknown") {
+          expect(error?.error).toBeInstanceOf(Error);
+        }
       });
 
       test("handles throwing null or undefined", () => {

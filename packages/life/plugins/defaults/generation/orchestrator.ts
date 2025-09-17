@@ -29,10 +29,7 @@ export type GenerationPluginParams = {
 export class GenerationOrchestrator {
   readonly #generationPlugin: GenerationPluginParams;
   readonly #generationsQueue: AsyncQueue<Generation> = new AsyncQueue();
-  // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #generations: Generation[] = [];
-
-  // biome-ignore lint/style/useReadonlyClassProperties: it is re-assigned
   #decidePromises: {
     id: string;
     event: Extract<GenerationPluginEvent, { type: "agent.decide" }>;

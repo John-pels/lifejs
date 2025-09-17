@@ -6,6 +6,7 @@ import type {
   LifeApiDefinition,
   LifeApiStreamDefinition,
 } from "@/server/api/types";
+import { canon } from "@/shared/canon";
 import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 
@@ -69,7 +70,10 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
 
       this.ws.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data);
+          const [err, message] = canon.parse(event.data);
+          if (err) return;
+          if (!message || typeof message !== "object" || message === null) return;
+          if (!("subscriptionId" in message) || typeof message.subscriptionId !== "string") return;
           const callback = this.subscriptions.get(message.subscriptionId);
           callback?.(message.data);
         } catch {
@@ -90,41 +94,45 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
   }
 
   async call<K extends keyof CallHandlers<Def>>(handlerId: K, input?: InferInput<Def[K]>) {
-    const url = `${this.serverUrl}/api/${handlerId as string}`;
+    const url = `${this.serverUrl}/http`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
 
-    if (this.serverToken) {
-      headers.Authorization = `Bearer ${this.serverToken}`;
-    }
+    if (this.serverToken) headers.Authorization = `Bearer ${this.serverToken}`;
 
     try {
+      const [errCanon, body] = canon.stringify({
+        handlerId: handlerId as string,
+        serverToken: this.serverToken,
+        data: input,
+      });
+      if (errCanon) return op.failure(errCanon);
+
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          handlerId: handlerId as string,
-          serverToken: this.serverToken,
-          data: input,
-        }),
+        body,
       });
 
       if (!response.ok) {
-        await response.text(); // Consume body to avoid memory leak
-        return op.failure({
-          code: "Upstream",
-          message: `API call failed: ${response.statusText}`,
-        });
+        try {
+          const result = await response.json();
+          return op.failure(result.error);
+        } catch {
+          return op.failure({
+            code: "Upstream",
+            message: `API call failed: ${response.statusText}`,
+          });
+        }
       }
 
       const result = await response.json();
-      if (result.error) {
-        return op.failure(result.error);
-      }
+      if (result.error) return op.failure(result.error);
 
       return op.success(result.data as InferOutput<Def[K]>);
     } catch (error) {
+      console.error(error);
       return op.failure({
         code: "Unknown",
         message: "Network request failed",
@@ -139,14 +147,14 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
   ): Promise<op.OperationResult<undefined>> {
     return op.attempt(async () => {
       const ws = await this.ensureWebSocket();
-      ws.send(
-        JSON.stringify({
-          type: "cast",
-          handlerId: handlerId as string,
-          serverToken: this.serverToken,
-          data: input,
-        }),
-      );
+      const [errCanon, body] = canon.stringify({
+        type: "cast",
+        handlerId: handlerId as string,
+        serverToken: this.serverToken,
+        data: input,
+      });
+      if (errCanon) return op.failure(errCanon);
+      ws.send(body);
       return op.success(undefined);
     });
   }
@@ -166,16 +174,16 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
       // Start connection asynchronously
       this.ensureWebSocket()
         .then((ws) => {
-          ws.send(
-            JSON.stringify({
-              type: "stream",
-              action: "subscribe",
-              handlerId: handlerId as string,
-              subscriptionId,
-              serverToken: this.serverToken,
-              data: input,
-            }),
-          );
+          const [errCanon, body] = canon.stringify({
+            type: "stream",
+            action: "subscribe",
+            handlerId: handlerId as string,
+            subscriptionId,
+            serverToken: this.serverToken,
+            data: input,
+          });
+          if (errCanon) return op.failure(errCanon);
+          ws.send(body);
         })
         .catch(() => {
           this.subscriptions.delete(subscriptionId);
@@ -184,15 +192,15 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
       const unsubscribe: UnsubscribeFunction = () => {
         this.subscriptions.delete(subscriptionId);
         if (this.ws?.readyState === WebSocket.OPEN) {
-          this.ws.send(
-            JSON.stringify({
-              type: "stream",
-              action: "unsubscribe",
-              handlerId: handlerId as string,
-              subscriptionId,
-              serverToken: this.serverToken,
-            }),
-          );
+          const [errCanon, body] = canon.stringify({
+            type: "stream",
+            action: "unsubscribe",
+            handlerId: handlerId as string,
+            subscriptionId,
+            serverToken: this.serverToken,
+          });
+          if (errCanon) return op.failure(errCanon);
+          this.ws.send(body);
         }
       };
 

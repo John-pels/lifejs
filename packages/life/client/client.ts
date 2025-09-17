@@ -7,25 +7,27 @@ import * as op from "@/shared/operation";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/browser";
 import { LifeServerApiClient } from "./api";
-// import type { LifeServerApiClient } from "./api";
+import type { LifeClientOptions } from "./types";
 
 export class LifeClient {
-  readonly #serverUrl: string;
+  readonly options: LifeClientOptions;
   readonly #serverToken?: string;
   readonly #agents: Map<string, AgentClient<AgentClientDefinition>>;
   #clientBuild: ClientBuild | null = null;
-  api: LifeServerApiClient;
   readonly #telemetry: TelemetryClient;
+  api: LifeServerApiClient;
 
-  constructor(params?: { serverUrl?: string; serverToken?: string }) {
-    this.#serverUrl = params?.serverUrl ?? "http://localhost:3003";
-    this.#serverToken = params?.serverToken;
+  constructor(options: LifeClientOptions) {
+    this.options = {
+      serverUrl: options?.serverUrl ?? "http://localhost:3003",
+      serverToken: options?.serverToken,
+    };
     this.#agents = new Map();
 
     // Initialize API client
     this.api = new LifeServerApiClient({
-      serverUrl: this.#serverUrl,
-      serverToken: this.#serverToken,
+      serverUrl: this.options.serverUrl,
+      serverToken: this.options.serverToken,
     });
 
     // Initialize telemetry

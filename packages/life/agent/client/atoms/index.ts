@@ -1,7 +1,7 @@
 import { atom, onMount, type WritableAtom } from "nanostores";
 import type z from "zod";
 import type { definition } from "@/server/api/definition";
-import { type LifeError, lifeError } from "@/shared/error";
+import { type LifeErrorUnion, lifeError } from "@/shared/error";
 import type { AgentClient } from "../class";
 import type { AgentClientDefinition } from "../types";
 
@@ -11,7 +11,7 @@ export interface InfoAtomConfig {
 
 export type AgentInfoResponse =
   | { success: true; data: z.infer<(typeof definition)["agent.info"]["outputDataSchema"]> }
-  | { success: false; error: LifeError };
+  | { success: false; error: LifeErrorUnion };
 
 export interface AgentClientAtoms {
   info: (config?: InfoAtomConfig) => WritableAtom<AgentInfoResponse | null> & {
