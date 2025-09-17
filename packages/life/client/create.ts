@@ -1,28 +1,49 @@
+import { hmr } from "@/shared/hmr";
 import * as op from "@/shared/operation";
 import { LifeClient } from "./client";
 import type { LifeClientOptions } from "./types";
 
-// Cache to store client instances by their options cache key
-const clientCache = new Map<string, op.ToPublic<LifeClient>>();
+// Create an HMR-resistant cache map
+type ClientCache = Map<string, op.ToPublic<LifeClient>>;
+declare global {
+  var __LIFE_CLIENT_CACHE__: ClientCache | undefined;
+}
+const getClientCache = (): ClientCache => {
+  if (!globalThis.__LIFE_CLIENT_CACHE__) globalThis.__LIFE_CLIENT_CACHE__ = new Map();
+  return globalThis.__LIFE_CLIENT_CACHE__;
+};
 
+// Helper to generate a cache key
 const getCacheKey = (options: LifeClientOptions): string => {
   return `${options.serverUrl}::${options.serverToken ?? ""}`;
 };
 
+/**
+ * Creates a new Life.js client instance, which is the main entry point
+ * to interact with your Life.js agents.
+ *
+ * @param options - Client options.
+ * @returns LifeClient instance.
+ */
 export const createLifeClient = (options: LifeClientOptions): op.ToPublic<LifeClient> | null => {
   // On the server, simply return the options
   if (typeof window === "undefined") return { options } as op.ToPublic<LifeClient>;
 
-  // Generate cache key for these options
-  const cacheKey = getCacheKey(options);
+  // Get HMR-resistant cache and generate cache key
+  const cache = getClientCache();
+  const key = getCacheKey(options);
 
   // Return any cached client for these options
-  const cachedClient = clientCache.get(cacheKey);
-  if (cachedClient) return cachedClient;
+  const client = cache.get(key);
+  if (client) return client;
 
   // Create a new client and cache it
   const newClient = op.toPublic(new LifeClient(options));
-  clientCache.set(cacheKey, newClient);
+  cache.set(key, newClient);
 
   return newClient;
 };
+
+// If nobody higher up accepts hot-reloading, bundlers may trigger a full page reload,
+// which would wipe globalThis. Accepting here prevents this module from causing that.
+hmr.accept?.();
