@@ -1,5 +1,12 @@
 # life
 
+## 0.23.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [d544d29](https://github.com/lifejs/lifejs/commit/d544d293f8c5924a3afebe3a03cc5c7efab8cadc) — Migrate to Zod 4
+- [@LilaRest](https://github.com/LilaRest) in [7e1ad9e](https://github.com/lifejs/lifejs/commit/7e1ad9e61d5645f0a9ffc979d2cebd3ece3a345f) — Make createLifeClient() HMR-resistant
+
 ## 0.22.0
 
 ### Minor Changes
