@@ -1,5 +1,15 @@
 # life
 
+## 0.24.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [444bb1e](https://github.com/lifejs/lifejs/commit/444bb1e102cfce53bdbad1325ee20413aab862b2) — Rename Copy mode to Debug mode in `life dev` and also show debug-level logs in that mode
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [fdf4947](https://github.com/lifejs/lifejs/commit/fdf494777fed6aa6648f5d3482efddcbd6b473a5) — Upgrade symbol in `life dev` was causing layout shift
+
 ## 0.23.0
 
 ### Minor Changes
