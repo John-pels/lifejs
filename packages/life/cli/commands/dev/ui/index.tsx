@@ -19,6 +19,7 @@ import { Divider } from "../components/divider";
 import { FullScreenBox } from "../components/fullscreen-box.js";
 import { checkLivekitInstall } from "../helpers/check-livekit-install";
 import { cleanStdData } from "../helpers/clean-std-data";
+import { DEFAULT_TABS } from "../helpers/tabs";
 import { DevContent } from "./content";
 import { DevFooter } from "./footer";
 import { DevLoader } from "./loader";
@@ -54,8 +55,6 @@ const customInkUITheme = extendTheme(defaultTheme, {
   },
 });
 
-export const DEFAULT_TABS = ["server", "compiler", "webrtc"];
-
 export const DevUI = ({ options }: { options: DevOptions }) => {
   const [loadingProgress, setLoadingProgress] = useState(1);
   const [loadingStatus, setLoadingStatus] = useState<string | null>("Initializing...");
@@ -71,6 +70,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [tabs, setTabs] = useState<string[]>(DEFAULT_TABS);
   const [selectedTab, setSelectedTab] = useState("server");
+
   const [logs, setLogs] = useState<Record<string, string[]>>({
     server: [],
     compiler: [],
@@ -524,7 +524,13 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
 
   return (
     <ThemeProvider theme={customInkUITheme}>
-      <Container flexDirection="column" marginRight={5} paddingX={1} width="100%">
+      <Container
+        flexDirection="column"
+        marginRight={debugModeEnabled ? 0 : 5}
+        minHeight={(process.stdout.rows ?? 24) - 1}
+        paddingX={1}
+        width="100%"
+      >
         {/* Loader */}
         {loadingProgress < 100 && (
           <DevLoader
@@ -555,7 +561,11 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
                   selectedTab={selectedTab}
                 />
               </Box>
-              <DevFooter debugModeEnabled={debugModeEnabled} />
+              <DevFooter
+                agentProcesses={agentProcesses}
+                debugModeEnabled={debugModeEnabled}
+                selectedTab={selectedTab}
+              />
             </Box>
           </ConditionalMouseProvider>
         )}

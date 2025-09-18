@@ -50,20 +50,30 @@ export class LifeServer {
         span.log.debug({ message: `Host: ${this.options.host}` });
         span.log.debug({ message: `Port: ${this.options.port}` });
 
-        // 1. Ensure a valid build directory exists
-        const [errDir] = await this.ensureBuildDirectory();
-        if (errDir) return op.failure(errDir);
+        // 1. Start watching build directory if in watch mode
+        if (this.options.watch) {
+          const [errWatch] = await this.watchBuildDirectory();
+          if (errWatch) return op.failure(errWatch);
+        }
+        // Or ensure a valid build directory exists
+        else {
+          const [errDir] = await this.ensureBuildDirectory();
+          if (errDir) return op.failure(errDir);
+        }
 
         // 2. Start the API
         const [errApi] = await this.api.start();
         if (errApi) return op.failure(errApi);
         this.#startedAt = Date.now();
+        this.telemetry.log.info({
+          message: `⧉ ${chalk.italic("API")} listening on         → http://${this.options.host}:${this.options.port}/api`,
+        });
 
-        // 3. Start watching build directory if in watch mode
-        if (this.options.watch) {
-          const [errWatch] = await this.watchBuildDirectory();
-          if (errWatch) return op.failure(errWatch);
-        }
+        // 3. Start the Observatory web app
+        // TODO
+        this.telemetry.log.info({
+          message: `⧉ ${chalk.italic("Observatory")} listening on → http://${this.options.host}:${this.options.port}`,
+        });
 
         // 4. Listen for SIGINT and SIGTERM to gracefully stop the server
         const handleShutdown = async (signal: string) => {
@@ -151,7 +161,6 @@ export class LifeServer {
 
         // Check if client index exists
         const clientIndex = join(buildDir, "client", "index.ts");
-        console.log("CLIENT INDEX", clientIndex);
         if (!existsSync(clientIndex)) {
           return op.failure({
             code: "NotFound",
@@ -161,7 +170,6 @@ export class LifeServer {
 
         // Check if server dist index exists
         const serverIndex = join(buildDir, "server", "dist", "index.js");
-        console.log("SERVER INDEX", serverIndex);
         if (!existsSync(serverIndex)) {
           return op.failure({
             code: "NotFound",

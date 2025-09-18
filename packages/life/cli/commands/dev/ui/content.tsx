@@ -32,10 +32,10 @@ export const DevContent: FC<DevContentProps> = ({
       width="100%"
     >
       {debugModeEnabled ? (
-        <Box flexDirection="column">
-          <Text>{"\n"}</Text>
-          <Divider color={theme.orange} width="100%" />
-          <Text>{"\n"}</Text>
+        <Box flexDirection="column" gap={1} width="100%">
+          <Box alignItems="center" flexDirection="column" justifyContent="center" width="100%">
+            <Divider color={theme.orange} width="100%" />
+          </Box>
           <Box flexDirection="column">{renderLogs()}</Box>
         </Box>
       ) : (

@@ -152,11 +152,8 @@ export class LifeApi {
   }
 
   async start() {
-    return await this.server.telemetry.trace("start()", (span) => {
+    return await this.server.telemetry.trace("start()", () => {
       try {
-        span.log.info({
-          message: `API listening on http://${this.server.options.host}:${this.server.options.port}`,
-        });
         this.#honoServer = serve({
           fetch: this.app.fetch,
           port: Number.parseInt(this.server.options.port, 10),

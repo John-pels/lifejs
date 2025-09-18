@@ -4,7 +4,7 @@ import { theme } from "@/cli/utils/theme";
 import { formatVersion, type VersionInfo } from "@/cli/utils/version";
 import type { AgentProcess } from "@/server/agent-process/parent";
 import { Divider } from "../components/divider";
-import { DEFAULT_TABS } from ".";
+import { DEFAULT_TABS, getTabName } from "../helpers/tabs";
 
 interface DevSidebarProps {
   version: VersionInfo | null;
@@ -55,7 +55,7 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
                   color={selectedTab === tab ? theme.orange : theme.gray.medium}
                   key={tab}
                 >
-                  {{ server: "Server", compiler: "Compiler", webrtc: "WebRTC" }[tab]}
+                  {getTabName(tab, agentProcesses)}
                 </Text>
               ))}
           </Box>
@@ -77,10 +77,7 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
                     key={agentId}
                     wrap="truncate-end"
                   >
-                    <Text color="gray" italic>
-                      ({agentProcesses.get(agentId)?.name ?? "unknown"}){" "}
-                    </Text>
-                    {agentProcesses.get(agentId)?.id.replace("agent_", "").slice(0, 6) ?? "unknown"}
+                    {getTabName(agentId, agentProcesses)}
                   </Text>
                 ))}
             </Box>

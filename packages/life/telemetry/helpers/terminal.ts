@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import esbuild from "esbuild";
+import esbuild, { type BuildFailure, type PartialMessage } from "esbuild";
 import z from "zod";
 import { isLifeError } from "@/shared/error";
 import type { TelemetryLog } from "@/telemetry/types";
@@ -11,6 +11,7 @@ function formatErrorForTerminal(error: Error | unknown): string {
   let message = "";
   let stack = "";
   let other = "";
+  let processed = false;
 
   // Format LifeError
   if (isLifeError(error)) {
@@ -24,6 +25,7 @@ function formatErrorForTerminal(error: Error | unknown): string {
     if (error.code === "Unknown" && error.error) {
       other += formatErrorForTerminal(error.error);
     }
+    processed = true;
   }
 
   // Format ZodError
@@ -33,6 +35,7 @@ function formatErrorForTerminal(error: Error | unknown): string {
     stack = error.stack
       ? (error.stack.split("at new ZodError")?.[1]?.split("\n").slice(2).join("\n") ?? "")
       : "";
+    processed = true;
   }
 
   // Format ESBuild errors
@@ -44,18 +47,21 @@ function formatErrorForTerminal(error: Error | unknown): string {
         text: z.string().optional(),
       }),
     );
-    const { success, data } = errorsSchema.safeParse(error.errors);
+    const { success } = errorsSchema.safeParse(error.errors);
     if (success) {
+      const formatEsbuildMessage = (msg: PartialMessage) => {
+        return (
+          esbuild
+            .formatMessagesSync([msg], { kind: "error", color: true })?.[0]
+            ?.replace("\x1B[31m✘ \x1B[41;31m[\x1B[41;97mERROR\x1B[41;31m]\x1B[0m \x1B[1m", "")
+            ?.trim() ?? ""
+        );
+      };
       try {
-        const messages = esbuild.formatMessagesSync(data, { kind: "error", color: true });
-        const formatted = messages
-          .map((m) =>
-            m.replace("\x1B[31m✘ \x1B[41;31m[\x1B[41;97mERROR\x1B[41;31m]\x1B[0m \x1B[1m", ""),
-          )
-          .join("\n\n");
-        code = "Build Error";
-        message = `\n\n${formatted}`;
-        stack = error.stack ?? "";
+        const esbuildError = error as BuildFailure;
+        const formattedMessages = esbuildError.errors.map(formatEsbuildMessage);
+        message = `Build Error: ${formattedMessages.join("\n\n")}`;
+        processed = true;
       } catch (_) {
         /* Ignore, that wasn't an ESBuild error */
       }
@@ -63,7 +69,7 @@ function formatErrorForTerminal(error: Error | unknown): string {
   }
 
   // Format other errors
-  else if (error instanceof Error) {
+  if (!processed && error instanceof Error) {
     // Try to infer the code
     if ("name" in error && typeof error.name === "string") code = error.name;
     else if ("code" in error && typeof error.code === "string") code = error.code;

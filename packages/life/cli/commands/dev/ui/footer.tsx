@@ -1,21 +1,36 @@
+import chalk from "chalk";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
+import type { AgentProcess } from "@/server/agent-process/parent";
+import { getTabName } from "../helpers/tabs";
 
 interface DevFooterProps {
   debugModeEnabled: boolean;
+  selectedTab: string;
+  agentProcesses: Map<string, AgentProcess>;
 }
 
-export const DevFooter: FC<DevFooterProps> = ({ debugModeEnabled }) => {
+export const DevFooter: FC<DevFooterProps> = ({
+  debugModeEnabled,
+  selectedTab,
+  agentProcesses,
+}) => {
   return (
-    <>
+    <Box flexDirection="column" width="100%">
+      {debugModeEnabled && (
+        <Box alignItems="center" justifyContent="flex-end" marginTop={5} width="100%">
+          <Box borderColor={"gray"} borderStyle={"round"} paddingX={1}>
+            <Text>Current Tab: {chalk.bold(getTabName(selectedTab, agentProcesses))}</Text>
+          </Box>
+        </Box>
+      )}
       {debugModeEnabled && (
         <Box
           alignItems="center"
           borderColor={theme.orange}
           borderStyle="doubleSingle"
           justifyContent="center"
-          marginTop={5}
           paddingX={2}
           paddingY={1}
           width="100%"
@@ -44,7 +59,7 @@ export const DevFooter: FC<DevFooterProps> = ({ debugModeEnabled }) => {
           <Text bold color={theme.orange}>
             ↑/↓
           </Text>
-          : Sidebar options
+          : Switch tabs
         </Text>
         <Text color="gray">
           <Text bold color={theme.orange}>
@@ -59,6 +74,6 @@ export const DevFooter: FC<DevFooterProps> = ({ debugModeEnabled }) => {
           : Quit
         </Text>
       </Box>
-    </>
+    </Box>
   );
 };
