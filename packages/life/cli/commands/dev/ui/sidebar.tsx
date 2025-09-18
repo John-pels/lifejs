@@ -19,8 +19,8 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
       borderColor="gray"
       borderStyle="round"
       height="100%"
-      minWidth={35}
-      overflow="hidden"
+      minWidth={38}
+      // overflow="hidden"
       width="25%"
     >
       <Box flexDirection="column" gap={1} width="100%">
@@ -29,9 +29,8 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
           <Box
             flexDirection="row"
             justifyContent="space-between"
-            marginRight={version?.hasUpdate ? -1 : 0}
-            paddingLeft={version?.hasUpdate ? 0 : 1}
-            paddingRight={version?.hasUpdate ? 0 : 0.5}
+            paddingLeft={1}
+            paddingRight={0.5}
             width="100%"
           >
             <Text color={theme.gray.medium}>
@@ -40,7 +39,7 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
                 Dev
               </Text>
             </Text>
-            <Text>{version ? formatVersion(version).output : "..."}</Text>
+            <Text>{version ? formatVersion(version).output : ""}</Text>
           </Box>
           <Divider color="gray" width="100%" />
         </Box>

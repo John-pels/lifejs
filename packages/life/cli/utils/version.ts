@@ -32,9 +32,9 @@ export async function getVersion(): Promise<VersionInfo> {
 
 export function formatVersion(versionInfo: VersionInfo) {
   const hasUpdate = versionInfo.hasUpdate && versionInfo.latest;
-  const raw = hasUpdate ? `${versionInfo.current} (⬆ ${versionInfo.latest})` : versionInfo.current;
+  const raw = hasUpdate ? `${versionInfo.current} (↑ ${versionInfo.latest})` : versionInfo.current;
   const output = hasUpdate
-    ? `${themeChalk.gray.medium(versionInfo.current)} (${chalk.green(chalk.bold(`⬆ ${versionInfo.latest}`))})`
+    ? `${themeChalk.gray.medium(versionInfo.current)} ${chalk.green(chalk.bold(`(new ${versionInfo.latest})`))}`
     : themeChalk.gray.medium(versionInfo.current);
   return { raw, output };
 }
