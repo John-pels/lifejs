@@ -65,13 +65,18 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
   const compiler = useRef<LifeCompiler | null>(null);
   const livekitProcess = useRef<ChildProcess | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [initLogs, setInitLogs] = useState<string[]>([]);
   const [agentProcesses, setAgentProcesses] = useState<Map<string, AgentProcess>>(new Map());
 
-  const [copyMode, setCopyMode] = useState(false);
+  const [debugModeEnabled, setDebugModeEnabled] = useState(false);
   const [tabs, setTabs] = useState<string[]>(DEFAULT_TABS);
   const [selectedTab, setSelectedTab] = useState("server");
   const [logs, setLogs] = useState<Record<string, string[]>>({
+    server: [],
+    compiler: [],
+    webrtc: [],
+  });
+  const [debugLogs, setDebugLogs] = useState<Record<string, string[]>>({
     server: [],
     compiler: [],
     webrtc: [],
@@ -95,7 +100,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
         });
         if (output) {
           const lines = cleanStdData(output);
-          setDebugLogs((prev) => [...prev, ...lines]);
+          setInitLogs((prev) => [...prev, ...lines]);
         }
         return { success: true, output: output.toString("utf-8") };
       } catch (error) {
@@ -105,7 +110,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
           const execError = error as Error & { stderr?: Buffer };
           errorMessage = execError.stderr?.toString("utf-8") || error.message || "Command failed";
         }
-        setDebugLogs((prev) => [...prev, `Error: ${errorMessage}`]);
+        setInitLogs((prev) => [...prev, `Error: ${errorMessage}`]);
         return { success: false, error: errorMessage };
       }
     };
@@ -134,7 +139,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       // - MacOS
       if (process.platform === "darwin") {
-        setDebugLogs((prev) => [...prev, "Running: brew update && brew install livekit"]);
+        setInitLogs((prev) => [...prev, "Running: brew update && brew install livekit"]);
         const result = await executeWithLogging("brew update && brew install livekit");
         if (!result.success) {
           return await initError(
@@ -144,7 +149,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       }
       // - Linux
       else if (process.platform === "linux") {
-        setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
+        setInitLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
         const result = await executeWithLogging("curl -sSL https://get.livekit.io | bash");
         if (!result.success) {
           return await initError(
@@ -180,7 +185,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       // - MacOS
       if (process.platform === "darwin") {
-        setDebugLogs((prev) => [...prev, "Running: brew update && brew upgrade livekit"]);
+        setInitLogs((prev) => [...prev, "Running: brew update && brew upgrade livekit"]);
         const result = await executeWithLogging("brew update && brew upgrade livekit");
         if (!result.success) {
           return await initError(
@@ -190,7 +195,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       }
       // - Linux
       else if (process.platform === "linux") {
-        setDebugLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
+        setInitLogs((prev) => [...prev, "Running: curl -sSL https://get.livekit.io | bash"]);
         const result = await executeWithLogging("curl -sSL https://get.livekit.io | bash");
         if (!result.success) {
           return await initError(
@@ -242,10 +247,26 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     };
 
     livekitServer.stdout?.on("data", (data) => {
-      logInTab("webrtc", cleanLivekitLogs(cleanStdData(data)));
+      const formattedLog = cleanLivekitLogs(cleanStdData(data));
+      setDebugLogs((prev) => ({
+        ...prev,
+        webrtc: [...(prev.webrtc ?? []), ...formattedLog],
+      }));
+      setLogs((prev) => ({
+        ...prev,
+        webrtc: [...(prev.webrtc ?? []), ...formattedLog],
+      }));
     });
     livekitServer.stderr?.on("data", (data) => {
-      logInTab("webrtc", cleanLivekitLogs(cleanStdData(data)));
+      const formattedLog = cleanLivekitLogs(cleanStdData(data));
+      setDebugLogs((prev) => ({
+        ...prev,
+        webrtc: [...(prev.webrtc ?? []), ...formattedLog],
+      }));
+      setLogs((prev) => ({
+        ...prev,
+        webrtc: [...(prev.webrtc ?? []), ...formattedLog],
+      }));
     });
     setLoadingProgress(40);
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -281,18 +302,28 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     // Consume compiler telemetry logs
     newCompiler.telemetry.registerConsumer({
       async start(queue) {
-        for await (const item of queue) {
-          if (item.type !== "log") continue;
+        for await (const signal of queue) {
+          if (signal.type !== "log") continue;
+
+          // Format the log
+          const formattedLog = formatLogForTerminal(signal);
+
+          // Push any log to debug logs
+          setDebugLogs((prev) => ({
+            ...prev,
+            compiler: [...(prev.compiler ?? []), formattedLog],
+          }));
 
           // Ignore logs lower than the requested log level
-          if (logLevelPriority(item.level) < logLevelPriority(options.debug ? "debug" : "info"))
-            continue;
-
-          // Format and record the logs
-          setLogs((prev) => ({
-            ...prev,
-            compiler: [...(prev.compiler ?? []), formatLogForTerminal(item)],
-          }));
+          if (
+            logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")
+          ) {
+            // Format and record the logs
+            setLogs((prev) => ({
+              ...prev,
+              compiler: [...(prev.compiler ?? []), formattedLog],
+            }));
+          }
         }
       },
     });
@@ -322,18 +353,28 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     // Consume server telemetry logs
     newServer.telemetry.registerConsumer({
       async start(queue) {
-        for await (const item of queue) {
-          if (item.type !== "log") continue;
+        for await (const signal of queue) {
+          if (signal.type !== "log") continue;
+
+          // Format the log
+          const formattedLog = formatLogForTerminal(signal);
+
+          // Push any log to debug logs
+          setDebugLogs((prev) => ({
+            ...prev,
+            server: [...(prev.server ?? []), formattedLog],
+          }));
 
           // Ignore logs lower than the requested log level
-          if (logLevelPriority(item.level) < logLevelPriority(options.debug ? "debug" : "info"))
-            continue;
-
-          // Format and record the logs
-          setLogs((prev) => ({
-            ...prev,
-            server: [...(prev.server ?? []), formatLogForTerminal(item)],
-          }));
+          if (
+            logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")
+          ) {
+            // Format and record the logs
+            setLogs((prev) => ({
+              ...prev,
+              server: [...(prev.server ?? []), formattedLog],
+            }));
+          }
         }
       },
     });
@@ -364,7 +405,7 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     }, 200);
 
     // Reset debug logs
-    setDebugLogs([]);
+    setInitLogs([]);
   }
 
   async function cleanup() {
@@ -382,14 +423,6 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     };
   }, []);
 
-  // Helper to log in a tab
-  const logInTab = (tabId: string, message: string | string[]) => {
-    setLogs((prev) => ({
-      ...prev,
-      [tabId]: [...(prev[tabId] ?? []), ...(Array.isArray(message) ? message : [message])],
-    }));
-  };
-
   // Add keyboard navigation
   useInput((input, key) => {
     const currentIndex = tabs.indexOf(selectedTab);
@@ -399,8 +432,8 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
     } else if (key.downArrow) {
       const newIndex = (currentIndex + 1) % tabs.length;
       setSelectedTab(tabs[newIndex] || "server");
-    } else if (input.toLowerCase() === "c") {
-      setCopyMode((prev) => !prev);
+    } else if (input.toLowerCase() === "d") {
+      setDebugModeEnabled((prev) => !prev);
     } else if (input.toLowerCase() === "q") {
       cleanup().then(() => {
         process.exit(0);
@@ -439,28 +472,55 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
       process.onChildTelemetrySignal((signal) => {
         if (signal.type !== "log") return;
 
-        // Ignore logs lower than the requested log level
-        if (logLevelPriority(signal.level) < logLevelPriority(options.debug ? "debug" : "info"))
-          return;
+        // Format the log
+        const formattedLog = formatLogForTerminal(signal);
 
-        // Format and record the logs
-        logInTab(process.id, formatLogForTerminal(signal));
+        // Push any log to debug logs
+        setDebugLogs((prev) => ({
+          ...prev,
+          [process.id]: [...(prev[process.id] ?? []), formattedLog],
+        }));
+
+        // Ignore logs lower than the requested log level
+        if (logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")) {
+          // Format and record the logs
+          setLogs((prev) => ({
+            ...prev,
+            [process.id]: [...(prev[process.id] ?? []), formattedLog],
+          }));
+        }
       });
 
       // STDOUT
       process.nodeProcess?.stdout?.on("data", (newOutput: Buffer) => {
-        logInTab(process.id, cleanStdData(newOutput));
+        const formattedLog = cleanStdData(newOutput);
+        setDebugLogs((prev) => ({
+          ...prev,
+          [process.id]: [...(prev[process.id] ?? []), ...formattedLog],
+        }));
+        setLogs((prev) => ({
+          ...prev,
+          [process.id]: [...(prev[process.id] ?? []), ...formattedLog],
+        }));
       });
 
       // STDERR
       process.nodeProcess?.stderr?.on("data", (newOutput: Buffer) => {
-        logInTab(process.id, cleanStdData(newOutput));
+        const formattedLog = cleanStdData(newOutput);
+        setDebugLogs((prev) => ({
+          ...prev,
+          [process.id]: [...(prev[process.id] ?? []), ...formattedLog],
+        }));
+        setLogs((prev) => ({
+          ...prev,
+          [process.id]: [...(prev[process.id] ?? []), ...formattedLog],
+        }));
       });
     }
   }, [agentProcesses]);
 
-  // Enter fullscreen mode if not in copy mode
-  const Container = copyMode || loadingError ? Box : FullScreenBox;
+  // Enter fullscreen mode if not in debug mode
+  const Container = debugModeEnabled || loadingError ? Box : FullScreenBox;
 
   return (
     <ThemeProvider theme={customInkUITheme}>
@@ -477,10 +537,10 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
 
         {/* Main */}
         {loadingProgress >= 100 && (
-          <ConditionalMouseProvider enabled={!copyMode}>
+          <ConditionalMouseProvider enabled={!debugModeEnabled}>
             <Box flexDirection="column" height={"100%"} width="100%">
               <Box flexGrow={1} gap={1} width="100%">
-                {!copyMode && server && (
+                {!debugModeEnabled && server && (
                   <DevSidebar
                     agentProcesses={agentProcesses}
                     selectedTab={selectedTab}
@@ -488,26 +548,31 @@ export const DevUI = ({ options }: { options: DevOptions }) => {
                     version={version}
                   />
                 )}
-                <DevContent copyMode={copyMode} logs={logs} selectedTab={selectedTab} />
+                <DevContent
+                  debugLogs={debugLogs}
+                  debugModeEnabled={debugModeEnabled}
+                  logs={logs}
+                  selectedTab={selectedTab}
+                />
               </Box>
-              <DevFooter copyMode={copyMode} />
+              <DevFooter debugModeEnabled={debugModeEnabled} />
             </Box>
           </ConditionalMouseProvider>
         )}
       </Container>
       {loadingError && options.debug && (
         <Box flexDirection="column" padding={1}>
-          {debugLogs.length > 0 && (
+          {initLogs.length > 0 && (
             <>
               <Text>Debug logs:</Text>
               <Divider color={theme.orange} minWidth={"100%"} width="100%" />
-              {debugLogs.map((log, i) => (
+              {initLogs.map((log, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: expected
                 <Text key={`loading-log-${i}`}>{log}</Text>
               ))}
             </>
           )}
-          {debugLogs.length === 0 && <Text>No debug logs.</Text>}
+          {initLogs.length === 0 && <Text>No debug logs.</Text>}
         </Box>
       )}
     </ThemeProvider>

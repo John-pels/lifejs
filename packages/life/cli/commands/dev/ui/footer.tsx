@@ -3,13 +3,13 @@ import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
 
 interface DevFooterProps {
-  copyMode: boolean;
+  debugModeEnabled: boolean;
 }
 
-export const DevFooter: FC<DevFooterProps> = ({ copyMode }) => {
+export const DevFooter: FC<DevFooterProps> = ({ debugModeEnabled }) => {
   return (
     <>
-      {copyMode && (
+      {debugModeEnabled && (
         <Box
           alignItems="center"
           borderColor={theme.orange}
@@ -21,8 +21,8 @@ export const DevFooter: FC<DevFooterProps> = ({ copyMode }) => {
           width="100%"
         >
           <Text>
-            You entered <Text color={theme.orange}>copy mode</Text>. UI controls are hidden so you
-            can freely copy your logs. Press <Text color={theme.orange}>c</Text> again to exit copy
+            You entered <Text color={theme.orange}>debug mode</Text>. UI controls are hidden so you
+            can freely copy your logs. Press <Text color={theme.orange}>d</Text> again to exit debug
             mode.
           </Text>
         </Box>
@@ -33,7 +33,7 @@ export const DevFooter: FC<DevFooterProps> = ({ copyMode }) => {
         borderLeft={false}
         borderRight={false}
         borderStyle="round"
-        borderTop={copyMode}
+        borderTop={debugModeEnabled}
         borderTopColor="gray"
         flexShrink={0}
         justifyContent="space-between"
@@ -48,9 +48,9 @@ export const DevFooter: FC<DevFooterProps> = ({ copyMode }) => {
         </Text>
         <Text color="gray">
           <Text bold color={theme.orange}>
-            c
+            d
           </Text>
-          : {copyMode ? "Exit copy Mode" : "Copy mode"}
+          : {debugModeEnabled ? "Exit debug mode" : "Debug mode"}
         </Text>
         <Text color="gray">
           <Text bold color={theme.orange}>
