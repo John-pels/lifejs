@@ -16,24 +16,27 @@ import { formatVersion, getVersion } from "./utils/version";
 async function main() {
   // Stream formatted telemetry logs to the terminal (except for dev command without --no-tui flag)
   let logLevel = process.argv.includes("--debug") ? "debug" : undefined;
+  const isDevCommand = process.argv.includes("dev") && !process.argv.includes("--no-tui");
   logLevel = logLevel ?? (process.env.LOG_LEVEL as TelemetryLogLevel) ?? "info";
-  TelemetryClient.registerGlobalConsumer({
-    async start(queue) {
-      for await (const item of queue) {
-        if (item.type !== "log") continue;
-        // Ignore logs lower than the requested log level
-        if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel))
-          continue;
+  if (!isDevCommand) {
+    TelemetryClient.registerGlobalConsumer({
+      async start(queue) {
+        for await (const item of queue) {
+          if (item.type !== "log") continue;
+          // Ignore logs lower than the requested log level
+          if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel))
+            continue;
 
-        // Format and print the log
-        try {
-          console.log(formatLogForTerminal(item));
-        } catch {
-          console.log(item.message);
+          // Format and print the log
+          try {
+            console.log(formatLogForTerminal(item));
+          } catch {
+            console.log(item.message);
+          }
         }
-      }
-    },
-  });
+      },
+    });
+  }
 
   // Set up cleanup function to run before process exits
   let cleanupDone = false;
