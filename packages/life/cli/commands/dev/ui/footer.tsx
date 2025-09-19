@@ -3,7 +3,7 @@ import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
 import type { AgentProcess } from "@/server/agent-process/parent";
-import { getTabName } from "../helpers/tabs";
+import { getTabName } from "../lib/tabs";
 
 interface DevFooterProps {
   debugModeEnabled: boolean;

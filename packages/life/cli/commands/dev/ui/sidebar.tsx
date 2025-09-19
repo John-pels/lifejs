@@ -4,7 +4,7 @@ import { theme } from "@/cli/utils/theme";
 import { formatVersion, type VersionInfo } from "@/cli/utils/version";
 import type { AgentProcess } from "@/server/agent-process/parent";
 import { Divider } from "../components/divider";
-import { DEFAULT_TABS, getTabName } from "../helpers/tabs";
+import { DEFAULT_TABS, getTabName } from "../lib/tabs";
 
 interface DevSidebarProps {
   version: VersionInfo | null;

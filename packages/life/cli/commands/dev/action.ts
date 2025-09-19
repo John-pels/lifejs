@@ -19,7 +19,7 @@ export const executeDev = (telemetry: TelemetryClient, options: DevOptions) => {
     loadEnvVars(options.root);
 
     // Render the terminal UI
-    render(React.createElement(DevUI, { options }), {
+    render(React.createElement(DevUI, { options, telemetry }), {
       exitOnCtrlC: true,
     });
   } catch (error) {

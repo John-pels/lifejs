@@ -80,6 +80,8 @@ function formatErrorForTerminal(error: Error | unknown): string {
 
     // Try to infer the stack
     if ("stack" in error && typeof error.stack === "string") stack = error.stack;
+    if (error.stack?.trim().includes(error.message.trim()))
+      stack = stack.split("\n").slice(1).join("\n");
 
     // If no code, message, or stack is present, use the default
     if (!code) code = "Unknown Error";

@@ -12,6 +12,7 @@ import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
+import { getDependenciesMap } from "./helpers/dependencies-map";
 import { type CompilerOptions, compilerOptionsSchema } from "./options";
 
 const EXCLUDED_DEFAULTS = ["**/node_modules/**", "**/build/**", "**/generated/**", "**/dist/**"];
@@ -210,7 +211,16 @@ export class LifeCompiler {
 
       await Promise.all(
         allEntryPaths.map(async (entryPath) => {
-          const dependencies = await this.getPathDependencies(entryPath);
+          const absEntryPath = this.ensureAbsolute(entryPath);
+          const [error, dependencies] = await getDependenciesMap(absEntryPath);
+          if (error) {
+            this.telemetry.log.error({
+              message: "Obtaining entry path dependencies failed.",
+              error,
+              attributes: { entryPath },
+            });
+            return;
+          }
           // Store entryPath -> dependencies mapping
           this.entryPaths.dependenciesMap.set(entryPath, new Set(dependencies));
           // Collect all unique dependencies
@@ -268,7 +278,16 @@ export class LifeCompiler {
 
         // Refresh the dependencies for this entry path
         const refreshEntryPathDependencies = async (entryPath: string) => {
-          const dependencies = await this.getPathDependencies(entryPath);
+          const absEntryPath = this.ensureAbsolute(entryPath);
+          const [error, dependencies] = await getDependenciesMap(absEntryPath);
+          if (error) {
+            this.telemetry.log.error({
+              message: "Obtaining entry path dependencies failed.",
+              error,
+              attributes: { entryPath },
+            });
+            return;
+          }
           // Store the dependencies for this entry path
           this.entryPaths.dependenciesMap.set(entryPath, new Set(dependencies));
           // Hash all the dependencies
@@ -964,39 +983,6 @@ export default {
   async hashFile(filePath: string) {
     const content = await readFile(filePath, "utf-8");
     return createHash("md5").update(content).digest("hex");
-  }
-
-  async getPathDependencies(entryPath: string) {
-    const absPath = this.ensureAbsolute(entryPath);
-    return await this.telemetry.trace("getPathDependencies()", async (span) => {
-      span.setAttributes({ entryPath, absPath });
-      try {
-        const result = await esbuild.build({
-          entryPoints: [entryPath],
-          outdir: this.options.outputDirectory,
-          bundle: true,
-          format: "esm",
-          packages: "external",
-          jsx: "automatic",
-          write: false,
-          logLevel: "silent",
-          metafile: true,
-          loader: {
-            ".node": "file",
-          },
-        });
-        return Object.keys(result.metafile?.inputs ?? {})
-          .map((p) => this.ensureAbsolute(p))
-          .filter((p) => p !== absPath);
-      } catch (error) {
-        span.log.error({
-          message: "Obtaining agent file inputs failed.",
-          error,
-          attributes: { isEsbuild: true },
-        });
-        return [];
-      }
-    });
   }
 
   async findNodeModules(startPath: string) {
