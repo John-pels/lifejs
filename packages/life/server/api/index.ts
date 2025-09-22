@@ -230,7 +230,7 @@ export class LifeApi {
         const status = error?.httpEquivalent ?? 500;
         let statusChalk = chalk.gray;
         if (status >= 500) statusChalk = chalk.red;
-        else if (status >= 400) statusChalk = chalk.yellow;
+        else if (status >= 400) statusChalk = chalk.hex('#FFA500');
         else if (status >= 300) statusChalk = chalk.cyan;
         else if (status >= 200) statusChalk = chalk.green;
 

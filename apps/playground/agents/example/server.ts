@@ -16,7 +16,7 @@ export default defineAgent("example")
     items: ["item1", "item3"] as const,
   })
   .generation({
-    collections: ["collection1", "collection200"],
+    collections: ["collection1", "collection2"],
     tools: [
       {
         name: "get-weather",

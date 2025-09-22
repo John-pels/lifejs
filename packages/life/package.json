@@ -107,6 +107,7 @@
     "globby": "^14.1.0",
     "hono": "^4.9.7",
     "ink": "^6.3.0",
+    "ink-link": "^5.0.0",
     "livekit-client": "^2.15.7",
     "livekit-server-sdk": "^2.13.3",
     "nanostores": "^1.0.1",

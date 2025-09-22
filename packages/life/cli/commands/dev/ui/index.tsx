@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { ThemeProvider } from "@inkjs/ui";
 import chalk from "chalk";
 import { Box, Text, useInput } from "ink";
+import Link from "ink-link";
 import { useEffect, useRef, useState } from "react";
 import { getVersion, type VersionInfo } from "@/cli/utils/version";
 import { LifeCompiler } from "@/compiler";
@@ -35,10 +36,14 @@ export const DevUI = ({
   telemetry: TelemetryClient;
 }) => {
   // Track the progress and status of the init() task
-  // If a fatal error is set, the app will clean up, show all logs with an error title, and exit
-  const [initProgress, setInitProgress] = useState(1);
+  // If an init error is set, the app will clean up, show all logs with an error title, and exit
+  const [initProgress, setInitProgress] = useState(0);
   const [initStatus, setInitStatus] = useState<string | null>("Initializing...");
   const [initError, setInitError] = useState<string | null>(null);
+
+  // Track the progress and status of the exit() task
+  const [exitProgress, setExitProgress] = useState(0);
+  const [exitStatus, setExitStatus] = useState<string | null>("Exiting...");
 
   // When debug mode is enabled, UI controls are hidden and debug logs are shown
   const [debugModeEnabled, setDebugModeEnabled] = useState(false);
@@ -73,12 +78,31 @@ export const DevUI = ({
   const intervals = useRef<NodeJS.Timeout[]>([]);
 
   // Cleanup function, used on process exit
-  async function cleanup() {
+  async function exit() {
+    setExitStatus("Stopping server...");
     await server.current?.stop();
+    setExitProgress(30);
+
+    setExitStatus("Stopping compiler...");
     await compiler.current?.stop();
+    setExitProgress(60);
+
+    setExitStatus("Stopping LiveKit server...");
     livekitProcess.current?.kill();
-    for (const interval of intervals.current) clearInterval(interval);
+    setExitProgress(90);
+    setExitStatus("Exiting...");
+
+    // Done
+    setExitStatus("Done!");
+    setTimeout(() => {
+      setExitProgress(100);
+    }, 200);
   }
+
+  // Exit the app when the exit progress is 100
+  useEffect(() => {
+    if (exitProgress === 100) process.exit(initError ? 1 : 0);
+  }, [exitProgress]);
 
   // Helper function to execute initialization commands and capture output
   const initCommand = (command: string) => {
@@ -415,7 +439,6 @@ export const DevUI = ({
           projectDirectory: options.root,
           outputDirectory: ".life",
           watch: true,
-          optimize: true,
         });
         compiler.current = newCompiler;
 
@@ -574,12 +597,10 @@ export const DevUI = ({
       if (!error) return;
       telemetry.log.error({ error });
       setInitError(error.message);
-      await cleanup();
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      process.exit(1);
+      await exit();
     });
     return () => {
-      cleanup();
+      exit();
     };
   }, []);
 
@@ -594,10 +615,8 @@ export const DevUI = ({
       setSelectedTab(tabs[newIndex] || "server");
     } else if (input.toLowerCase() === "d") {
       setDebugModeEnabled((prev) => !prev);
-    } else if (input.toLowerCase() === "q") {
-      cleanup().then(() => {
-        process.exit(0);
-      });
+    } else if (input.toLowerCase() === "q" || (key.ctrl && input === "c")) {
+      exit();
     }
   });
 
@@ -683,29 +702,82 @@ export const DevUI = ({
   }, [agentProcesses]);
 
   // Enter fullscreen mode if not in debug mode
-  const Container = debugModeEnabled || initError ? Box : FullScreenBox;
+  const isFullscreen = !debugModeEnabled && exitProgress !== 100;
+  const Container = isFullscreen ? FullScreenBox : Box;
 
   return (
     <ThemeProvider theme={customInkUITheme}>
       <Container
         flexDirection="column"
         marginRight={debugModeEnabled ? 0 : 5}
-        minHeight={(process.stdout.rows ?? 24) - 1}
+        minHeight={isFullscreen ? (process.stdout.rows ?? 24) - 1 : undefined}
         paddingX={1}
         width="100%"
       >
-        {/* Loader */}
-        {initProgress < 100 && (
-          <DevLoader
-            loadingError={initError}
-            loadingProgress={initProgress}
-            loadingStatus={initStatus}
-            options={options}
-          />
+        {/* Init Loader */}
+        {initProgress < 100 && exitProgress === 0 && (
+          <DevLoader loadingProgress={initProgress} loadingStatus={initStatus} />
+        )}
+
+        {/* Exit Loader */}
+        {exitProgress > 0 && exitProgress < 100 && (
+          <DevLoader loadingProgress={exitProgress} loadingStatus={exitStatus} />
+        )}
+
+        {/* Successful exit */}
+        {exitProgress === 100 && !initError && (
+          <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
+            <Box
+              alignItems="center"
+              borderColor="gray"
+              borderStyle="round"
+              justifyContent="center"
+              paddingX={1}
+            >
+              <Text>Stopped successfully. Enjoy {chalk.hex(theme.orange)("life")}!</Text>
+            </Box>
+            <Text>
+              <Link url="https://lifejs.org/docs">Docs</Link>
+              {"    "}
+              <Link url="https://github.com/lifejs/lifejs/issues">Report an issue</Link>
+              {"    "}
+              <Link url="https://discord.gg/U5wHjT5Ryj">Get support</Link>
+            </Text>
+            {!options.debug && (
+              <>
+                <Divider borderDimColor={true} width={40} />
+                <Text dimColor={true}>Run with --debug to see logs.</Text>
+              </>
+            )}
+          </Box>
+        )}
+
+        {/* Failure exit */}
+        {exitProgress === 100 && initError && (
+          <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
+            <Box
+              alignItems="center"
+              borderColor="red"
+              borderStyle="round"
+              justifyContent="center"
+              paddingX={1}
+            >
+              <Text color={"red"}>Error starting the Life.js development server</Text>
+            </Box>
+            <Text color={"red"}>{initError}</Text>
+            {!options.debug && (
+              <>
+                <Divider borderDimColor={true} color={"red"} width={40} />
+                <Text color={"red"} dimColor={true}>
+                  Run with --debug to see logs.
+                </Text>
+              </>
+            )}
+          </Box>
         )}
 
         {/* Main */}
-        {initProgress >= 100 && (
+        {initProgress === 100 && exitProgress === 0 && (
           <ConditionalMouseProvider enabled={!debugModeEnabled}>
             <Box flexDirection="column" height={"100%"} width="100%">
               <Box flexGrow={1} gap={1} width="100%">
@@ -733,7 +805,8 @@ export const DevUI = ({
           </ConditionalMouseProvider>
         )}
       </Container>
-      {initError && options.debug && (
+      {/* Debug logs */}
+      {exitProgress === 100 && initError && options.debug && (
         <Box flexDirection="column" padding={1}>
           {allLogs.length > 0 && (
             <>

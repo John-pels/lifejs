@@ -24,7 +24,6 @@ export const telemetryNodeScopesDefinition = defineScopes({
     displayName: "Compiler",
     requiredAttributesSchema: z.object({
       watch: z.boolean(),
-      optimize: z.boolean(),
     }),
   },
   cli: {

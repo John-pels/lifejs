@@ -24,7 +24,8 @@
         "useBlockStatements": "off",
         "noUselessElse": "off",
         "noMagicNumbers": "off",
-        "useReadonlyClassProperties": "warn"
+        "useReadonlyClassProperties": "warn",
+        "noParameterAssign": "off"
       },
       "suspicious": {
         "noConsole": "off",

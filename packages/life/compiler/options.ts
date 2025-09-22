@@ -4,7 +4,7 @@ export const compilerOptionsSchema = z.object({
   projectDirectory: z.string(),
   outputDirectory: z.string().prefault(".life"),
   watch: z.boolean().prefault(false),
-  optimize: z.boolean().prefault(true),
+  stopOnError: z.boolean().prefault(true),
 });
 
 export type CompilerOptions<T extends "input" | "output"> = T extends "input"

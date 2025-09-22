@@ -2,7 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { type ParseResult, parseAsync } from "oxc-parser";
+import { type Node, type ParseResult, parseAsync } from "oxc-parser";
 import { walk } from "oxc-walker";
 import resolve from "resolve";
 import * as op from "@/shared/operation";
@@ -22,7 +22,7 @@ const resolveLocalFrom = (spec: string, basedir: string): string | null => {
     const resolved = resolve.sync(spec, {
       basedir,
       extensions: EXTENSIONS,
-      preserveSymlinks: false,
+      preserveSymlinks: true,
       includeCoreModules: false,
     });
     // Only return paths that are not in node_modules (i.e., local dependencies)
@@ -32,18 +32,53 @@ const resolveLocalFrom = (spec: string, basedir: string): string | null => {
   }
 };
 
+const isTypeOnlyImport = (node: Node): boolean => {
+  // Handle `import type { ... } from '...'` or `import type * as ... from '...'`
+  if (node.type === "ImportDeclaration" && node.importKind === "type") {
+    return true;
+  }
+
+  // Handle mixed imports like `import { value, type Type } from '...'`
+  if (node.type === "ImportDeclaration" && node.specifiers) {
+    // If there are no specifiers, it's a side effect import (never type-only)
+    if (node.specifiers.length === 0) {
+      return false;
+    }
+
+    // Check if ALL specifiers are type-only
+    const hasValueImports = node.specifiers.some((spec) => {
+      // ImportDefaultSpecifier and ImportNamespaceSpecifier don't have importKind
+      if (spec.type === "ImportDefaultSpecifier" || spec.type === "ImportNamespaceSpecifier") {
+        return true; // These are always value imports
+      }
+      // ImportSpecifier can have importKind: "type" for individual type imports
+      return spec.type === "ImportSpecifier" && spec.importKind !== "type";
+    });
+
+    return !hasValueImports;
+  }
+
+  return false;
+};
+
 /**
  * Return all transitive import dependencies for one or many entry files.
  * Supports TS/TSX/JS/JSX and ESM/CJS. Syntax errors tolerant.
  *
- * @param _entries - The absolute entry path(s) to get the dependencies for.
+ * @param entries - The absolute entry path(s) to get the dependencies for.
+ * @param exclude - Absolute path(s) to exclude from the dependency tree (excludes the file and its entire subtree).
+ * @param skipTypeOnlyDependencies - Whether to exclude TypeScript type-only imports (default: false).
  * @returns An array of absolute paths to the dependencies.
  */
-export const getDependenciesMap = async (_entries: string | string[]) => {
+export const getDependenciesMap = async (
+  entries: string | string[],
+  exclude: string | string[] = [],
+  skipTypeOnlyDependencies = false,
+) => {
   const output = new Set<string>();
 
   // Ensure entries is an array, of clean absolute paths
-  const entriesArray = Array.isArray(_entries) ? _entries : [_entries];
+  const entriesArray = Array.isArray(entries) ? entries : [entries];
   for (const p of entriesArray) {
     if (!path.isAbsolute(p))
       return op.failure({
@@ -51,10 +86,21 @@ export const getDependenciesMap = async (_entries: string | string[]) => {
         message: `Provided entry path must be absolute: ${p}`,
       });
   }
-  const entries = new Set(entriesArray.map((p) => path.resolve(p)));
+  const entriesSet = new Set(entriesArray.map((p) => path.resolve(p)));
+
+  // Ensure exclude is an array, of clean absolute paths
+  const excludeArray = Array.isArray(exclude) ? exclude : [exclude];
+  for (const p of excludeArray) {
+    if (p && !path.isAbsolute(p))
+      return op.failure({
+        code: "Validation",
+        message: `Provided exclude path must be absolute: ${p}`,
+      });
+  }
+  const excludeSet = new Set(excludeArray.filter(Boolean).map((p) => path.resolve(p)));
 
   // Initialize the queue
-  const queue = [...entries];
+  const queue = [...entriesSet];
 
   // Track already visited files
   const visited = new Set<string>();
@@ -64,8 +110,8 @@ export const getDependenciesMap = async (_entries: string | string[]) => {
     const file = queue.pop();
     if (!file) throw new Error("Shouldn't happen");
 
-    // Skip if already visited
-    if (visited.has(file)) continue;
+    // Skip if already visited or excluded
+    if (visited.has(file) || excludeSet.has(file)) continue;
     visited.add(file);
 
     // Read the file content
@@ -93,6 +139,10 @@ export const getDependenciesMap = async (_entries: string | string[]) => {
       enter(node) {
         // import ... from 'x'
         if (node.type === "ImportDeclaration" && node.source?.value) {
+          // Skip type-only imports if skipTypeOnlyDependencies is true
+          if (skipTypeOnlyDependencies && isTypeOnlyImport(node)) {
+            return;
+          }
           specifiers.add(node.source.value);
         }
         // export * from 'x' / export { ... } from 'x'
@@ -100,6 +150,10 @@ export const getDependenciesMap = async (_entries: string | string[]) => {
           (node.type === "ExportAllDeclaration" || node.type === "ExportNamedDeclaration") &&
           node.source?.value
         ) {
+          // Skip type-only exports if skipTypeOnlyDependencies is true
+          if (skipTypeOnlyDependencies && node.exportKind === "type") {
+            return;
+          }
           specifiers.add(node.source.value);
         }
         // import('x')
@@ -137,8 +191,8 @@ export const getDependenciesMap = async (_entries: string | string[]) => {
     const basedir = path.dirname(file);
     for (const spec of specifiers) {
       const resolved = resolveLocalFrom(spec, basedir);
-      if (!resolved) continue;
-      if (!entries.has(resolved)) output.add(resolved);
+      if (!resolved || excludeSet.has(resolved)) continue;
+      if (!entriesSet.has(resolved)) output.add(resolved);
       if (!visited.has(resolved)) queue.push(resolved);
     }
   }

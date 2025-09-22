@@ -17,12 +17,6 @@ export const DevContent: FC<DevContentProps> = ({
   logs,
   debugLogs,
 }) => {
-  const renderLogs = () => {
-    const currentLogs = debugModeEnabled ? debugLogs[selectedTab] || [] : logs[selectedTab] || [];
-    // biome-ignore lint/suspicious/noArrayIndexKey: expected
-    return currentLogs.map((log, index) => <Text key={`${selectedTab}-log-${index}`}>{log}</Text>);
-  };
-
   return (
     <Box
       borderColor={debugModeEnabled ? undefined : "gray"}
@@ -36,10 +30,24 @@ export const DevContent: FC<DevContentProps> = ({
           <Box alignItems="center" flexDirection="column" justifyContent="center" width="100%">
             <Divider color={theme.orange} width="100%" />
           </Box>
-          <Box flexDirection="column">{renderLogs()}</Box>
+          <Box flexDirection="column">
+            {(debugLogs[selectedTab] || []).map((log, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: expected
+              <Text key={`${selectedTab}-log-${index}`} wrap="wrap">
+                {log}
+              </Text>
+            ))}
+          </Box>
         </Box>
       ) : (
-        <ScrollBox key={`${selectedTab}-scroll-box`}>{renderLogs()}</ScrollBox>
+        <ScrollBox flexDirection="column" key={`${selectedTab}-scroll-box`} width={"100%"}>
+          {(logs[selectedTab] || []).map((log, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: expected
+            <Text key={`${selectedTab}-log-${index}`} wrap="wrap">
+              {log}
+            </Text>
+          ))}
+        </ScrollBox>
       )}
     </Box>
   );

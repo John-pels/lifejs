@@ -20,7 +20,7 @@ export const executeDev = (telemetry: TelemetryClient, options: DevOptions) => {
 
     // Render the terminal UI
     render(React.createElement(DevUI, { options, telemetry }), {
-      exitOnCtrlC: true,
+      exitOnCtrlC: false,
     });
   } catch (error) {
     telemetry.log.error({

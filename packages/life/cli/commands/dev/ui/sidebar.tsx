@@ -19,9 +19,9 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
       borderColor="gray"
       borderStyle="round"
       height="100%"
-      minWidth={38}
+      minWidth={37}
       // overflow="hidden"
-      width="25%"
+      width={37}
     >
       <Box flexDirection="column" gap={1} width="100%">
         <Box alignItems="center" flexDirection="column" justifyContent="center" width="100%">

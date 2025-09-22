@@ -155,7 +155,7 @@ export class LifeServer {
         if (!existsSync(buildDir)) {
           return op.failure({
             code: "NotFound",
-            message: `The .life/ build directory not found at: ${buildDir}. Run 'life build' first.`,
+            message: `No .life/ directory found at: ${buildDir}. Run 'life build' first.`,
           });
         }
 
