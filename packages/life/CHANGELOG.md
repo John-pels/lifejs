@@ -1,5 +1,19 @@
 # life
 
+## 0.25.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [7083231](https://github.com/lifejs/lifejs/commit/7083231d7cdf1da2551caf8a88dbfe70e3b7c450) — New syntax-error resilient dependencies map resolver using oxc-parser in the compiler
+- [@LilaRest](https://github.com/LilaRest) in [29e6f30](https://github.com/lifejs/lifejs/commit/29e6f30b3f317746a950375a869459fad6190a9b) — Improved compiler with syntax-error resiliant compilation, isolated compilation paths, and overall better error handling and display in the terminal and `life dev` command
+- [@LilaRest](https://github.com/LilaRest) in [29e6f30](https://github.com/lifejs/lifejs/commit/29e6f30b3f317746a950375a869459fad6190a9b) — Add a proper exit screen to `life dev`
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [4ac6ab5](https://github.com/lifejs/lifejs/commit/4ac6ab56505ca87c045ff4c67aa5a901b8b89fa6) — Disable main CLI logs consumer when running `life dev` with interactive UI
+- [@LilaRest](https://github.com/LilaRest) in [501d6c7](https://github.com/lifejs/lifejs/commit/501d6c7d831a8c40a30e432e78f8140679977539) — A lot of stability and DX improvements in the CLI
+- [@LilaRest](https://github.com/LilaRest) in [7083231](https://github.com/lifejs/lifejs/commit/7083231d7cdf1da2551caf8a88dbfe70e3b7c450) — Improve `life dev` initialization, so on fatal errors all the logs are shown
+
 ## 0.24.0
 
 ### Minor Changes
