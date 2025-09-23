@@ -197,18 +197,16 @@ export class LifeServer {
       try {
         // Get the raw server directory
         const buildDir = join(this.options.projectDirectory, ".life");
-        const rawServerDir = join(buildDir, "server", "raw");
+        const signalDir = join(buildDir, "server", "signal");
 
         // Initialize content hashes for existing agent files to track actual changes
         const { readdirSync } = await import("node:fs");
-        const files = readdirSync(rawServerDir).filter(
-          (file) => file.endsWith(".ts") && file !== "index.ts",
-        );
+        const files = readdirSync(signalDir).filter((file) => file.endsWith(".txt"));
 
         // Read all files in parallel to avoid await-in-loop issue
         await Promise.all(
           files.map(async (file) => {
-            const filePath = join(rawServerDir, file);
+            const filePath = join(signalDir, file);
             try {
               const content = await readFile(filePath, "utf-8");
               const hash = createHash("md5").update(content).digest("hex");
@@ -225,9 +223,9 @@ export class LifeServer {
 
         // Watch for changes to agent build files
         this.watcher = chokidar.watch(".", {
-          cwd: rawServerDir,
+          cwd: signalDir,
           ignoreInitial: true,
-          ignored: ["index.ts", ...EXCLUDED_DEFAULTS],
+          ignored: EXCLUDED_DEFAULTS,
           awaitWriteFinish: {
             stabilityThreshold: 50,
             pollInterval: 5,
@@ -239,7 +237,7 @@ export class LifeServer {
             span.setAttributes({ action, relPath });
 
             try {
-              const absPath = join(rawServerDir, relPath);
+              const absPath = join(signalDir, relPath);
 
               // Only process change events (add/unlink ignored for now)
               if (action !== "change") return;
@@ -254,7 +252,7 @@ export class LifeServer {
               this.#fileHashes.set(absPath, newHash);
 
               // Extract agent name from filename
-              const agentName = basename(relPath, ".ts");
+              const agentName = basename(relPath, ".txt");
 
               span.log.debug({
                 message: `Detected change in agent '${agentName}', restarting affected processes.`,

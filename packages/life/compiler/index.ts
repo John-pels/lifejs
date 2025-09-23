@@ -200,6 +200,7 @@ export class LifeCompiler {
     await Promise.all([
       mkdir(path.join(this.options.outputDirectory, "server", "raw"), { recursive: true }),
       mkdir(path.join(this.options.outputDirectory, "server", "dist"), { recursive: true }),
+      mkdir(path.join(this.options.outputDirectory, "server", "signal"), { recursive: true }),
       mkdir(path.join(this.options.outputDirectory, "client"), { recursive: true }),
     ]);
   }
@@ -325,11 +326,11 @@ export class LifeCompiler {
         if (type === "config") return await this.onAddedConfig(absPath);
         else if (type === "server") {
           const res = await this.onAddedServer(absPath);
-          await emitTimingLogs(false);
+          if (!res?.[0]) await emitTimingLogs(false);
           return res;
         } else if (type === "client") {
           const res = await this.onAddedClient(absPath);
-          await emitTimingLogs(false);
+          if (!res?.[0]) await emitTimingLogs(false);
           return res;
         } else if (type === "dependency")
           return op.failure({
@@ -369,11 +370,11 @@ export class LifeCompiler {
         if (type === "config") return await this.onChangedConfig(absPath);
         else if (type === "server") {
           const res = await this.onChangedServer(absPath);
-          await emitTimingLogs(true);
+          if (!res?.[0]) await emitTimingLogs(true);
           return res;
         } else if (type === "client") {
           const res = await this.onChangedClient(absPath);
-          await emitTimingLogs(true);
+          if (!res?.[0]) await emitTimingLogs(true);
           return res;
         } else if (type === "dependency") return await this.onChangedDependency(absPath);
       }
@@ -623,11 +624,7 @@ export class LifeCompiler {
 
           if (treeHashes.length !== filteredTreeHashes.length) {
             span.log.warn({
-              message:
-                "Some tree files have no hash. Shouldn't happen." +
-                JSON.stringify(Array.from(treeFiles)) +
-                JSON.stringify(treeHashes) +
-                JSON.stringify(filteredTreeHashes),
+              message: "Some tree files have no hash. Shouldn't happen.",
               attributes: { treeFiles },
             });
           }
@@ -657,6 +654,15 @@ export default {
           // 8. Re-bundle the server index
           const [errBundle] = await this.generateServerBundle();
           if (errBundle) return op.failure(errBundle);
+
+          // 9. If everything went well, reflect the new sha in the signal/ folder
+          const signalPath = path.join(
+            this.options.outputDirectory,
+            "server",
+            "signal",
+            `${name}.txt`,
+          );
+          await writeFile(signalPath, sha, "utf-8");
 
           return op.success();
         } catch (error) {

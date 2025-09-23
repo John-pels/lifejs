@@ -726,7 +726,13 @@ export const DevUI = ({
 
         {/* Successful exit */}
         {exitProgress === 100 && !initError && (
-          <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
+          <Box
+            alignItems="center"
+            flexDirection="column"
+            gap={1}
+            justifyContent="center"
+            margin={2}
+          >
             <Box
               alignItems="center"
               borderColor="gray"
@@ -754,7 +760,13 @@ export const DevUI = ({
 
         {/* Failure exit */}
         {exitProgress === 100 && initError && (
-          <Box alignItems="center" flexDirection="column" gap={1} justifyContent="center">
+          <Box
+            alignItems="center"
+            flexDirection="column"
+            gap={1}
+            justifyContent="center"
+            margin={2}
+          >
             <Box
               alignItems="center"
               borderColor="red"
