@@ -1,5 +1,11 @@
 # life
 
+## 0.26.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [8bc2c98](https://github.com/lifejs/lifejs/commit/8bc2c98a8433682c117e50485b120b5d14c551a7) — Prevent server reloading when one of the agent has a compilation error
+
 ## 0.25.0
 
 ### Minor Changes
