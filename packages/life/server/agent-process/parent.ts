@@ -56,9 +56,21 @@ export class AgentProcess {
     return await this.#server.telemetry.trace("AgentProcess.getDefinition()", async (span) => {
       span.setAttributes({ agentId: this.id });
       try {
-        const [error, servers] = await op.attempt(importServerBuild(true));
+        const [error, servers] = await op.attempt(
+          importServerBuild({
+            projectDirectory: this.#server.options.projectDirectory,
+            noCache: true,
+          }),
+        );
         if (error) return op.failure(error);
         const definition = servers?.[this.name as keyof typeof servers]?.definition;
+        if (!definition) {
+          return op.failure({
+            code: "NotFound",
+            message: `Agent '${this.name}' not found.`,
+            isPublic: true,
+          });
+        }
         return op.success(definition);
       } catch (error) {
         return op.failure({ code: "Unknown", error });
@@ -89,6 +101,7 @@ export class AgentProcess {
           return op.failure({
             code: "Conflict",
             message: `Cannot start agent in '${this.status}' state.`,
+            isPublic: true,
           });
         }
 
@@ -103,11 +116,8 @@ export class AgentProcess {
         this.lastTransportRoom = transportRoom;
 
         // Get the agent definition
-        const [errGet, definition] = await this.getDefinition();
+        const [errGet] = await this.getDefinition();
         if (errGet) return op.failure(errGet);
-        if (!definition) {
-          return op.failure({ code: "NotFound", message: `Agent '${this.name}' not found.` });
-        }
 
         // Fork the child process
         const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -115,6 +125,7 @@ export class AgentProcess {
         this.nodeProcess = fork(childPath, [], {
           serialization: "json",
           silent: false,
+          cwd: this.#server.options.projectDirectory,
           // Disable anonymous telemetry in the child process (managed by the parent)
           env: { LIFE_TELEMETRY_DISABLED: "true" },
         });
@@ -209,11 +220,7 @@ export class AgentProcess {
         this.lastStartedAt = undefined;
         this.lastSeenAt = undefined;
         this.#readyResolve = null;
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to start agent '${this.name}'.`,
-          error,
-        });
+        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -228,6 +235,7 @@ export class AgentProcess {
           return op.failure({
             code: "Conflict",
             message: `Cannot stop agent in '${this.status}' state.`,
+            isPublic: true,
           });
         }
 
@@ -295,11 +303,7 @@ export class AgentProcess {
         this.nodeProcess = null;
         this.lastStartedAt = undefined;
         this.lastSeenAt = undefined;
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to stop agent '${this.name}', will force kill.`,
-          error,
-        });
+        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -315,6 +319,7 @@ export class AgentProcess {
           return op.failure({
             code: "Conflict",
             message: "Agent must be started before it can be restarted.",
+            isPublic: true,
           });
         }
         this.restartCount++;
@@ -325,11 +330,7 @@ export class AgentProcess {
         if (errStart) return op.failure(errStart);
         return op.success();
       } catch (error) {
-        return op.failure({
-          code: "Unknown",
-          message: `Failed to restart agent '${this.name}'.`,
-          error,
-        });
+        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -404,33 +405,25 @@ export class AgentProcess {
 
   async getProcessStats() {
     if (!this.#child || this.status !== "running")
-      return op.failure({ code: "NotFound", message: "Agent is not running." });
+      return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
     try {
       const [errStats, stats] = await this.#child.getProcessStats();
       if (errStats) return op.failure(errStats);
       return op.success(stats);
     } catch (error) {
-      return op.failure({
-        code: "Unknown",
-        message: `Failed to get process stats for agent '${this.name}'.`,
-        error,
-      });
+      return op.failure({ code: "Unknown", error });
     }
   }
 
   async ping() {
     try {
       if (!this.#child || this.status !== "running")
-        return op.failure({ code: "NotFound", message: "Agent is not running." });
+        return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
       const [errPing] = await this.#child.ping();
       if (errPing) return op.failure(errPing);
       return op.success();
     } catch (error) {
-      return op.failure({
-        code: "Unknown",
-        message: `Failed to ping agent '${this.name}'.`,
-        error,
-      });
+      return op.failure({ code: "Unknown", error });
     }
   }
 

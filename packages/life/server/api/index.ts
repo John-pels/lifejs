@@ -9,7 +9,7 @@ import type { WSMessageReceive } from "hono/ws";
 import z from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
-import { type LifeErrorUnion, makePublic } from "@/shared/error";
+import { type LifeErrorUnion, makeErrorPublic } from "@/shared/error";
 import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
 import type { LifeServer } from "..";
@@ -96,13 +96,20 @@ export class LifeApi {
       }),
     );
 
+    this.app.get("/api", (c) => {
+      return c.text("Hello Life.", 200, {
+        "Content-Type": "application/json",
+      });
+    });
+
     // Setup HTTP requests handler
-    this.app.post("/http", async (c) => {
+    this.app.post("/api/http", async (c) => {
       const { response, error } = await this.handleRequest({
         type: "http",
         request: c.req.raw,
         inputStr: await c.req.text(),
       });
+
       return c.text(response, (error?.httpEquivalent as 200) ?? 200, {
         "Content-Type": "application/json",
       });
@@ -112,7 +119,7 @@ export class LifeApi {
     const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app: this.app });
     this.#injectWebSocket = injectWebSocket;
     this.app.get(
-      "/ws",
+      "/api/ws",
       upgradeWebSocket((c) => ({
         onMessage: async (event, ws) => {
           const { response } = await this.handleRequest({
@@ -211,7 +218,7 @@ export class LifeApi {
       // Helper to sanitize the result (public and stringified result)
       const sanitizeResult = (result: op.OperationResult<unknown>) => {
         const [error, data] = result;
-        const resultPublic = error ? op.failure(makePublic(error)) : op.success(data);
+        const resultPublic = error ? op.failure(makeErrorPublic(error)) : op.success(data);
         const [errorCanon, response] = canon.stringify(
           resultPublic as unknown as SerializableValue,
         );
@@ -227,22 +234,19 @@ export class LifeApi {
       const prepareResponse = (result: op.OperationResult<unknown>) => {
         // Log the request
         const [error] = result;
-        const status = error?.httpEquivalent ?? 500;
-        let statusChalk = chalk.gray;
-        if (status >= 500) statusChalk = chalk.red;
-        else if (status >= 400) statusChalk = chalk.hex('#FFA500');
-        else if (status >= 300) statusChalk = chalk.cyan;
-        else if (status >= 200) statusChalk = chalk.green;
+        const status = error ? (error.httpEquivalent ?? 500) : 200;
+        let statusColor = chalk.gray;
+        if (status >= 500) statusColor = chalk.red;
+        else if (status >= 400) statusColor = chalk.hex("#FFA500");
+        else if (status >= 300) statusColor = chalk.cyan;
+        else if (status >= 200) statusColor = chalk.green;
+        this.server.telemetry.log.info({
+          message: `Request /${handlerId} ${type === "http" ? `${statusColor.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms.`)}`,
+          error,
+        });
 
-        if (status < 400)
-          this.server.telemetry.log.info({
-            message: `Request /${handlerId} ${type === "http" ? `${statusChalk.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}`,
-          });
-        else {
-          this.server.telemetry.log.error({
-            message: `Request /${handlerId} ${type === "http" ? `${statusChalk.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}`,
-            error,
-          });
+        // Log the raw input if the request failed
+        if (status >= 400) {
           this.server.telemetry.log.debug({
             message: `Failed request raw input: ${(typeof inputStr === "string" ? inputStr : "Non-string data.") ?? "No data."}`,
           });
@@ -337,8 +341,8 @@ export class LifeApi {
       const handler = getHandlers(this.server.telemetry)[
         input.handlerId as keyof ReturnType<typeof getHandlers>
       ] as LifeApiCallHandler<LifeApiCallDefinition>;
-      const response = await handler.onCall({ api: this, data: input.data as never, request });
-      return response;
+      const result = await handler.onCall({ api: this, data: input.data as never, request });
+      return result;
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }
@@ -349,8 +353,8 @@ export class LifeApi {
       const handler = getHandlers(this.server.telemetry)[
         input.handlerId as keyof ReturnType<typeof getHandlers>
       ] as LifeApiCastHandler<LifeApiCastDefinition>;
-      const response = await handler.onCast({ api: this, data: input.data as never });
-      return response;
+      const result = await handler.onCast({ api: this, data: input.data as never });
+      return result;
     } catch (error) {
       return op.failure({ code: "Unknown", error });
     }

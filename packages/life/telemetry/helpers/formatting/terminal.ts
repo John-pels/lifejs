@@ -4,8 +4,8 @@ import esbuild, { type BuildFailure, type PartialMessage } from "esbuild";
 import z from "zod";
 import { isLifeError } from "@/shared/error";
 import type { TelemetryLog } from "@/telemetry/types";
-import { telemetryBrowserScopesDefinition } from "../scopes/browser";
-import { telemetryNodeScopesDefinition } from "../scopes/node";
+import { telemetryBrowserScopesDefinition } from "../../scopes/browser";
+import { telemetryNodeScopesDefinition } from "../../scopes/node";
 
 const isEsbuildError = (error: Error | unknown): error is BuildFailure => {
   if (error instanceof Error && "errors" in error) {

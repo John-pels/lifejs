@@ -1,10 +1,10 @@
-#!/usr/bin/env node --enable-source-maps
+#!/usr/bin/env node
 
 import { Command } from "commander";
 import { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
+import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
 import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
-import { formatLogForTerminal } from "@/telemetry/helpers/terminal";
 import type { TelemetryLogLevel } from "@/telemetry/types";
 import { createBuildCommand } from "./commands/build";
 import { createDevCommand } from "./commands/dev";

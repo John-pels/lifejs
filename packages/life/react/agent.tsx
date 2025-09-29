@@ -17,7 +17,11 @@ export function useAgent<K extends keyof ClientBuild>(
   const [agent, setAgent] = useState<GeneratedAgentClient<K> | null>(null);
 
   const initAgent = async () => {
-    setAgent((await client.getOrCreateAgent(name, options)) as GeneratedAgentClient<K>);
+    try {
+      setAgent((await client.getOrCreateAgent(name, options)) as GeneratedAgentClient<K>);
+    } catch {
+      setAgent(null); // Error is already logged by telemetry system.
+    }
   };
 
   useEffect(() => {

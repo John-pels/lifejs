@@ -384,13 +384,15 @@ export const resultSchema = z
  */
 export function serializeResult<D extends OperationData>(
   result: OperationResult<D>,
-): { _isOperationResult: true; result: OperationResult<D> } {
+): { _isOperationResult: true; result: [LifeErrorUnion | undefined, D | undefined] } {
   if (!isResult(result)) {
     throw new Error("The provided value is not an OperationResult");
   }
+  // Extract the tuple without the symbol to avoid recursive serialization
+  const [error, data] = result;
   return {
     _isOperationResult: true,
-    result,
+    result: [error, data],
   };
 }
 
@@ -409,7 +411,7 @@ export function serializeResult<D extends OperationData>(
  */
 export function deserializeResult<D extends OperationData>(obj: {
   _isOperationResult: true;
-  result: OperationResult<D>;
+  result: [LifeErrorUnion | undefined, D | undefined];
 }): OperationResult<D> {
   if (!obj._isOperationResult) {
     throw new Error("The provided object is not a serialized OperationResult");

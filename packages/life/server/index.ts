@@ -364,7 +364,13 @@ export class LifeServer {
     available: async () => {
       return await this.telemetry.trace("server.available()", async () => {
         try {
-          const [errImport, build] = await op.attempt(async () => await importServerBuild(true));
+          const [errImport, build] = await op.attempt(
+            async () =>
+              await importServerBuild({
+                projectDirectory: this.options.projectDirectory,
+                noCache: true,
+              }),
+          );
           if (errImport) return op.failure(errImport);
           return op.success(
             Object.entries(build).map(([name, { definition }]) => ({
@@ -440,10 +446,18 @@ export class LifeServer {
       return await this.telemetry.trace("agent.create()", async (span) => {
         try {
           // Ensure the request agent exists
-          const build = await importServerBuild(true);
+          const build = await importServerBuild({
+            projectDirectory: this.options.projectDirectory,
+            noCache: true,
+          });
+          span.log.debug({ message: `Build ${JSON.stringify(Object.keys(build))}` });
           const definition = build[name as keyof typeof build]?.definition;
           if (!definition)
-            return op.failure({ code: "NotFound", message: `Agent '${name}' not found.` });
+            return op.failure({
+              code: "NotFound",
+              message: `Agent '${name}' not found.`,
+              isPublic: true,
+            });
 
           // Create the agent process
           const process = new AgentProcess({ id, name, server: this });
@@ -464,14 +478,19 @@ export class LifeServer {
           );
 
           // Return the agent's client-side config
+          const serverConfig = agentServerConfig.schema.parse(definition.config);
+          const clientConfig = agentClientConfig.schema.parse(serverConfig);
+
           return op.success({
             id: process.id,
-            clientConfig: agentServerConfig.schema
-              .and(agentClientConfig.schema)
-              .parse(definition.config),
+            clientConfig,
           });
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({
+            code: "Unknown",
+            message: `Failed to create agent process '${id}'.`,
+            error,
+          });
         }
       });
     },
@@ -492,6 +511,7 @@ export class LifeServer {
             return op.failure({
               code: "Forbidden",
               message: `Access denied for agent '${process.name}'.`,
+              isPublic: true,
             });
           }
 

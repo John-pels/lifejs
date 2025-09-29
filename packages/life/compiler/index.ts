@@ -234,9 +234,13 @@ export class LifeCompiler {
         const serverPath = relative(dirname(filePath), generatedServerPath);
         const updatedContent = content
           .replaceAll(/"LIFE()_CLIENT_BUILD_PATH"/g, `"${clientPath}"`)
+          .replaceAll(/String\("LIFE()_CLIENT_BUILD_MODULE"\)/g, `import("${clientPath}")`)
+          .replaceAll(/"LIFE()_CLIENT_BUILD_MODULE"/g, `import("${clientPath}")`)
           .replaceAll(/"LIFE()_SERVER_BUILD_PATH"/g, `"${serverPath}"`)
           .replaceAll(/"LIFE()_BUILD_MODE"/g, '"production"')
           .replaceAll(/'LIFE()_CLIENT_BUILD_PATH'/g, `'${clientPath}'`)
+          .replaceAll(/String\('LIFE()_CLIENT_BUILD_MODULE'\)/g, `import("${clientPath}")`)
+          .replaceAll(/'LIFE()_CLIENT_BUILD_MODULE'/g, `import("${clientPath}")`)
           .replaceAll(/'LIFE()_SERVER_BUILD_PATH'/g, `'${serverPath}'`)
           .replaceAll(/'LIFE()_BUILD_MODE'/g, "'production'");
 
@@ -545,7 +549,23 @@ export class LifeCompiler {
           }
 
           // Request a rebuild of the server bundle
-          return await this.generateServerBundle();
+          const res = await this.generateServerBundle();
+          if (!res?.[0]) return res;
+
+          // Signal the server removal
+          const name = this.getPathDisplayName(serverPath, "server");
+          const signalPath = path.join(
+            this.options.outputDirectory,
+            "server",
+            "signal",
+            `${name}.txt`,
+          );
+          if (await this.fileExists(signalPath)) {
+            await writeFile(signalPath, "removed", "utf-8");
+            // await rm(signalPath);
+          }
+
+          return op.success();
         } catch (error) {
           return op.failure({ code: "Unknown", error });
         }

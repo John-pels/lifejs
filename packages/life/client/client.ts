@@ -1,19 +1,42 @@
-import type z from "zod";
 import { AgentClient } from "@/agent/client/class";
-import type { agentClientConfig } from "@/agent/client/config";
 import type { AgentClientDefinition, GeneratedAgentClient } from "@/agent/client/types";
 import { type ClientBuild, importClientBuild } from "@/exports/build/client";
 import * as op from "@/shared/operation";
 import type { TelemetryClient } from "@/telemetry/clients/base";
-import { createTelemetryClient } from "@/telemetry/clients/browser";
+import { createTelemetryClient, TelemetryBrowserClient } from "@/telemetry/clients/browser";
+import { formatLogForBrowser } from "@/telemetry/helpers/formatting/browser";
+import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
+import type { TelemetryLogLevel } from "@/telemetry/types";
 import { LifeServerApiClient } from "./api";
 import type { LifeClientOptions } from "./types";
 
+// Stream formatted telemetry logs to the terminal
+TelemetryBrowserClient.registerGlobalConsumer({
+  async start(queue) {
+    for await (const item of queue) {
+      if (item.type !== "log") continue;
+      const logLevel = (globalThis?.process?.env?.LOG_LEVEL as TelemetryLogLevel) ?? "info";
+
+      // Ignore logs lower than the requested log level
+      if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel)) continue;
+
+      // Format and print the log
+      try {
+        if (logLevelPriority("error") >= logLevelPriority(logLevel as TelemetryLogLevel)) {
+          console.error(await formatLogForBrowser(item));
+        } else {
+          console.log(await formatLogForBrowser(item));
+        }
+      } catch (_e) {
+        console.log(item.message);
+      }
+    }
+  },
+});
+
 export class LifeClient {
   readonly options: LifeClientOptions;
-  readonly #serverToken?: string;
-  readonly #agents: Map<string, AgentClient<AgentClientDefinition>>;
-  #clientBuild: ClientBuild | null = null;
+  readonly #agents = new Map<string, AgentClient<AgentClientDefinition>>();
   readonly #telemetry: TelemetryClient;
   api: LifeServerApiClient;
 
@@ -22,7 +45,6 @@ export class LifeClient {
       serverUrl: options?.serverUrl ?? "http://localhost:3003",
       serverToken: options?.serverToken,
     };
-    this.#agents = new Map();
 
     // Initialize API client
     this.api = new LifeServerApiClient({
@@ -42,15 +64,22 @@ export class LifeClient {
    */
   async createAgent<Name extends keyof ClientBuild>(name: Name, options: { id?: string } = {}) {
     return await this.#telemetry.trace("createAgent()", async (span) => {
+      const [error, agent] = await this.#createAgent(name, options);
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(agent);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  async #createAgent<Name extends keyof ClientBuild>(name: Name, options: { id?: string } = {}) {
+    return await this.#telemetry.trace("#createAgent()", async () => {
       try {
-        // Send a call to the server to create the agent
-        const [err, data] = await this.api.call("agent.create", { name, id: options.id });
-        if (err) return op.failure(err);
-
         // Load the client build if not already loaded
-        if (!this.#clientBuild) this.#clientBuild = await importClientBuild();
-
-        const agentBuild = this.#clientBuild[name as keyof ClientBuild];
+        const build = await importClientBuild();
+        const agentBuild = build[name as keyof ClientBuild];
         if (!agentBuild) {
           return op.failure({
             code: "NotFound",
@@ -58,28 +87,28 @@ export class LifeClient {
           });
         }
 
+        // Send a call to the server to create the agent
+        const [err, data] = await this.api.call("agent.create", { name, id: options.id });
+        if (err) return op.failure(err);
+
         // Create agent client with proper definition and plugins from build
         const agentClient = new AgentClient({
           id: data.id,
           definition: agentBuild.definition,
           plugins: agentBuild.plugins,
           life: this,
-          config:
-            data.clientConfig ?? ({ transport: {} } as z.output<typeof agentClientConfig.schema>),
-          // sessionToken: data.sessionToken,
-          // transportRoom: data.transportRoom,
+          config: data.clientConfig ?? {},
         }) as GeneratedAgentClient<Name>;
         this.#agents.set(data.id, agentClient);
 
         // Return the agent client
         return op.success(op.toPublic(agentClient));
       } catch (error) {
-        span.log.error({
+        return op.failure({
+          code: "Unknown",
           message: "Unknown error while creating agent.",
           error,
-          attributes: { name },
         });
-        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -91,16 +120,27 @@ export class LifeClient {
    */
   getAgent<Name extends keyof ClientBuild>(id: string) {
     return this.#telemetry.trace("getAgent()", (span) => {
+      const [error, agent] = this.#getAgent<Name>(id);
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(agent);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  #getAgent<Name extends keyof ClientBuild>(id: string) {
+    return this.#telemetry.trace("#getAgent()", () => {
       try {
         const agent = this.#agents.get(id) as GeneratedAgentClient<Name> | undefined;
         return op.success(op.toPublic(agent));
       } catch (error) {
-        span.log.error({
+        return op.failure({
+          code: "Unknown",
           message: "Unknown error while getting agent.",
           error,
-          attributes: { id },
         });
-        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -111,11 +151,26 @@ export class LifeClient {
    */
   listAgents() {
     return this.#telemetry.trace("listAgents()", (span) => {
+      const [error, agents] = this.#listAgents();
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(agents);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  #listAgents() {
+    return this.#telemetry.trace("#listAgents()", () => {
       try {
         return op.success(Array.from(this.#agents.keys()));
       } catch (error) {
-        span.log.error({ message: "Unknown error while listing agents.", error });
-        return op.failure({ code: "Unknown", error });
+        return op.failure({
+          code: "Unknown",
+          message: "Unknown error while listing agents.",
+          error,
+        });
       }
     });
   }
@@ -131,6 +186,21 @@ export class LifeClient {
     options: { id?: string } = {},
   ) {
     return await this.#telemetry.trace("getOrCreateAgent()", async (span) => {
+      const [error, agent] = await this.#getOrCreateAgent(name, options);
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(agent);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  async #getOrCreateAgent<Name extends keyof ClientBuild>(
+    name: Name,
+    options: { id?: string } = {},
+  ) {
+    return await this.#telemetry.trace("#getOrCreateAgent()", async () => {
       try {
         // Check if agent with same name already exists
         const existingAgent = Array.from(this.#agents.values()).find(
@@ -139,16 +209,15 @@ export class LifeClient {
         if (existingAgent) return op.success(existingAgent as GeneratedAgentClient<Name>);
 
         // Else, create a new agent
-        const [err, agent] = await this.createAgent(name, options);
+        const [err, agent] = await this.#createAgent(name, options);
         if (err) return op.failure(err);
         return op.success(agent);
       } catch (error) {
-        span.log.error({
+        return op.failure({
+          code: "Unknown",
           message: "Unknown error while getting or creating agent.",
           error,
-          attributes: { name, options },
         });
-        return op.failure({ code: "Unknown", error });
       }
     });
   }
@@ -159,14 +228,29 @@ export class LifeClient {
    */
   async info() {
     return await this.#telemetry.trace("info()", async (span) => {
+      const [error, data] = await this.#info();
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(data);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  async #info() {
+    return await this.#telemetry.trace("info()", async () => {
       try {
         // Send a call to the server to get server information
         const [err, data] = await this.api.call("server.info");
         if (err) return op.failure(err);
         return op.success(data);
       } catch (error) {
-        span.log.error({ message: "Failed to get server info.", error });
-        return op.failure({ code: "Unknown", error });
+        return op.failure({
+          code: "Unknown",
+          message: "Unknown error while getting server info.",
+          error,
+        });
       }
     });
   }
@@ -177,15 +261,33 @@ export class LifeClient {
    */
   async ping() {
     return await this.#telemetry.trace("ping()", async (span) => {
+      const [error, data] = await this.#ping();
+      if (error) {
+        span.log.error({ error });
+        return op.failure(error);
+      }
+      return op.success(data);
+    });
+  }
+
+  // Private method, doesn't log to telemetry
+  async #ping() {
+    return await this.#telemetry.trace("#ping()", async () => {
       try {
         const [err, data] = await this.api.call("server.ping");
         if (err) return op.failure(err);
         if (data !== "pong")
-          return op.failure({ code: "Unknown", message: `Ping failed. Received '${data}'.` });
+          return op.failure({
+            code: "Validation",
+            message: `Ping failed. Received wrong response: '${data}'.`,
+          });
         return op.success("pong");
       } catch (error) {
-        span.log.error({ message: "Failed to ping server.", error });
-        return op.failure({ code: "Unknown", error });
+        return op.failure({
+          code: "Unknown",
+          message: "Unknown error while pinging server.",
+          error,
+        });
       }
     });
   }

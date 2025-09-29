@@ -38,6 +38,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   }) {
     this._definition = params.definition;
     this.id = params.id;
+    // No need to parse the config, it is already parsed by the server
     this.config = params.config;
     this.#life = params.life;
 

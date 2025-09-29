@@ -330,7 +330,7 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeErrorUni
  * @param error - The LifeError to make public.
  * @returns - The public LifeError.
  */
-export function makePublic<Code extends LifeErrorCode = LifeErrorCode>(
+export function makeErrorPublic<Code extends LifeErrorCode = LifeErrorCode>(
   error: LifeError<Code>,
 ): LifeErrorUnion {
   // Return raw error in development

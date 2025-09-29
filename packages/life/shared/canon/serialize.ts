@@ -28,7 +28,7 @@ superjson.registerCustom<ZodError, any>(
   {
     isApplicable: (v): v is ZodError => v instanceof ZodError,
     serialize: (zErr) => zErr.issues,
-    deserialize: (data) => new ZodError(data as z.ZodIssue[]),
+    deserialize: (data) => new ZodError(data as z.core.$ZodIssue[]),
   },
   "ZodError",
 );
@@ -51,7 +51,7 @@ superjson.registerCustom<op.OperationResult<unknown>, any>(
   {
     isApplicable: (v): v is op.OperationResult<unknown> => op.isResult(v),
     serialize: (result) => op.serializeResult(result),
-    deserialize: (result) => op.deserializeResult(result),
+    deserialize: (data) => op.deserializeResult(data),
   },
   "OperationResult",
 );

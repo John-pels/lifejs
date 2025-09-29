@@ -12,7 +12,7 @@ import { deserialize, type SerializableValue, serialize } from "./serialize";
 // biome-ignore-start lint/complexity: reason
 // biome-ignore-start lint/correctness: reason
 
-export function stableDeepStringify(data: any, opts?: any): string {
+export function stableDeepStringify(data: any, sortArrays: boolean, opts?: any): string {
   if (!opts) opts = {};
   if (typeof opts === "function") opts = { cmp: opts };
   var cycles = typeof opts.cycles === "boolean" ? opts.cycles : false;
@@ -37,9 +37,9 @@ export function stableDeepStringify(data: any, opts?: any): string {
 
     var i, out;
     if (Array.isArray(node)) {
-      // Sort array elements by their stringified representation for deterministic output
-      const sortedItems = node.map((item) => stringify_(item) || "null").sort();
-      return "[" + sortedItems.join(",") + "]";
+      const items = node.map((item) => stringify_(item) || "null");
+      if (sortArrays) items.sort();
+      return "[" + items.join(",") + "]";
     }
 
     if (node === null) return "null";
@@ -93,10 +93,10 @@ export function stableDeepStringify(data: any, opts?: any): string {
  * stringify(new Set([3, 1, 2])) === stringify(new Set([1, 2, 3])); // → true
  * ```
  */
-export const stringify = (value: SerializableValue) => {
+export const stringify = (value: SerializableValue, sortArrays = false) => {
   const [err, res] = serialize(value);
   if (err) return op.failure(err);
-  return op.attempt(() => stableDeepStringify(res));
+  return op.attempt(() => stableDeepStringify(res, sortArrays));
 };
 
 /**

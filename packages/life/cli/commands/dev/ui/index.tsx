@@ -12,8 +12,8 @@ import type { AgentProcess } from "@/server/agent-process/parent";
 import * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
 import type { TelemetryClient } from "@/telemetry/clients/base";
+import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
 import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
-import { formatLogForTerminal } from "@/telemetry/helpers/terminal";
 import { theme } from "../../../utils/theme";
 import type { DevOptions } from "../action";
 import { ConditionalMouseProvider } from "../components/conditional-mouse-provider";
@@ -96,7 +96,7 @@ export const DevUI = ({
     setExitStatus("Done!");
     setTimeout(() => {
       setExitProgress(100);
-    }, 200);
+    }, 50);
   }
 
   // Exit the app when the exit progress is 100
@@ -580,7 +580,7 @@ export const DevUI = ({
       run: () => {
         setTimeout(() => {
           setInitProgress(100);
-        }, 200);
+        }, 50);
         return op.success();
       },
     });

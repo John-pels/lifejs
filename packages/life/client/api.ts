@@ -57,7 +57,7 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
     }
 
     return new Promise((resolve, reject) => {
-      const wsUrl = `${this.serverUrl.replace(WS_PROTOCOL_REGEX, "ws")}/ws`;
+      const wsUrl = `${this.serverUrl.replace(WS_PROTOCOL_REGEX, "ws")}/api/ws`;
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -94,7 +94,7 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
   }
 
   async call<K extends keyof CallHandlers<Def>>(handlerId: K, input?: InferInput<Def[K]>) {
-    const url = `${this.serverUrl}/http`;
+    const url = `${this.serverUrl}/api/http`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -117,8 +117,10 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
 
       if (!response.ok) {
         try {
-          const result = await response.json();
-          return op.failure(result.error);
+          const result = canon.parse(await response.text()) as op.OperationResult<unknown>;
+          return op.failure(
+            result?.[0] ?? { code: "Upstream", message: `API call failed: ${response.statusText}` },
+          );
         } catch {
           return op.failure({
             code: "Upstream",
@@ -127,12 +129,12 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
         }
       }
 
-      const result = await response.json();
-      if (result.error) return op.failure(result.error);
+      const text = await response.text();
+      const [err, data] = canon.parse(text) as op.OperationResult<unknown>;
+      if (err) return op.failure(err);
 
-      return op.success(result.data as InferOutput<Def[K]>);
+      return op.success(data as InferOutput<Def[K]>);
     } catch (error) {
-      console.error(error);
       return op.failure({
         code: "Unknown",
         message: "Network request failed",

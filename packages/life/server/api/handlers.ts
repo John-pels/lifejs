@@ -1,4 +1,3 @@
-import z from "zod";
 import * as op from "@/shared/operation";
 import { TelemetryClient } from "@/telemetry/clients/base";
 import type { TelemetryConsumer } from "@/telemetry/types";
@@ -14,6 +13,7 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
           return op.failure({
             code: "Validation",
             message: `Telemetry signal scope must be in ["client", "agent.client", "plugin.client"].`,
+            isPublic: true,
           });
 
         // Send the signal
@@ -44,21 +44,14 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
 
         // Handle subcriptions events
         for await (const event of queue) {
-          if (event.action === "add") {
-            subscribers.set(event.subscriptionId, { send: event.send });
-          } else if (event.action === "remove") {
-            subscribers.delete(event.subscriptionId);
-          }
+          if (event.action === "add") subscribers.set(event.subscriptionId, { send: event.send });
+          else if (event.action === "remove") subscribers.delete(event.subscriptionId);
         }
       },
     },
     "agent.create": {
       onCall: async ({ api, data }) => {
         const { id, name } = data;
-        const zodRes = z
-          .object({ id: z.string(), name: z.string() })
-          .safeParse({ id: "A", name: 1 });
-        if (zodRes.error) return op.failure({ code: "Validation", zodError: zodRes.error });
         return await api.server.agent.create({ id, name });
       },
     },

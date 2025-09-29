@@ -31,15 +31,19 @@ export const useAgentStatus = <Client extends AgentWithGenerationPlugin | null>(
 ) => {
   const data = useStore(agentClient?.generation.atoms.status ?? atom(null));
   if (agentClient && !("generation" in agentClient))
-    throw new Error("useAgentStatus() must be used with agents having the 'generation' plugin.");
+    throw new Error(
+      "Life.js: useAgentStatus() requires the 'generation' plugin to be registered on the agent.",
+    );
   return data;
 };
 
 export const useAgentMessages = <Client extends AgentWithGenerationPlugin | null>(
   agentClient: Client,
 ) => {
-  const data = useStore(agentClient?.generation.atoms.messages ?? atom([]));
   if (agentClient && !("generation" in agentClient))
-    throw new Error("useAgentMessages() must be used with agents having the 'generation' plugin.");
+    throw new Error(
+      "Life.js: useAgentMessages() requires the 'generation' plugin to be registered on the agent.",
+    );
+  const data = useStore(agentClient?.generation.atoms.messages ?? atom([]));
   return data;
 };

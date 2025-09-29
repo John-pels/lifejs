@@ -25,7 +25,9 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
     async start(params) {
       try {
         // Retrieve the agent definition
-        const [errImport, servers] = await op.attempt(importServerBuild(true));
+        const [errImport, servers] = await op.attempt(
+          importServerBuild({ projectDirectory: process.cwd(), noCache: true }),
+        );
         if (errImport) return op.failure(errImport);
         const server = servers?.[params.name as keyof typeof servers];
         if (!server)

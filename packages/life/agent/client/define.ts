@@ -3,7 +3,6 @@ import type {
   PluginClientConfig,
   PluginClientDefinition,
   PluginClientDependenciesDefinition,
-  PluginClientDependencyDefinition,
 } from "@/plugins/client/types";
 import type { AgentDefinition } from "../server/types";
 import type { AgentClientBuilderWithPluginsMethods, AgentClientDefinition } from "./types";
@@ -45,53 +44,64 @@ export class AgentClientBuilder<
       ExcludedMethods | "plugins"
     >;
 
-    return this.#withPluginsMethods(builder, defs) as Omit<
-      AgentClientBuilderWithPluginsMethods<
-        typeof builder,
-        ExtractedPlugins,
-        ExcludedMethods | "plugins"
-      >,
+    const builder2 = AgentClientBuilder.#withPluginsMethods(
+      builder,
+      defs,
+    ) as AgentClientBuilderWithPluginsMethods<
+      typeof builder,
+      ExtractedPlugins,
       ExcludedMethods | "plugins"
     >;
+
+    return builder2 as Omit<typeof builder2, ExcludedMethods | "plugins">;
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: reason
-  #withPluginsMethods<Builder extends AgentClientBuilder<any, any>>(
+  static #withPluginsMethods<Builder extends AgentClientBuilder<any, any>>(
     builder: Builder,
     plugins: PluginClientDependenciesDefinition,
   ) {
     for (const plugin of Object.values(plugins)) {
       Object.assign(builder, {
-        [plugin.name]: this.#pluginMethod(plugin, plugins),
+        [plugin.name]: (config: z.input<PluginClientDefinition["config"]["schema"]>): unknown => {
+          const newBuilder = new AgentClientBuilder({
+            ...builder._definition,
+            pluginConfigs: {
+              ...(builder._definition.pluginConfigs ?? {}),
+              [plugin.name]: plugin.config.schema.parse(config),
+            },
+          });
+          return AgentClientBuilder.#withPluginsMethods(newBuilder, plugins);
+        },
       });
     }
     return builder;
   }
 
-  #pluginMethod(
-    plugin: PluginClientDependencyDefinition,
-    plugins: PluginClientDependenciesDefinition,
-  ) {
-    return <const C extends z.input<PluginClientDefinition["config"]["schema"]>>(
-      config: C,
-    ): unknown => {
-      const builder = new AgentClientBuilder({
-        ...this._definition,
-        pluginConfigs: {
-          ...((this._definition as Definition).pluginConfigs ?? {}),
-          [plugin.name]: plugin.config.schema.parse(config),
-        },
-      });
-      return this.#withPluginsMethods(builder, plugins) as Omit<
-        AgentClientBuilderWithPluginsMethods<
-          typeof builder,
-          Definition["plugins"],
-          ExcludedMethods
-        >,
-        ExcludedMethods
-      >;
-    };
-  }
+  // #pluginMethod(
+  //   plugin: PluginClientDependencyDefinition,
+  //   plugins: PluginClientDependenciesDefinition,
+  // ) {
+  //   return <const C extends z.input<PluginClientDefinition["config"]["schema"]>>(
+  //     config: C,
+  //   ): unknown => {
+  //     const builder = new AgentClientBuilder({
+  //       ...this._definition,
+  //       pluginConfigs: {
+  //         ...((this._definition as Definition).pluginConfigs ?? {}),
+  //         [plugin.name]: plugin.config.schema.parse(config),
+  //       },
+  //     });
+  //     return this.#withPluginsMethods(builder, plugins) as Omit<
+  //       AgentClientBuilderWithPluginsMethods<
+  //         typeof builder,
+  //         Definition["plugins"],
+  //         ExcludedMethods
+  //       >,
+  //       ExcludedMethods
+  //     >;
+  //   };
+  // }
 }
 
 // Helper function to define a agent client

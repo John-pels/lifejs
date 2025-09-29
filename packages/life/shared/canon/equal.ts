@@ -28,9 +28,9 @@ import { stringify } from "./stringify";
  * ```
  */
 export const equal = (a: SerializableValue, b: SerializableValue) => {
-  const [err1, data1] = stringify(a);
+  const [err1, data1] = stringify(a, true);
   if (err1) return op.failure(err1);
-  const [err2, data2] = stringify(b);
+  const [err2, data2] = stringify(b, true);
   if (err2) return op.failure(err2);
   return op.success(data1 === data2);
 };
