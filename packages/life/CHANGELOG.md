@@ -1,5 +1,16 @@
 # life
 
+## 0.27.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [a3ec953](https://github.com/lifejs/lifejs/commit/a3ec953cbc6ec87e6601af7d991da8f6f1a69e1e) — Major telemetry formatting improvements, especially in the browser console, for better debugging experience
+- [@LilaRest](https://github.com/LilaRest) in [a3ec953](https://github.com/lifejs/lifejs/commit/a3ec953cbc6ec87e6601af7d991da8f6f1a69e1e) — Compiler improvements with better build module handling and enhanced hot-reloading support
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [a3ec953](https://github.com/lifejs/lifejs/commit/a3ec953cbc6ec87e6601af7d991da8f6f1a69e1e) — Development experience improvements including faster UI animations, dependency updates, and various stability fixes
+
 ## 0.26.0
 
 ### Minor Changes
