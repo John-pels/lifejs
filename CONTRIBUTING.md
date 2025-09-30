@@ -49,7 +49,7 @@ All functions and methods of the codebase must:
 ```ts
 import * as op from "@/shared/operation"
 function myFunc() {
-    // void equivalent, but explicitely indicate success
+    // void equivalent, but explicitly indicates success
     return op.success() 
     // (or) can return any data alongside success
     return op.success("hello world") 
@@ -79,6 +79,28 @@ function myFunc() {
     // or return the data
     return op.success(data);
 }
+```
+4. Classes' constructor functions should throw any error, and `op.attempt()` should be used during instantiation
+```ts
+class MyClass {
+    constructor () {
+        // Possibly unsafe operation that could throw
+        anotherLibrary.func();
+
+        // Safe function, throw on error
+        const [err, data] = this.add(1,2);
+        if (err) throw err;
+    }
+
+    add(a: number, b: number) {
+        if (a > 10) return op.failure({ code: "Validation", message: "Number must be <= 10"})
+        return op.success(a + b);
+    }
+}
+```
+And when instantiating:
+```ts
+const [err, ins] = op.attempt(() => new MyClass())
 ```
 
 ### Logging

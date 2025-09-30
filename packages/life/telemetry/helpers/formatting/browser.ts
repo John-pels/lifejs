@@ -79,11 +79,11 @@ function safeParse(err: Error) {
 }
 
 // ---
-export async function formatErrorForBrowser(error: Error | unknown): Promise<string> {
+export async function formatErrorForBrowser(error: Error | unknown) {
   let code = "";
   let message = "";
   let stack = "";
-  let after = "";
+  const after: string[] = [];
   let processed = false;
 
   // Format LifeError
@@ -94,10 +94,12 @@ export async function formatErrorForBrowser(error: Error | unknown): Promise<str
     stack = prettyStack;
 
     if (error.code === "Validation" && error.zodError) {
-      after += await formatErrorForBrowser(error.zodError);
+      const formatted = await formatErrorForBrowser(error.zodError);
+      after.push(formatted.content, ...formatted.after);
     }
     if (error.code === "Unknown" && error.error) {
-      after += await formatErrorForBrowser(error.error);
+      const formatted = await formatErrorForBrowser(error.error);
+      after.push(formatted.content, ...formatted.after);
     }
     processed = true;
   }
@@ -136,10 +138,14 @@ export async function formatErrorForBrowser(error: Error | unknown): Promise<str
 
   // If a cause is present, format it as other as well
   if (error instanceof Error && error.cause) {
-    after += await formatErrorForBrowser(error.cause);
+    const formatted = await formatErrorForBrowser(error.cause);
+    after.push(formatted.content, ...formatted.after);
   }
 
-  return `${code}${code ? ": " : ""}${message}${message ? " " : ""}${stack ? `\n${stack}` : ""}${after ? `\n\n${after}` : ""}`;
+  return {
+    content: `${code}${code ? ": " : ""}${message}${message ? " " : ""}${stack ? `\n${stack}` : ""}`,
+    after,
+  };
 }
 
 export async function formatLogForBrowser(log: TelemetryLog) {
@@ -159,7 +165,7 @@ export async function formatLogForBrowser(log: TelemetryLog) {
       ? // biome-ignore lint/suspicious/noExplicitAny: fine here
         scopeDefinition.displayName(log.attributes as any)
       : scopeDefinition?.displayName;
-  const scope = `[Life.js > ${scopeDisplayName ?? "Unknown"}]`;
+  const scope = `[${scopeDisplayName ?? "Unknown"}]`;
 
   // Format the log message
   const message = log.message || "";
@@ -168,13 +174,9 @@ export async function formatLogForBrowser(log: TelemetryLog) {
   const header = `${prefix} ${scope}${message ? ` ${message}` : ""}`;
 
   // Format the log error content (if any)
-  const error = await formatErrorForBrowser(log.error);
-
-  // Build the output (if an error is present, add it with padding)
-  let output = header;
-  if (error)
-    output += `\n-----\n${error.includes(log.message) ? error.split("\n").slice(1).join("\n") : error}`;
+  const formatted = await formatErrorForBrowser(log.error);
+  const errors = [formatted.content, ...formatted.after];
 
   // Otherwise, just return the header
-  return output;
+  return [header, ...errors];
 }

@@ -21,14 +21,14 @@ export const telemetryBrowserScopesDefinition = defineScopes({
   "agent.client": {
     requiredAttributesSchema: baseAgentClientAttributesSchema,
     displayName: (attributes) =>
-      `Client > Agent (${attributes?.agentName} - ${attributes?.agentId.slice(0, 8)})`,
+      `Client » Agent (${attributes?.agentName} - ${attributes?.agentId.replace("agent_", "").slice(0, 6)})`,
   },
   "plugin.client": {
     requiredAttributesSchema: baseAgentClientAttributesSchema.extend({
       pluginName: z.string(),
       pluginClientConfig: z.any(),
     }),
-    displayName: (attributes) => `Client > Plugin (${attributes?.pluginName})`,
+    displayName: (attributes) => `Client » Plugin (${attributes?.pluginName})`,
   },
   react: {
     requiredAttributesSchema: z.object(),

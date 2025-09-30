@@ -45,5 +45,5 @@ export const useAgentMessages = <Client extends AgentWithGenerationPlugin | null
       "Life.js: useAgentMessages() requires the 'generation' plugin to be registered on the agent.",
     );
   const data = useStore(agentClient?.generation.atoms.messages ?? atom([]));
-  return data;
+  return data ?? [];
 };

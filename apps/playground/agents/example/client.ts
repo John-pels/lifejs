@@ -4,4 +4,7 @@ import type exampleAgent from "./server";
 
 export default defineAgentClient<typeof exampleAgent>("example")
   .plugins([...defaults.plugins, testPluginClient])
+  .generation({})
+  .memories({})
+  .stores({})
   .test({ connectors: ["connector1", "connector5"] });

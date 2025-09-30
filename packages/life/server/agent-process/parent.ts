@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type BirpcReturn, createBirpc } from "birpc";
+import chalk from "chalk";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { canon, type SerializableValue } from "@/shared/canon";
@@ -279,7 +280,7 @@ export class AgentProcess {
         }
         if (!stopSuccess) {
           span.log.warn({
-            message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${stopErr ? "(see error)" : "(timeout)"})`,
+            message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${stopErr ? "see error" : "timeout"})`,
             error: stopErr,
           });
         }
@@ -375,9 +376,11 @@ export class AgentProcess {
 
     // Telemetry
     const restartDelayMessage = restartDelay > 0 ? `in ${restartDelay}ms.` : "immediately.";
-    const restartMessage = needRestart ? `Restarting ${restartDelayMessage}` : "Not restarting.";
+    const restartMessage = chalk.bold(
+      needRestart ? `Restarting ${restartDelayMessage}` : "Not restarting.",
+    );
     this.#server.telemetry.log.error({
-      message: `Agent process crashed (code: ${code}, signal: ${signal}). ${restartMessage}`,
+      message: `Agent process crashed. ${restartMessage}`,
       attributes: { name: this.name, id: this.id, code, signal },
     });
 

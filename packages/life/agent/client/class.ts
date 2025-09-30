@@ -38,8 +38,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   }) {
     this._definition = params.definition;
     this.id = params.id;
-    // No need to parse the config, it is already parsed by the server
-    this.config = params.config;
+    this.config = params.config; // No need to parse, the config is already parsed by the server
     this.#life = params.life;
 
     // Initialize telemetry
@@ -57,60 +56,89 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     this.atoms = createAgentClientAtoms(this);
 
     // Validate plugins
-    this.#validatePlugins();
+    const [errValidation] = this.#validatePlugins();
+    if (errValidation) throw errValidation;
 
     // Initialize plugins
-    this.#initializePlugins(params.plugins);
+    const [errInitialize] = this.#initializePlugins(params.plugins);
+    if (errInitialize) throw errInitialize;
   }
 
   #validatePlugins() {
-    // Validate plugins have unique names
-    const pluginNames = Object.values(this._definition.plugins).map((plugin) => plugin.name);
-    const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
-    if (duplicates.length > 0) {
-      const uniqueDuplicates = [...new Set(duplicates)];
-      throw new Error(
-        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this._definition.name}')`,
-      );
-    }
+    try {
+      // Validate plugins have unique names
+      const pluginNames = Object.values(this._definition.plugins).map((plugin) => plugin.name);
+      const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
+      if (duplicates.length > 0) {
+        const uniqueDuplicates = [...new Set(duplicates)];
+        return op.failure({
+          code: "Validation",
+          message: `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this._definition.name}')`,
+        });
+      }
 
-    // Validate plugin dependencies
-    for (const plugin of Object.values(this._definition.plugins)) {
-      for (const [depName] of Object.entries(plugin.dependencies || {})) {
-        // - Ensure the plugin is provided
-        const depPlugin = Object.values(this._definition.plugins).find((p) => p.name === depName);
-        if (!depPlugin) {
-          throw new Error(
-            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this._definition.name}')`,
-          );
+      // Validate plugin dependencies
+      for (const plugin of Object.values(this._definition.plugins)) {
+        for (const [depName] of Object.entries(plugin.dependencies || {})) {
+          // - Ensure the plugin is provided
+          const depPlugin = Object.values(this._definition.plugins).find((p) => p.name === depName);
+          if (!depPlugin) {
+            return op.failure({
+              code: "Validation",
+              message: `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this._definition.name}')`,
+            });
+          }
         }
       }
+
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
   }
 
   #initializePlugins(plugins: AgentClientPluginsMapping) {
-    for (const [name, pluginDef] of Object.entries(this._definition.plugins)) {
-      // Retrieve plugin class
-      const PluginClass = plugins[name as keyof typeof plugins]
-        ?.class as unknown as typeof PluginClientBase<PluginClientDefinition>;
-      if (!PluginClass) return;
+    try {
+      for (const [name, pluginInfo] of Object.entries(plugins)) {
+        // Retrieve plugin class
+        const PluginClass =
+          pluginInfo.class as unknown as typeof PluginClientBase<PluginClientDefinition>;
+        if (!PluginClass) {
+          this.#telemetry.log.error({
+            message: `Plugin '${name}' class not found. Shouldn't happen.`,
+          });
+          continue;
+        }
 
-      // Create plugin instance
-      const plugin = op.toPublic(
-        new PluginClass(
-          pluginDef,
-          this._definition.pluginConfigs[name] as Record<string, unknown>,
-          this,
-        ),
-      );
+        // Create plugin instance
+        const [errPlugin, plugin] = op.attempt(() =>
+          op.toPublic(
+            new PluginClass(
+              pluginInfo.definition,
+              this._definition.pluginConfigs[name] as Record<string, unknown>,
+              this,
+            ),
+          ),
+        );
+        if (errPlugin) {
+          this.#telemetry.log.error({
+            message: `Failed to initialize plugin '${name}'.`,
+            error: errPlugin,
+          });
+          continue;
+        }
 
-      // Make server methods, events, and context public
-      plugin.server.methods = op.toPublic(plugin.server.methods) as never;
-      plugin.server.events = op.toPublic(plugin.server.events) as never;
-      plugin.server.context = op.toPublic(plugin.server.context) as never;
+        // Make server methods, events, and context public
+        plugin.server.methods = op.toPublic(plugin.server.methods) as never;
+        plugin.server.events = op.toPublic(plugin.server.events) as never;
+        plugin.server.context = op.toPublic(plugin.server.context) as never;
 
-      // Assign plugin instance to agent client
-      this[name as keyof typeof this] = plugin as never;
+        // Assign plugin instance to agent client
+        this[name as keyof typeof this] = plugin as never;
+      }
+      return op.success();
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
   }
 

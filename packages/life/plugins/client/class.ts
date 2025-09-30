@@ -3,6 +3,7 @@ import type { AgentClient } from "@/agent/client/class";
 import type { AgentClientDefinition } from "@/agent/client/types";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
+import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { TelemetryClient } from "@/telemetry/clients/base";
@@ -66,10 +67,17 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   ) {
     this._definition = definition;
     this.#agent = agent;
-    this.config = definition.config.schema.parse(config) as PluginClientConfig<
-      ClientDefinition["config"],
-      "output"
-    >;
+
+    // Validate config
+    const { data, error } = definition.config.schema.safeParse(config);
+    if (error) {
+      throw lifeError({
+        code: "Validation",
+        message: `Invalid config provided to plugin client '${definition.name}'.`,
+        zodError: error,
+      });
+    }
+    this.config = data as PluginClientConfig<ClientDefinition["config"], "output">;
 
     // Initialize telemetry
     this.#telemetry = createTelemetryClient("plugin.client", {
@@ -92,15 +100,17 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       dependencies: this.#dependencies,
     }) as PluginClientAtoms<ClientDefinition["atoms"]>;
 
-    // Wire methods
-    for (const name of Object.keys(definition.$serverDef.methods)) {
-      this.server.methods[name as keyof typeof this.server.methods] = (input: unknown) =>
-        agent.transport.call({
-          name: `plugin.${this._definition.name}.methods.${name}`,
-          input: input as SerializableValue,
-          // biome-ignore lint/suspicious/noExplicitAny: no need further type precision here
-        }) as any;
-    }
+    // Wire methods with proxy
+    this.server.methods = new Proxy(
+      {},
+      {
+        get: (_, method: string) => (input: unknown) =>
+          agent.transport.call({
+            name: `plugin.${this._definition.name}.methods.${method}`,
+            input: input as SerializableValue,
+          }),
+      },
+    ) as typeof this.server.methods;
 
     // Wire events
     this.server.events.emit = (input: unknown) =>

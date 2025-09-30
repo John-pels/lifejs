@@ -41,7 +41,7 @@ export const telemetryNodeScopesDefinition = defineScopes({
   },
   "agent.server": {
     displayName: (attributes) =>
-      `Server > Agent (${attributes?.agentName} - ${attributes?.agentId?.slice(0, 8)})`,
+      `Server > Agent (${attributes?.agentName} - ${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
     requiredAttributesSchema: baseAgentServerAttributesSchema,
   },
   "plugin.server": {

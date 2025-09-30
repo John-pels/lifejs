@@ -18,16 +18,19 @@ TelemetryBrowserClient.registerGlobalConsumer({
       const logLevel = (globalThis?.process?.env?.LOG_LEVEL as TelemetryLogLevel) ?? "info";
 
       // Ignore logs lower than the requested log level
-      if (logLevelPriority(item.level) < logLevelPriority(logLevel as TelemetryLogLevel)) continue;
+      const priority = logLevelPriority(item.level);
+      if (priority < logLevelPriority(logLevel as TelemetryLogLevel)) continue;
 
       // Format and print the log
       try {
-        if (logLevelPriority("error") >= logLevelPriority(logLevel as TelemetryLogLevel)) {
-          console.error(await formatLogForBrowser(item));
-        } else {
-          console.log(await formatLogForBrowser(item));
-        }
-      } catch (_e) {
+        const content = await formatLogForBrowser(item);
+        let consoleFn: (line: string) => void;
+        if (logLevelPriority("error") >= priority) consoleFn = console.error;
+        else if (logLevelPriority("warn") >= priority) consoleFn = console.warn;
+        else consoleFn = console.log;
+        for (let i = 0; i < content.length; i++)
+          consoleFn(`Life.js (${item.id.slice(0, 6)}, ${i + 1}/${content.length})\n${content[i]}`);
+      } catch {
         console.log(item.message);
       }
     }
