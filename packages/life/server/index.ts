@@ -28,6 +28,7 @@ export class LifeServer {
   watcher: FSWatcher | null = null;
   api: LifeApi;
   readonly agentProcesses = new Map<string, AgentProcess>();
+
   readonly #processStats = new ProcessStats();
   readonly #fileHashes = new Map<string, string>();
   #startedAt: number | null = null;
@@ -450,7 +451,6 @@ export class LifeServer {
             projectDirectory: this.options.projectDirectory,
             noCache: true,
           });
-          span.log.debug({ message: `Build ${JSON.stringify(Object.keys(build))}` });
           const definition = build[name as keyof typeof build]?.definition;
           if (!definition)
             return op.failure({
@@ -481,10 +481,7 @@ export class LifeServer {
           const serverConfig = agentServerConfig.schema.parse(definition.config);
           const clientConfig = agentClientConfig.schema.parse(serverConfig);
 
-          return op.success({
-            id: process.id,
-            clientConfig,
-          });
+          return op.success({ id: process.id, clientConfig });
         } catch (error) {
           return op.failure({
             code: "Unknown",

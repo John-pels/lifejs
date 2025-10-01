@@ -1,8 +1,10 @@
+import chalk from "chalk";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
 import { Divider } from "../components/divider";
 import { ScrollBox } from "../components/scroll-box";
+import { DEFAULT_TABS } from "../lib/tabs";
 
 interface DevContentProps {
   debugModeEnabled: boolean;
@@ -17,6 +19,8 @@ export const DevContent: FC<DevContentProps> = ({
   logs,
   debugLogs,
 }) => {
+  const currentTabLogs = (debugModeEnabled ? debugLogs[selectedTab] : logs[selectedTab]) ?? [];
+
   return (
     <Box
       borderColor={debugModeEnabled ? undefined : "gray"}
@@ -31,24 +35,37 @@ export const DevContent: FC<DevContentProps> = ({
             <Divider color={theme.orange} width="100%" />
           </Box>
           <Box flexDirection="column">
-            {(debugLogs[selectedTab] || []).map((log, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: expected
-              <Text key={`${selectedTab}-log-${index}`} wrap="wrap">
-                {log}
-              </Text>
-            ))}
+            <Logs logs={currentTabLogs} selectedTab={selectedTab} />
           </Box>
         </Box>
       ) : (
         <ScrollBox flexDirection="column" key={`${selectedTab}-scroll-box`} width={"100%"}>
-          {(logs[selectedTab] || []).map((log, index) => (
+          <Logs logs={currentTabLogs} selectedTab={selectedTab} />
+        </ScrollBox>
+      )}
+    </Box>
+  );
+};
+
+const Logs = ({ logs, selectedTab }: { logs: string[]; selectedTab: string }) => {
+  const hasLogs = logs.length > 0;
+  const isAgentTab = !DEFAULT_TABS.includes(selectedTab);
+  return (
+    <>
+      {hasLogs
+        ? (logs || []).map((log, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: expected
             <Text key={`${selectedTab}-log-${index}`} wrap="wrap">
               {log}
             </Text>
-          ))}
-        </ScrollBox>
-      )}
-    </Box>
+          ))
+        : null}
+      {!hasLogs && isAgentTab ? (
+        <Text color={theme.gray.light} italic>
+          This agent isn't started yet.{"\n\n"}Run `{chalk.bold("agent.start()")}` on the frontend
+          to start it.
+        </Text>
+      ) : null}
+    </>
   );
 };

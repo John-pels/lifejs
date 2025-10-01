@@ -49,14 +49,15 @@ export class LifeClient {
       serverToken: options?.serverToken,
     };
 
+    // Initialize telemetry
+    this.#telemetry = createTelemetryClient("client", {});
+
     // Initialize API client
     this.api = new LifeServerApiClient({
+      telemetry: this.#telemetry,
       serverUrl: this.options.serverUrl,
       serverToken: this.options.serverToken,
     });
-
-    // Initialize telemetry
-    this.#telemetry = createTelemetryClient("client", {});
   }
 
   /**

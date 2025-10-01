@@ -179,6 +179,7 @@ export class AgentProcess {
             on: (fn) => this.nodeProcess?.on("message", fn),
             serialize: canon.serialize,
             deserialize: canon.deserialize,
+            timeout: -1,
           },
         );
 

@@ -4,14 +4,15 @@ import chalk from "chalk";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
-import { timeout } from "hono/timeout";
 import type { WSMessageReceive } from "hono/ws";
 import z from "zod";
+import { themeChalk } from "@/cli/utils/theme";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { type LifeErrorUnion, makeErrorPublic } from "@/shared/error";
 import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
+import type { MaybePromise } from "@/shared/types";
 import type { LifeServer } from "..";
 import { definition } from "./definition";
 import { getHandlers } from "./handlers";
@@ -46,36 +47,6 @@ export class LifeApi {
 
   constructor(server: LifeServer) {
     this.server = server;
-
-    // Setup HTTP requests telemetry
-    // this.app.use(async (c, next) => {
-    //   const requestId = newId("request");
-    //   using h0 = (
-    //     await this.server.telemetry.trace(`${c.req.method} ${c.req.path}`, {
-    //       method: c.req.method,
-    //       path: c.req.path,
-    //       requestId,
-    //     })
-    //   ).start();
-    //   c.header("Life-Request-Id", requestId);
-    //   try {
-    //     await next();
-    //   } catch (error) {
-    //     span.log.error({ message: `Uncaught error in route: ${c.req.method} ${c.req.path}`, error });
-    //   }
-    //   span.end();
-    //   let statusChalk = chalk.gray;
-    //   if (c.res.status >= 500) statusChalk = chalk.red;
-    //   else if (c.res.status >= 400) statusChalk = chalk.yellow;
-    //   else if (c.res.status >= 300) statusChalk = chalk.cyan;
-    //   else if (c.res.status >= 200) statusChalk = chalk.green;
-    //   this.server.telemetry.log.info({
-    //     message: `(${statusChalk.bold(c.res.status.toString())}) ${c.req.method} ${c.req.path} [in ${chalk.bold(`${ns.toMs(span.getSpan().duration)}ms]`)}`,
-    //   });
-    // });
-
-    // Setup timeout policy (10s)
-    this.app.use("*", timeout(10_000));
 
     // Setup CORS policy
     this.app.use(
@@ -236,11 +207,13 @@ export class LifeApi {
         const [error] = result;
         const status = error ? (error.httpEquivalent ?? 500) : 200;
         let statusColor = chalk.gray;
-        if (status >= 500) statusColor = chalk.red;
-        else if (status >= 400) statusColor = chalk.hex("#FFA500");
-        else if (status >= 300) statusColor = chalk.cyan;
-        else if (status >= 200) statusColor = chalk.green;
-        this.server.telemetry.log.info({
+        if (status >= 500) statusColor = themeChalk.level.error;
+        else if (status >= 400) statusColor = themeChalk.level.warn;
+        else if (status >= 300) statusColor = themeChalk.level.info;
+        else if (status >= 200) statusColor = themeChalk.level.info;
+        const logFn =
+          status >= 400 ? this.server.telemetry.log.error : this.server.telemetry.log.info;
+        logFn({
           message: `Request /${handlerId} ${type === "http" ? `${statusColor.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms.`)}`,
           error,
         });
@@ -315,18 +288,34 @@ export class LifeApi {
             }),
           );
 
+        // Prepare a timeout promise
+        const timeoutPromise = new Promise<op.OperationResult<unknown>>((resolve) => {
+          setTimeout(() => {
+            resolve(
+              op.failure({
+                code: "Timeout",
+                message: `Request to handler '${rawInput.handlerId}' timed out.`,
+                isPublic: true,
+              }),
+            );
+          }, handlerDef.timeoutMs ?? 10_000);
+        });
+
         // Handle the request based on the handler type
-        let output: op.OperationResult<unknown>;
+        let outputPromise: MaybePromise<op.OperationResult<unknown>>;
         if (handlerDef.type === "call") {
-          output = await this.handleCallRequest({ input: input as LifeApiCallInput, request });
+          outputPromise = this.handleCallRequest({ input: input as LifeApiCallInput, request });
         } else if (handlerDef.type === "cast") {
-          output = await this.handleCastRequest({ input: input as LifeApiCastInput });
+          outputPromise = this.handleCastRequest({ input: input as LifeApiCastInput });
         } else if (handlerDef.type === "stream") {
-          output = await this.handleStreamRequest({
+          outputPromise = this.handleStreamRequest({
             input: input as LifeApiStreamInput,
             send: (data) => send?.(prepareResponse(data).response),
           });
         } else throw new Error("Should never happen.");
+
+        // Capture whichever resolves first between timeout or result
+        const output = await Promise.race([timeoutPromise, outputPromise]);
 
         // Return the prepared response
         return prepareResponse(output);

@@ -12,14 +12,18 @@ let agentServer: AgentServer | null = null;
 const processStats = new ProcessStats();
 
 // biome-ignore lint/suspicious/noExplicitAny: attributes are going to be rewritten by the parent process anyway
-const telemetry = createTelemetryClient("server", {} as any);
+const telemetry = createTelemetryClient("server", { watch: false } as any);
 
 // Create RPC channel with parent process
 const rpc = createBirpc<ParentMethods, ChildMethods>(
   {
     // biome-ignore lint/suspicious/useAwait: not needed
     async injectEnvVars(vars) {
+      telemetry.log.debug({ message: `Injecting environment variables: ${JSON.stringify(vars)}` });
       process.env = { ...process.env, ...vars };
+      telemetry.log.debug({
+        message: `Environment variables injected: ${JSON.stringify(process.env)}`,
+      });
       return op.success();
     },
     async start(params) {
@@ -119,6 +123,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
     on: (fn) => process.on("message", fn),
     serialize: canon.serialize,
     deserialize: canon.deserialize,
+    timeout: -1,
   },
 );
 

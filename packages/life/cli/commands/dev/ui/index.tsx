@@ -14,7 +14,7 @@ import type { MaybePromise } from "@/shared/types";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
 import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
-import { theme } from "../../../utils/theme";
+import { theme, themeChalk } from "../../../utils/theme";
 import type { DevOptions } from "../action";
 import { ConditionalMouseProvider } from "../components/conditional-mouse-provider";
 import { Divider } from "../components/divider";
@@ -58,7 +58,9 @@ export const DevUI = ({
   const [version, setVersion] = useState<VersionInfo | null>(null);
 
   // Manage tabs and selected tab
-  const [tabs, setTabs] = useState<string[]>(DEFAULT_TABS);
+  const [tabs, setTabs] = useState<string[]>(
+    options.debug ? DEFAULT_TABS : DEFAULT_TABS.filter((tab) => tab !== "cli"),
+  );
   const [selectedTab, setSelectedTab] = useState("server");
 
   // Logs
@@ -66,11 +68,13 @@ export const DevUI = ({
     server: [],
     compiler: [],
     webrtc: [],
+    cli: [],
   });
   const [debugLogs, setDebugLogs] = useState<Record<string, string[]>>({
     server: [],
     compiler: [],
     webrtc: [],
+    cli: [],
   });
   const [allLogs, setAllLogs] = useState<string[]>([]);
 
@@ -187,7 +191,24 @@ export const DevUI = ({
           async start(queue) {
             for await (const item of queue) {
               if (item.type !== "log") continue;
-              setAllLogs((prev) => [...prev, formatLogForTerminal(item)]);
+              const formattedLog = formatLogForTerminal(item);
+              setAllLogs((prev) => [...prev, formattedLog]);
+
+              // Push any log to debug logs for CLI tab
+              setDebugLogs((prev) => ({
+                ...prev,
+                cli: [...(prev.cli ?? []), formattedLog],
+              }));
+
+              // Ignore logs lower than the requested log level
+              if (
+                logLevelPriority(item.level) >= logLevelPriority(options.debug ? "debug" : "info")
+              ) {
+                setLogs((prev) => ({
+                  ...prev,
+                  cli: [...(prev.cli ?? []), formattedLog],
+                }));
+              }
             }
           },
         });
@@ -370,7 +391,7 @@ export const DevUI = ({
           return lines
             .map(
               (line) =>
-                `${chalk.bold.cyan("⦿")} ${chalk.gray(`[${chalk.italic.gray("LiveKit")}] `)}` +
+                `${themeChalk.level.info.bold("⦿")} ${themeChalk.gray.medium(`[${themeChalk.gray.medium("LiveKit")}] `)}` +
                 // Remove datetime like "2025-09-16T07:29:29.693-0700"
                 line
                   .replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s*/, "")
@@ -565,7 +586,7 @@ export const DevUI = ({
       progressAfter: 95,
       run: () => {
         const intervalId = setInterval(() => {
-          setAgentProcesses(server.current?.agentProcesses ?? new Map());
+          setAgentProcesses(new Map(server.current?.agentProcesses ?? new Map()));
         }, 1000);
         intervals.current.push(intervalId);
         return op.success();
@@ -622,6 +643,9 @@ export const DevUI = ({
 
   // Update tabs and logs when agent processes change
   useEffect(() => {
+    // Determine base tabs based on debug mode
+    const baseTabs = options.debug ? DEFAULT_TABS : DEFAULT_TABS.filter((tab) => tab !== "cli");
+
     // Identify added/removed processes
     const addedProcesses = Array.from(agentProcesses.values()).filter(
       (process) => !tabs.includes(process.id),
@@ -629,13 +653,13 @@ export const DevUI = ({
     const removedProcessesIds = tabs.filter(
       (tabId) =>
         !(
-          DEFAULT_TABS.includes(tabId) ||
+          baseTabs.includes(tabId) ||
           Array.from(agentProcesses.values()).some((process) => process.id === tabId)
         ),
     );
 
     // Update tabs
-    setTabs([...DEFAULT_TABS, ...Array.from(agentProcesses.values()).map((process) => process.id)]);
+    setTabs([...baseTabs, ...Array.from(agentProcesses.values()).map((process) => process.id)]);
 
     // If the current selected tab is removed, switch to "server" tab
     if (removedProcessesIds.includes(selectedTab)) setSelectedTab("server");

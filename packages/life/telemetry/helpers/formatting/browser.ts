@@ -155,7 +155,7 @@ export async function formatLogForBrowser(log: TelemetryLog) {
   else if (log.level === "error") prefix = "✘";
   else if (log.level === "warn") prefix = "▲";
   else if (log.level === "info") prefix = "⦿";
-  else prefix = "→";
+  else prefix = "∴";
 
   // Format the log scope
   const scopeDefinition =

@@ -2,6 +2,7 @@ import path from "node:path";
 import chalk from "chalk";
 import esbuild, { type BuildFailure, type PartialMessage } from "esbuild";
 import z from "zod";
+import { themeChalk } from "@/cli/utils/theme";
 import { isLifeError } from "@/shared/error";
 import type { TelemetryLog } from "@/telemetry/types";
 import { telemetryBrowserScopesDefinition } from "../../scopes/browser";
@@ -109,12 +110,15 @@ function formatErrorForTerminal(error: Error | unknown): string {
 export function formatLogForTerminal(log: TelemetryLog, currentDir: string = process.cwd()) {
   // Get prefix and color based on level
   let style: { prefix: string; color?: (m: string) => string };
-  if (log.level === "fatal") style = { prefix: chalk.bold.bgRed("✘"), color: chalk.bgRed };
-  else if (log.level === "error") style = { prefix: chalk.bold.red("✘"), color: chalk.red };
+  if (log.level === "fatal")
+    style = { prefix: themeChalk.level.fatal.bold("✘"), color: themeChalk.level.fatal };
+  else if (log.level === "error")
+    style = { prefix: themeChalk.level.error.bold("✘"), color: themeChalk.level.error };
   else if (log.level === "warn")
-    style = { prefix: chalk.bold.hex("#FFA500")("▲"), color: chalk.hex("#FFA500") };
-  else if (log.level === "info") style = { prefix: chalk.bold.cyan("⦿"), color: chalk.cyan };
-  else style = { prefix: chalk.bold.gray("→"), color: chalk.gray };
+    style = { prefix: themeChalk.level.warn.bold("▲"), color: themeChalk.level.warn };
+  else if (log.level === "info")
+    style = { prefix: themeChalk.level.info.bold("⦿"), color: themeChalk.level.info };
+  else style = { prefix: themeChalk.level.debug.bold("∴"), color: themeChalk.level.debug };
 
   // Format the log scope
   const scopeDefinition =
@@ -135,12 +139,14 @@ export function formatLogForTerminal(log: TelemetryLog, currentDir: string = pro
 
   // Format the log error content (if any)
   const error = formatErrorForTerminal(log.error);
-  const errorColor = ["error", "fatal"].includes(log.level) ? chalk.red : chalk.hex("#FFA500");
+  const errorColor = ["error", "fatal"].includes(log.level)
+    ? themeChalk.level.error
+    : themeChalk.level.warn;
 
   // Build the output (if an error is present, add it with padding)
   let output = header;
   if (error)
-    output += `\n${errorColor.dim("-----")}\n${errorColor(error)}\n${errorColor.dim("-----")}\n`;
+    output += `\n${errorColor.dim("-----")}\n${errorColor(error)}\n${errorColor.dim("-----")}`;
 
   // Replace all the absolute paths with relative paths in the output (if shorter)
   output = output.replace(/\/[^\s\n\r:;,()[\]{}'"<>]+/g, (match) => {

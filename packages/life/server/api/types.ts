@@ -10,6 +10,7 @@ export type LifeApiCallDefinition = {
   protected: boolean;
   inputDataSchema?: z.ZodType;
   outputDataSchema?: z.ZodType;
+  timeoutMs?: number;
 };
 
 export type LifeApiCastDefinition = {
@@ -17,6 +18,7 @@ export type LifeApiCastDefinition = {
   protected: boolean;
   inputDataSchema?: z.ZodType;
   outputDataSchema?: never;
+  timeoutMs?: number;
 };
 
 export type LifeApiStreamDefinition = {
@@ -24,6 +26,7 @@ export type LifeApiStreamDefinition = {
   protected: boolean;
   inputDataSchema?: z.ZodType;
   outputDataSchema?: z.ZodType;
+  timeoutMs?: number;
 };
 
 export type LifeApiHandlerDefinition =

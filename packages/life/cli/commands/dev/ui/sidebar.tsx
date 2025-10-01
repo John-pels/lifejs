@@ -6,6 +6,30 @@ import type { AgentProcess } from "@/server/agent-process/parent";
 import { Divider } from "../components/divider";
 import { DEFAULT_TABS, getTabName } from "../lib/tabs";
 
+const getStatusIndicator = (process: AgentProcess) => {
+  const { status, restartCount } = process;
+
+  if (status === "running") {
+    return <Text color="green">● </Text>;
+  }
+
+  if (status === "starting") {
+    return <Text color={theme.level.warn}>● </Text>;
+  }
+
+  if (status === "stopping") {
+    return <Text color={theme.level.warn}>● </Text>;
+  }
+
+  // status === "stopped"
+  if (restartCount > 0) {
+    return <Text color={theme.level.error}>● </Text>;
+  }
+
+  // Never started
+  return <Text color={theme.gray.medium}>○ </Text>;
+};
+
 interface DevSidebarProps {
   version: VersionInfo | null;
   selectedTab: string;
@@ -66,20 +90,28 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
                 Agents
               </Text>
               <Divider borderDimColor={true} color="gray" flexGrow={1} />
+              <Text color={theme.gray.dark} italic>
+                ({agentProcesses.size})
+              </Text>
             </Box>
             <Box flexDirection="column" paddingLeft={2}>
               {tabs
                 .filter((tab) => !DEFAULT_TABS.includes(tab))
-                .map((agentId) => (
-                  <Text
-                    bold={selectedTab === agentId}
-                    color={selectedTab === agentId ? theme.orange : theme.gray.medium}
-                    key={agentId}
-                    wrap="truncate-end"
-                  >
-                    {getTabName(agentId, agentProcesses)}
-                  </Text>
-                ))}
+                .map((agentId) => {
+                  const process = agentProcesses.get(agentId);
+                  return (
+                    <Box flexDirection="row" key={agentId}>
+                      {process && getStatusIndicator(process)}
+                      <Text
+                        bold={selectedTab === agentId}
+                        color={selectedTab === agentId ? theme.orange : theme.gray.medium}
+                        wrap="truncate-end"
+                      >
+                        {getTabName(agentId, agentProcesses)}
+                      </Text>
+                    </Box>
+                  );
+                })}
             </Box>
           </Box>
         </Box>

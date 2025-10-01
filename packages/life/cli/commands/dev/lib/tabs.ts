@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import type { AgentProcess } from "@/server/agent-process/parent";
 
-export const DEFAULT_TABS = ["server", "compiler", "webrtc"];
+export const DEFAULT_TABS = ["server", "compiler", "webrtc", "cli"];
 
 export const getTabName = (selectedTab: string, agentProcesses: Map<string, AgentProcess>) => {
   // Match default tabs names
@@ -9,6 +9,7 @@ export const getTabName = (selectedTab: string, agentProcesses: Map<string, Agen
     server: "Server",
     compiler: "Compiler",
     webrtc: "WebRTC",
+    cli: "CLI",
   }[selectedTab];
   if (defaultTabName) return defaultTabName;
 
