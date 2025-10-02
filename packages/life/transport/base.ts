@@ -39,7 +39,7 @@ export abstract class TransportClientBase {
       await writer.close();
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -61,7 +61,7 @@ export abstract class TransportClientBase {
       if (errReceive) return op.failure(errReceive);
       return op.success(unsubscribe);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -73,7 +73,7 @@ export abstract class TransportClientBase {
       if (errSend) return op.failure(errSend);
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -89,7 +89,7 @@ export abstract class TransportClientBase {
       if (err) return op.failure(err);
       return op.success(unsubscribe);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -125,7 +125,7 @@ export abstract class TransportClientBase {
       const { data: input, error: inputError } = inputSchema?.input
         ? inputSchema.input.safeParse(rawInput)
         : { data: rawInput, error: null };
-      if (inputError) return op.failure({ code: "Validation", zodError: inputError });
+      if (inputError) return op.failure({ code: "Validation", cause: inputError });
 
       // Create a timeout promise that resolve with failure after 30 seconds
       const timeoutPromise = new Promise<op.OperationResult<SerializableValue>>((resolve) => {
@@ -169,7 +169,7 @@ export abstract class TransportClientBase {
       return result;
     } catch (error) {
       clearTimeout(timeoutId);
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -218,7 +218,7 @@ export abstract class TransportClientBase {
           op.failure({
             code: "Validation",
             message: `Invalid input parameters for procedure '${message.name}'.`,
-            zodError: inputError ?? undefined,
+            cause: inputError,
           }),
         );
       }
@@ -236,7 +236,7 @@ export abstract class TransportClientBase {
           op.failure({
             code: "Validation",
             message: `Invalid output from procedure '${message.name}'.`,
-            zodError: outputError ?? undefined,
+            cause: outputError,
           }),
         );
       }
@@ -244,7 +244,7 @@ export abstract class TransportClientBase {
       // - Send the output result
       await sendResult(op.success(output as SerializableValue));
     } catch (error) {
-      await sendResult(op.failure({ code: "Unknown", error }));
+      await sendResult(op.failure({ code: "Unknown", cause: error }));
     }
   }
 
@@ -255,7 +255,7 @@ export abstract class TransportClientBase {
       this.#rpcUnsubscribe = unsubscribe;
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -266,7 +266,7 @@ export abstract class TransportClientBase {
       this.#procedures.clear();
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 

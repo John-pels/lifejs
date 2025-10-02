@@ -62,8 +62,8 @@ const Logs = ({ logs, selectedTab }: { logs: string[]; selectedTab: string }) =>
         : null}
       {!hasLogs && isAgentTab ? (
         <Text color={theme.gray.light} italic>
-          This agent isn't started yet.{"\n\n"}Run `{chalk.bold("agent.start()")}` on the frontend
-          to start it.
+          This agent running.{"\n\n"}Run `{chalk.bold("agent.start()")}` on the frontend to start
+          it.
         </Text>
       ) : null}
     </>

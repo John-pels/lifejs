@@ -8,7 +8,8 @@ import { type TransportEvent, TransportProviderClientBase } from "../base";
 export const livekitBrowserConfig = createConfig({
   schema: z.object({
     provider: z.literal("livekit"),
-    serverUrl: z.url()
+    serverUrl: z
+      .url()
       .prefault(globalThis.process?.env?.LIVEKIT_SERVER_URL ?? "ws://localhost:7880"),
   }),
   toTelemetryAttribute: (config) => {
@@ -99,7 +100,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
 
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -111,7 +112,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       this.isConnected = false;
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -121,7 +122,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       if (errEnsure) return op.failure(errEnsure);
       return op.success(await connector.room.localParticipant.streamText({ topic }));
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -139,7 +140,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
         connector.room.unregisterTextStreamHandler(topic);
       });
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -154,7 +155,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       });
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -165,7 +166,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
       await connector.room.startAudio();
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -176,7 +177,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
         "streamAudioChunk() is not available for browser client, use enableMicrophone() instead.",
       );
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -192,7 +193,7 @@ export class LiveKitBrowserClient extends TransportProviderClientBase<
         this.listeners[type] = this.listeners[type]?.filter((listener) => listener !== callback);
       });
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 }

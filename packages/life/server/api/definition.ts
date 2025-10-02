@@ -47,6 +47,7 @@ export const definition = {
       id: z.string(),
       sessionToken: z.string(),
     }),
+    timeoutMs: 30_000,
   },
   "agent.ping": {
     type: "call",

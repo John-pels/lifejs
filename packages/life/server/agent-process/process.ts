@@ -1,39 +1,37 @@
 import { createBirpc } from "birpc";
 import { AgentServer } from "@/agent/server/class";
 import { importServerBuild } from "@/exports/build/server";
+import type { AsyncQueue } from "@/shared/async-queue";
 import { canon } from "@/shared/canon";
+import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { ProcessStats } from "@/shared/process-stats";
-import { createTelemetryClient } from "@/telemetry/clients/node";
+import { createTelemetryClient, TelemetryNodeClient } from "@/telemetry/clients/node";
+import type { TelemetrySignal } from "@/telemetry/types";
 import type { ChildMethods, ParentMethods } from "./types";
 
 let agentServer: AgentServer | null = null;
 
 const processStats = new ProcessStats();
 
-// biome-ignore lint/suspicious/noExplicitAny: attributes are going to be rewritten by the parent process anyway
-const telemetry = createTelemetryClient("server", { watch: false } as any);
+// Attributes are going to be rewritten by the parent process anyway
+const telemetry = createTelemetryClient("server", { watch: false });
 
-// Create RPC channel with parent process
 const rpc = createBirpc<ParentMethods, ChildMethods>(
   {
     // biome-ignore lint/suspicious/useAwait: not needed
     async injectEnvVars(vars) {
-      telemetry.log.debug({ message: `Injecting environment variables: ${JSON.stringify(vars)}` });
       process.env = { ...process.env, ...vars };
-      telemetry.log.debug({
-        message: `Environment variables injected: ${JSON.stringify(process.env)}`,
-      });
       return op.success();
     },
     async start(params) {
       try {
         // Retrieve the agent definition
-        const [errImport, servers] = await op.attempt(
+        const [errImport, imports] = await op.attempt(
           importServerBuild({ projectDirectory: process.cwd(), noCache: true }),
         );
         if (errImport) return op.failure(errImport);
-        const server = servers?.[params.name as keyof typeof servers];
+        const server = imports?.[params.name as keyof typeof imports];
         if (!server)
           return op.failure({ code: "NotFound", message: `Agent '${params.name}' not found.` });
         const definition = server.definition;
@@ -87,7 +85,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
         // Return that the agent server was started successfully
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     },
 
@@ -100,7 +98,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
         }
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     },
 
@@ -114,18 +112,73 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
       try {
         return await op.success(processStats.get());
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     },
   },
   {
     post: (data) => process.send?.(data),
     on: (fn) => process.on("message", fn),
-    serialize: canon.serialize,
-    deserialize: canon.deserialize,
+    serialize: (data) => {
+      const [error, result] = canon.serialize(data);
+      if (error) {
+        throw lifeError({
+          code: "Validation",
+          message:
+            "Failed to serialize data from agent process to server. The message has been discarded.",
+          attributes: { agentId: agentServer?.id, agentName: agentServer?._definition.name, data },
+          cause: error,
+        });
+      }
+      return result;
+    },
+    deserialize: (data) => {
+      const [error, result] = canon.deserialize(data);
+      if (error) {
+        throw lifeError({
+          code: "Validation",
+          message:
+            "Failed to deserialize data from agent process to server. The message has been discarded.",
+          attributes: { agentId: agentServer?.id, agentName: agentServer?._definition.name, data },
+          cause: error,
+        });
+      }
+      return result;
+    },
+    onFunctionError: (error) => {
+      telemetry.log.error(
+        isLifeError(error)
+          ? error
+          : lifeError({
+              code: "Unknown",
+              cause: error,
+            }),
+      );
+    },
+    onGeneralError: (error) => {
+      telemetry.log.error(
+        isLifeError(error)
+          ? error
+          : lifeError({
+              code: "Unknown",
+              cause: error,
+            }),
+      );
+    },
+    // Disable Birpc timeout
+    onTimeoutError: () => true,
     timeout: -1,
   },
 );
+
+// Register telemetry consumer to forward all signals to parent
+TelemetryNodeClient.registerGlobalConsumer({
+  start: async (queue: AsyncQueue<TelemetrySignal>) => {
+    for await (const signal of queue) {
+      rpc.syncTelemetry(signal);
+    }
+  },
+});
 
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {

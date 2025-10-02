@@ -171,7 +171,7 @@ export class LifeCompiler {
         // 7. Return success
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -425,7 +425,7 @@ export class LifeCompiler {
           // Call the change handler
           return await this.onChangedConfig(configPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { configPath } },
@@ -443,7 +443,7 @@ export class LifeCompiler {
           // Call the change handler
           return await this.onChangedConfig(configPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { configPath } },
@@ -506,7 +506,7 @@ export class LifeCompiler {
 
           return op.success();
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { configPath } },
@@ -526,7 +526,7 @@ export class LifeCompiler {
           // Call the change handler
           return await this.onChangedServer(serverPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { serverPath } },
@@ -567,7 +567,7 @@ export class LifeCompiler {
 
           return op.success();
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { serverPath } },
@@ -686,7 +686,7 @@ export default {
 
           return op.success();
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { serverPath } },
@@ -706,7 +706,7 @@ export default {
           // Call the change handler
           return await this.onChangedClient(clientPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { clientPath } },
@@ -731,7 +731,7 @@ export default {
           // Request a rebuild of the client bundle
           return await this.onChangedClient(clientPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { clientPath } },
@@ -830,7 +830,7 @@ ${pluginEntries}
 
           return op.success();
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { clientPath } },
@@ -847,7 +847,7 @@ ${pluginEntries}
           // Call the change handler
           return await this.onChangedDependency(dependencyPath);
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { dependencyPath } },
@@ -876,7 +876,7 @@ ${pluginEntries}
 
           return op.success();
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       },
       { attributes: { dependencyPath } },
@@ -1049,7 +1049,7 @@ export default {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -1082,7 +1082,7 @@ export default {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }

@@ -111,7 +111,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while creating agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -143,7 +143,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while getting agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -173,7 +173,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while listing agents.",
-          error,
+          cause: error,
         });
       }
     });
@@ -220,7 +220,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while getting or creating agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -253,7 +253,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while getting server info.",
-          error,
+          cause: error,
         });
       }
     });
@@ -290,7 +290,7 @@ export class LifeClient {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while pinging server.",
-          error,
+          cause: error,
         });
       }
     });

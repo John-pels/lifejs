@@ -93,14 +93,11 @@ export async function formatErrorForBrowser(error: Error | unknown) {
     const prettyStack = await errorToPrettyStack(error);
     stack = prettyStack;
 
-    if (error.code === "Validation" && error.zodError) {
-      const formatted = await formatErrorForBrowser(error.zodError);
+    if (error.cause) {
+      const formatted = await formatErrorForBrowser(error.cause);
       after.push(formatted.content, ...formatted.after);
     }
-    if (error.code === "Unknown" && error.error) {
-      const formatted = await formatErrorForBrowser(error.error);
-      after.push(formatted.content, ...formatted.after);
-    }
+
     processed = true;
   }
 
@@ -177,6 +174,5 @@ export async function formatLogForBrowser(log: TelemetryLog) {
   const formatted = await formatErrorForBrowser(log.error);
   const errors = [formatted.content, ...formatted.after];
 
-  // Otherwise, just return the header
   return [header, ...errors];
 }

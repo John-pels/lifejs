@@ -74,7 +74,7 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       throw lifeError({
         code: "Validation",
         message: `Invalid config provided to plugin client '${definition.name}'.`,
-        zodError: error,
+        cause: error,
       });
     }
     this.config = data as PluginClientConfig<ClientDefinition["config"], "output">;

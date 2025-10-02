@@ -20,6 +20,6 @@ export const getToken: GetTokenFunction<"livekit"> = async (config, roomName, pa
 
     return op.success(await token.toJwt());
   } catch (error) {
-    return op.failure({ code: "Unknown", error });
+    return op.failure({ code: "Unknown", cause: error });
   }
 };

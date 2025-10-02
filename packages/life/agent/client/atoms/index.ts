@@ -40,7 +40,7 @@ export function createAgentClientAtoms(
           } catch (error) {
             store.set({
               success: false,
-              error: lifeError({ code: "Unknown", error }),
+              error: lifeError({ code: "Unknown", cause: error }),
             });
           }
         };

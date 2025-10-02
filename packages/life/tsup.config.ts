@@ -2,7 +2,7 @@ import { preserveDirectivesPlugin } from "esbuild-plugin-preserve-directives";
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["exports/**/*", "cli/index.ts", "server/agent-process/child.ts"],
+  entry: ["exports/**/*", "cli/index.ts", "server/agent-process/process.ts"],
   ignoreWatch: ["**/dist/**", "**/.life/**"],
   format: ["esm", "cjs"],
   dts: true,

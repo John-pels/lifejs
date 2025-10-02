@@ -16,7 +16,7 @@ import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
 import { transportProviderGetToken } from "@/transport/auth";
 import packageJson from "../package.json" with { type: "json" };
-import { AgentProcess } from "./agent-process/parent";
+import { AgentProcessClient } from "./agent-process/client";
 import { LifeApi } from "./api";
 import { type ServerOptions, serverOptionsSchema } from "./options";
 
@@ -27,7 +27,7 @@ export class LifeServer {
   telemetry: TelemetryClient;
   watcher: FSWatcher | null = null;
   api: LifeApi;
-  readonly agentProcesses = new Map<string, AgentProcess>();
+  readonly agentProcesses = new Map<string, AgentProcessClient>();
 
   readonly #processStats = new ProcessStats();
   readonly #fileHashes = new Map<string, string>();
@@ -99,7 +99,7 @@ export class LifeServer {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -135,7 +135,7 @@ export class LifeServer {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -188,7 +188,7 @@ export class LifeServer {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -261,7 +261,7 @@ export class LifeServer {
               });
 
               // Find all running processes for this agent
-              const processesToRestart: AgentProcess[] = [];
+              const processesToRestart: AgentProcessClient[] = [];
               for (const [, process] of this.agentProcesses) {
                 if (process.name === agentName && process.status === "running") {
                   processesToRestart.push(process);
@@ -277,27 +277,23 @@ export class LifeServer {
               }
 
               // Restart affected processes in parallel and track timing
-              await this.telemetry.trace("restart-agent-processes", async (spanRestart) => {
-                spanRestart.setAttributes({ agentName, count: processesToRestart.length });
+              await Promise.all(
+                processesToRestart.map(async (process) => {
+                  span.log.debug({
+                    message: `Restarting process '${process.id}' for agent '${agentName}'.`,
+                    attributes: { processId: process.id, agentName },
+                  });
+                  await process.restart();
+                }),
+              );
 
-                await Promise.all(
-                  processesToRestart.map(async (process) => {
-                    span.log.debug({
-                      message: `Restarting process '${process.id}' for agent '${agentName}'.`,
-                      attributes: { processId: process.id, agentName },
-                    });
-                    await process.restart();
-                  }),
-                );
-
-                // Log operation with timing similar to compiler
-                spanRestart.end();
-                const instanceCount = processesToRestart.length;
-                const formattedName = chalk.bold.italic(agentName);
-                span.log.info({
-                  message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanRestart.getData().duration)}ms`)}.`,
-                  attributes: { agentName, instanceCount },
-                });
+              // Log operation with timing similar to compiler
+              span.end();
+              const instanceCount = processesToRestart.length;
+              const formattedName = chalk.bold.italic(agentName);
+              this.telemetry.log.info({
+                message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+                attributes: { agentName, instanceCount },
               });
             } catch (error) {
               span.log.error({
@@ -314,7 +310,7 @@ export class LifeServer {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -336,7 +332,7 @@ export class LifeServer {
 
         return op.success(process);
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -354,7 +350,7 @@ export class LifeServer {
         return op.failure({
           code: "Unknown",
           message: `Failed to obtain agent process '${id}'.`,
-          error,
+          cause: error,
         });
       }
     });
@@ -382,7 +378,7 @@ export class LifeServer {
             })),
           );
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       });
     },
@@ -400,7 +396,11 @@ export class LifeServer {
             ...(stats ?? {}),
           });
         } catch (error) {
-          return op.failure({ code: "Unknown", message: "Failed to get server info", error });
+          return op.failure({
+            code: "Unknown",
+            message: "Failed to get server info",
+            cause: error,
+          });
         }
       });
     },
@@ -417,7 +417,7 @@ export class LifeServer {
             })),
           );
         } catch (error) {
-          return op.failure({ code: "Unknown", error });
+          return op.failure({ code: "Unknown", cause: error });
         }
       });
     },
@@ -435,7 +435,11 @@ export class LifeServer {
             ...(stats ?? {}),
           });
         } catch (error) {
-          return op.failure({ code: "Unknown", message: "Failed to get server info", error });
+          return op.failure({
+            code: "Unknown",
+            message: "Failed to get server info",
+            cause: error,
+          });
         }
       });
     },
@@ -460,7 +464,7 @@ export class LifeServer {
             });
 
           // Create the agent process
-          const process = new AgentProcess({ id, name, server: this });
+          const process = new AgentProcessClient({ id, name, server: this });
           span.setAttributes({ id: process.id, name });
 
           // Add the agent process to the map
@@ -486,7 +490,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to create agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });
@@ -532,23 +536,19 @@ export class LifeServer {
           );
           if (errUserToken) return op.failure(errUserToken);
 
-          // Staet the process
-          await this.telemetry.trace("start-process", async (spanStart) => {
-            spanStart.setAttributes({ id, agentName: process.name });
+          // Start the process
+          const [errStart] = await process.start({
+            scope,
+            transportRoom: { name: roomName, token: agentToken },
+          });
+          if (errStart) return op.failure(errStart);
 
-            const [errStart] = await process.start({
-              scope,
-              transportRoom: { name: roomName, token: agentToken },
-            });
-            if (errStart) return op.failure(errStart);
-
-            // Log operation with timing
-            spanStart.end();
-            const formattedName = chalk.bold.italic(process.name);
-            span.log.info({
-              message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStart.getData().duration)}ms`)}.`,
-              attributes: { id, agentName: process.name },
-            });
+          // Log operation with timing
+          span.end();
+          const formattedName = chalk.bold.italic(process.name);
+          this.telemetry.log.info({
+            message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+            attributes: { id, agentName: process.name },
           });
 
           return op.success({
@@ -559,7 +559,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to start agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });
@@ -579,23 +579,20 @@ export class LifeServer {
           if (errCheckSessionToken) return op.failure(errCheckSessionToken);
 
           // Track timing for stopping the process
-          await this.telemetry.trace("stop-process", async (spanStop) => {
-            spanStop.setAttributes({ id, agentName: process.name });
 
-            // Stop the process
-            const [errStop] = await process.stop();
-            if (errStop) return op.failure(errStop);
+          // Stop the process
+          const [errStop] = await process.stop();
+          if (errStop) return op.failure(errStop);
 
-            // Remove the process from the map
-            this.agentProcesses.delete(process.id);
+          // Remove the process from the map
+          this.agentProcesses.delete(process.id);
 
-            // Log operation with timing
-            spanStop.end();
-            const formattedName = chalk.bold.italic(process.name);
-            span.log.info({
-              message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanStop.getData().duration)}ms`)}.`,
-              attributes: { id, agentName: process.name },
-            });
+          // Log operation with timing
+          span.end();
+          const formattedName = chalk.bold.italic(process.name);
+          this.telemetry.log.info({
+            message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+            attributes: { id, agentName: process.name },
           });
 
           return op.success();
@@ -603,7 +600,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to stop agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });
@@ -623,20 +620,17 @@ export class LifeServer {
           if (errCheckSessionToken) return op.failure(errCheckSessionToken);
 
           // Track timing for restarting the process
-          await this.telemetry.trace("restart-process", async (spanRestart) => {
-            spanRestart.setAttributes({ id, agentName: process.name });
 
-            // Restart the process
-            const [errRestart] = await process.restart();
-            if (errRestart) return op.failure(errRestart);
+          // Restart the process
+          const [errRestart] = await process.restart();
+          if (errRestart) return op.failure(errRestart);
 
-            // Log operation with timing
-            spanRestart.end();
-            const formattedName = chalk.bold.italic(process.name);
-            span.log.info({
-              message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(spanRestart.getData().duration)}ms`)}.`,
-              attributes: { id, agentName: process.name },
-            });
+          // Log operation with timing
+          span.end();
+          const formattedName = chalk.bold.italic(process.name);
+          this.telemetry.log.info({
+            message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+            attributes: { id, agentName: process.name },
           });
 
           return op.success();
@@ -644,7 +638,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to restart agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });
@@ -672,7 +666,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to ping agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });
@@ -709,7 +703,7 @@ export class LifeServer {
           return op.failure({
             code: "Unknown",
             message: `Failed to get info for agent process '${id}'.`,
-            error,
+            cause: error,
           });
         }
       });

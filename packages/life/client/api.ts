@@ -138,7 +138,7 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
 
         return op.success(data as InferOutput<Def[K]>);
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -211,7 +211,7 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
 
         return op.success(unsubscribe);
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }

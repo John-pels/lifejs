@@ -133,7 +133,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while initializing plugins.",
-          error,
+          cause: error,
         });
       }
     });
@@ -183,7 +183,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while starting agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -237,7 +237,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while stopping agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -273,7 +273,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while restarting agent.",
-          error,
+          cause: error,
         });
       }
     });
@@ -318,7 +318,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
         return op.failure({
           code: "Unknown",
           message: "Unknown error while getting agent info.",
-          error,
+          cause: error,
         });
       }
     });

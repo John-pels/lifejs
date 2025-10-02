@@ -2,11 +2,11 @@ import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
 import { formatVersion, type VersionInfo } from "@/cli/utils/version";
-import type { AgentProcess } from "@/server/agent-process/parent";
+import type { AgentProcessClient } from "@/server/agent-process/client";
 import { Divider } from "../components/divider";
 import { DEFAULT_TABS, getTabName } from "../lib/tabs";
 
-const getStatusIndicator = (process: AgentProcess) => {
+const getStatusIndicator = (process: AgentProcessClient) => {
   const { status, restartCount } = process;
 
   if (status === "running") {
@@ -34,19 +34,12 @@ interface DevSidebarProps {
   version: VersionInfo | null;
   selectedTab: string;
   tabs: string[];
-  agentProcesses: Map<string, AgentProcess>;
+  agentProcesses: Map<string, AgentProcessClient>;
 }
 
 export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, agentProcesses }) => {
   return (
-    <Box
-      borderColor="gray"
-      borderStyle="round"
-      height="100%"
-      minWidth={37}
-      // overflow="hidden"
-      width={37}
-    >
+    <Box borderColor="gray" borderStyle="round" height="100%" minWidth={37} width={37}>
       <Box flexDirection="column" gap={1} width="100%">
         <Box alignItems="center" flexDirection="column" justifyContent="center" width="100%">
           {/* Header */}
@@ -97,6 +90,18 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
             <Box flexDirection="column" paddingLeft={2}>
               {tabs
                 .filter((tab) => !DEFAULT_TABS.includes(tab))
+                .sort((a, b) => {
+                  const aProcess = agentProcesses.get(a);
+                  const bProcess = agentProcesses.get(b);
+
+                  const getPriority = (status: string | undefined) => {
+                    if (status === "running") return 0;
+                    if (status === "starting" || status === "stopping") return 1;
+                    return 2; // stopped
+                  };
+
+                  return getPriority(aProcess?.status) - getPriority(bProcess?.status);
+                })
                 .map((agentId) => {
                   const process = agentProcesses.get(agentId);
                   return (

@@ -68,10 +68,10 @@ describe("operation", () => {
       // }
       const result = failure({
         code: "Unknown",
-        error: new Error("Something went wrong"),
+        cause: new Error("Something went wrong"),
       });
       if (result[0]?.code === "Unknown") {
-        expect(result[0]?.error).toBeInstanceOf(Error);
+        expect(result[0]?.cause).toBeInstanceOf(Error);
       }
     });
   });
@@ -232,7 +232,7 @@ describe("operation", () => {
         expect(isLifeError(error)).toBe(true);
         expect(error?.code).toBe("Unknown");
         if (error?.code === "Unknown") {
-          expect(error?.error).toBeInstanceOf(Error);
+          expect(error?.cause).toBeInstanceOf(Error);
         }
       });
 

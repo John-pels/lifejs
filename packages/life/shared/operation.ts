@@ -44,10 +44,10 @@
 
 import z from "zod";
 import {
-  type CreateLifeErrorParams,
   isLifeError,
   LifeErrorClass,
   type LifeErrorCode,
+  type LifeErrorParameters,
   type LifeErrorUnion,
   lifeError,
 } from "./error";
@@ -117,7 +117,7 @@ export const success = <const DR extends OperationDataOrResult = void>(
  * ```
  */
 export const failure = <Code extends LifeErrorCode, D extends OperationData = never>(
-  errorOrDef: CreateLifeErrorParams<Code>,
+  errorOrDef: LifeErrorParameters<Code>,
 ): OperationFailure<D> => {
   const error = isLifeError(errorOrDef) ? errorOrDef : lifeError(errorOrDef);
   const result = Object.assign([error, undefined] as const, {
@@ -186,7 +186,7 @@ export function attempt<const DR extends OperationDataOrResult>(
 ): Promise<OperationEnsureResult<DR>> | OperationEnsureResult<DR> {
   const handleError = (error: unknown) => {
     if (isLifeError(error)) return failure(error);
-    return failure({ code: "Unknown", error });
+    return failure({ code: "Unknown", cause: error });
   };
   const handleResult = (result: DR) => {
     if (isResult(result)) return result as OperationEnsureResult<DR>;
@@ -411,7 +411,7 @@ export function serializeResult<D extends OperationData>(
  */
 export function deserializeResult<D extends OperationData>(obj: {
   _isOperationResult: true;
-  result: [LifeErrorUnion | undefined, D | undefined];
+  result: readonly [LifeErrorUnion | undefined, D | undefined];
 }): OperationResult<D> {
   if (!obj._isOperationResult) {
     throw new Error("The provided object is not a serialized OperationResult");

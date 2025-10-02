@@ -26,7 +26,6 @@ export const executeBuild = async (telemetry: TelemetryClient, options: BuildOpt
       projectDirectory: options.root,
       outputDirectory: options.output,
       watch: options.watch,
-      optimize: options.optimize,
     });
   
     // Start compiler

@@ -7,7 +7,6 @@ interface LifeErrorCodeDefinition {
   retriable: boolean;
   defaultMessage: string;
   httpEquivalent: number;
-  extraSchema: z.ZodObject<Record<string, z.ZodType<SerializableValue>>>;
 }
 
 export const lifeErrorCodes = {
@@ -18,12 +17,6 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Invalid data provided.",
     httpEquivalent: 400,
-    extraSchema: z.object({
-      /**
-       * Optionally, the ZodError that was thrown (if the input error comes from a Zod schema).
-       */
-      zodError: z.instanceof(z.ZodError).optional(),
-    }),
   },
   /**
    * Used when the user is not authorized to access a resource
@@ -32,7 +25,6 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Not allowed to access this resource.",
     httpEquivalent: 403,
-    extraSchema: z.object(),
   },
   /**
    * Used when an operation took too long and timed out.
@@ -41,7 +33,6 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Operation timed out.",
     httpEquivalent: 504,
-    extraSchema: z.object(),
   },
   /**
    * Used when the user has exceeded the rate limit for a resource.
@@ -50,7 +41,6 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Rate limit exceeded.",
     httpEquivalent: 429,
-    extraSchema: z.object(),
   },
   /**
    * Used when a resource was not found or missing.
@@ -59,7 +49,6 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Resource not found.",
     httpEquivalent: 404,
-    extraSchema: z.object(),
   },
   /**
    * Used when an operation is about to conflict with another.
@@ -69,7 +58,6 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Operation conflicted.",
     httpEquivalent: 409,
-    extraSchema: z.object(),
   },
   /**
    * Used when an upstream service or resource fails.
@@ -79,7 +67,6 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Upstream error.",
     httpEquivalent: 502,
-    extraSchema: z.object(),
   },
   /**
    * Used when an unexpected error is thrown.
@@ -88,12 +75,6 @@ export const lifeErrorCodes = {
     retriable: false,
     defaultMessage: "Unknown error.",
     httpEquivalent: 500,
-    extraSchema: z.object({
-      /**
-       * The unhandled thrown value.
-       */
-      error: z.any().or(z.unknown()).optional(),
-    }),
   },
   /**
    * Used to obfuscate internal errors publicly.
@@ -103,11 +84,20 @@ export const lifeErrorCodes = {
     retriable: true,
     defaultMessage: "Internal error.",
     httpEquivalent: 500,
-    extraSchema: z.object(),
   },
 } as const satisfies Record<string, LifeErrorCodeDefinition>;
 
 export type LifeErrorCode = keyof typeof lifeErrorCodes;
+
+// Parameters
+export type LifeErrorParameters<Code extends LifeErrorCode> = {
+  code: Code;
+  message?: string;
+  attributes?: LifeErrorAttributes;
+  retryAfterMs?: number;
+  isPublic?: boolean;
+  cause?: unknown;
+};
 
 // Attributes
 export type LifeErrorAttributes = Record<string, SerializableValue>;
@@ -145,7 +135,7 @@ export class LifeErrorClass extends Error {
    */
   readonly retriable: boolean;
   /**
-   * The number of milliseconds to wait before retrying the operation that caused the error.
+   * The suggested time (in ms) to wait before retrying the operation that caused the error.
    * Check `.retriable` first to ensure the operation can be retried.
    */
   readonly retryAfterMs?: number;
@@ -157,26 +147,15 @@ export class LifeErrorClass extends Error {
    * Used to indicate whether this error is public and can be safely sent to external clients.
    */
   readonly isPublic: boolean;
-  /**
-   * @internal Use attributes on the error directly, e.g. `error.zodError` instead of `error._extra.zodError`.
-   */
-  readonly _extra: z.output<(typeof lifeErrorCodes)[LifeErrorCode]["extraSchema"]>;
 
   constructor({
     code,
     message,
     attributes,
     retryAfterMs,
+    cause,
     isPublic = false,
-    extra,
-  }: {
-    code: LifeErrorCode;
-    message?: string;
-    attributes?: LifeErrorAttributes;
-    retryAfterMs?: number;
-    isPublic?: boolean;
-    extra: z.output<(typeof lifeErrorCodes)[LifeErrorCode]["extraSchema"]>;
-  }) {
+  }: LifeErrorParameters<LifeErrorCode>) {
     const definition = lifeErrorCodes[code];
     super(message ?? definition.defaultMessage);
     this.code = code;
@@ -185,11 +164,7 @@ export class LifeErrorClass extends Error {
     this.retryAfterMs = retryAfterMs;
     this.httpEquivalent = definition.httpEquivalent;
     this.isPublic = isPublic;
-
-    // Store extra attributes both as a whole and individually
-    this._extra = extra;
-    // @ts-expect-error - runtime only
-    for (const key of Object.keys(extra)) this[key] = extra[key];
+    this.cause = cause;
 
     // Clean stack capture
     if (Error.captureStackTrace) Error.captureStackTrace(this, LifeErrorClass);
@@ -205,7 +180,7 @@ export class LifeErrorClass extends Error {
       retryAfterMs: this.retryAfterMs,
       httpEquivalent: this.httpEquivalent,
       stack: this.stack,
-      extra: this._extra,
+      cause: this.cause,
     };
   }
 }
@@ -216,7 +191,7 @@ export class LifeErrorClass extends Error {
  */
 export type LifeError<Code extends LifeErrorCode = LifeErrorCode> = LifeErrorClass & {
   code: Code;
-} & z.output<(typeof lifeErrorCodes)[Code]["extraSchema"]>;
+}; // & z.output<(typeof lifeErrorCodes)[Code]["extraSchema"]>;
 
 /**
  * Union of all LifeError types.
@@ -225,32 +200,13 @@ export type LifeErrorUnion<Code extends LifeErrorCode = LifeErrorCode> = Code ex
   ? LifeError<Code>
   : never;
 
-// lifeError() parameters exported as a type (also used in '@/shared/operation')
-export type CreateLifeErrorParams<Code extends LifeErrorCode> = {
-  code: Code;
-  message?: string;
-  attributes?: LifeErrorAttributes;
-  retryAfterMs?: number;
-  isPublic?: boolean;
-} & z.input<(typeof lifeErrorCodes)[Code]["extraSchema"]>;
-
 /**
  * Creates a new LifeError instance.
  * @param params
  * @returns
  */
-export function lifeError<Code extends LifeErrorCode>(
-  params: CreateLifeErrorParams<Code>,
-): LifeError<Code> {
-  const { code, message, attributes, retryAfterMs, isPublic, ...extra } = params;
-  return new LifeErrorClass({
-    code,
-    message,
-    attributes,
-    isPublic,
-    retryAfterMs,
-    extra,
-  }) as LifeError<Code>;
+export function lifeError<Code extends LifeErrorCode>(params: LifeErrorParameters<Code>) {
+  return new LifeErrorClass(params) as LifeError<Code>;
 }
 
 /**
@@ -271,7 +227,8 @@ const serializedLifeErrorSchema = z.object({
   message: z.string(),
   attributes: z.object().optional(),
   retryAfterMs: z.number().optional(),
-  _extra: z.object(),
+  isPublic: z.boolean().optional(),
+  cause: z.any().optional(),
 });
 
 /**
@@ -279,7 +236,7 @@ const serializedLifeErrorSchema = z.object({
  * @param error - The LifeError to serialize.
  * @returns - The JSON-serializable object.
  */
-export function serializeLifeError(error: LifeError): Record<string, unknown> {
+export function lifeErrorToObject(error: LifeError): Record<string, unknown> {
   if (!(error instanceof LifeErrorClass))
     throw lifeError({
       code: "Validation",
@@ -293,7 +250,7 @@ export function serializeLifeError(error: LifeError): Record<string, unknown> {
     message: error.message,
     attributes: error.attributes,
     retryAfterMs: error.retryAfterMs,
-    _extra: error._extra,
+    cause: error.cause,
   };
 }
 
@@ -303,7 +260,7 @@ export function serializeLifeError(error: LifeError): Record<string, unknown> {
  * @param obj - The JSON-serializable object.
  * @returns - The LifeError instance.
  */
-export function deserializeLifeError(obj: Record<string, unknown>): LifeErrorUnion {
+export function lifeErrorFromObject(obj: Record<string, unknown>): LifeErrorUnion {
   const { success, data } = serializedLifeErrorSchema.safeParse(obj);
   if (!success)
     throw lifeError({
@@ -315,7 +272,8 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeErrorUni
     message: data.message,
     retryAfterMs: data.retryAfterMs,
     attributes: data.attributes as LifeErrorAttributes,
-    ...data._extra,
+    cause: data.cause,
+    isPublic: data.isPublic,
   });
   // @ts-expect-error - runtime only
   err.id = data.id;
@@ -330,7 +288,7 @@ export function deserializeLifeError(obj: Record<string, unknown>): LifeErrorUni
  * @param error - The LifeError to make public.
  * @returns - The public LifeError.
  */
-export function makeErrorPublic<Code extends LifeErrorCode = LifeErrorCode>(
+export function obfuscateLifeError<Code extends LifeErrorCode = LifeErrorCode>(
   error: LifeError<Code>,
 ): LifeErrorUnion {
   // Return raw error in development
@@ -338,25 +296,23 @@ export function makeErrorPublic<Code extends LifeErrorCode = LifeErrorCode>(
 
   let publicError: LifeError;
 
-  // If the error is already public, just copy it
+  // If the error is already public, just clone it to avoid mutating the original error
   if (error.isPublic) {
     publicError = lifeError({
       code: error.code,
       message: error.message,
       attributes: error.attributes,
       retryAfterMs: error.retryAfterMs,
-      isPublic: true,
-      // biome-ignore lint/suspicious/noExplicitAny: fine
-      ...(error._extra as any),
+      cause: error.cause,
     });
   }
 
   // Else, create an obfuscated error
-  else
-    publicError = lifeError({
-      code: "Internal",
-      isPublic: true,
-    });
+  else publicError = lifeError({ code: "Internal" });
+
+  // Set the error as public
+  // @ts-expect-error - runtime only
+  publicError.isPublic = true;
 
   // Restore the original id (for telemetry purposes)
   // @ts-expect-error - runtime only

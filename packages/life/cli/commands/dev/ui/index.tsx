@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from "react";
 import { getVersion, type VersionInfo } from "@/cli/utils/version";
 import { LifeCompiler } from "@/compiler";
 import { LifeServer } from "@/server";
-import type { AgentProcess } from "@/server/agent-process/parent";
+import type { AgentProcessClient } from "@/server/agent-process/client";
+import { canon, type SerializableValue } from "@/shared/canon";
 import * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
 import type { TelemetryClient } from "@/telemetry/clients/base";
@@ -52,7 +53,7 @@ export const DevUI = ({
   const server = useRef<LifeServer | null>(null);
   const compiler = useRef<LifeCompiler | null>(null);
   const livekitProcess = useRef<ChildProcess | null>(null);
-  const [agentProcesses, setAgentProcesses] = useState<Map<string, AgentProcess>>(new Map());
+  const [agentProcesses, setAgentProcesses] = useState<Map<string, AgentProcessClient>>(new Map());
 
   // Life.js version info (used in the sidebar banner)
   const [version, setVersion] = useState<VersionInfo | null>(null);
@@ -128,7 +129,7 @@ export const DevUI = ({
       return op.failure({
         code: "Unknown",
         message: `Uncaught error during initCommand('${command}').`,
-        error,
+        cause: error,
       });
     }
   };
@@ -175,7 +176,7 @@ export const DevUI = ({
       return op.failure({
         code: "Unknown",
         message: `Uncaught error during initStep('${name}').`,
-        error,
+        cause: error,
       }) as T;
     }
   };
@@ -538,6 +539,8 @@ export const DevUI = ({
               // Format the log
               const formattedLog = formatLogForTerminal(signal);
 
+              // Tab
+
               // Push any log to debug logs
               setDebugLogs((prev) => ({
                 ...prev,
@@ -586,7 +589,15 @@ export const DevUI = ({
       progressAfter: 95,
       run: () => {
         const intervalId = setInterval(() => {
-          setAgentProcesses(new Map(server.current?.agentProcesses ?? new Map()));
+          setAgentProcesses((value) => {
+            const newAgentProcesses = new Map(server.current?.agentProcesses);
+            const [, areEqual] = canon.equal(
+              value as unknown as SerializableValue,
+              newAgentProcesses as unknown as SerializableValue,
+            );
+            if (areEqual) return value;
+            return newAgentProcesses;
+          });
         }, 1000);
         intervals.current.push(intervalId);
         return op.success();
@@ -671,57 +682,20 @@ export const DevUI = ({
 
     // Properly capture logs of added processes
     for (const process of addedProcesses) {
-      // Telemetry logs
-      process.onChildTelemetrySignal((signal) => {
-        if (signal.type !== "log") return;
-
-        // Format the log
-        const formattedLog = formatLogForTerminal(signal);
-
-        // Push any log to debug logs
-        setDebugLogs((prev) => ({
-          ...prev,
-          [process.id]: [...(prev[process.id] ?? []), formattedLog],
-        }));
-        setAllLogs((prev) => [...prev, formattedLog]);
-
-        // Ignore logs lower than the requested log level
-        if (logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")) {
-          // Format and record the logs
+      for (const channel of ["stdout", "stderr"] as const) {
+        process.nodeProcess?.[channel]?.on("data", (newOutput: Buffer) => {
+          const formattedLogs = cleanStdData(newOutput);
+          setDebugLogs((prev) => ({
+            ...prev,
+            [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
+          }));
           setLogs((prev) => ({
             ...prev,
-            [process.id]: [...(prev[process.id] ?? []), formattedLog],
+            [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
           }));
-        }
-      });
-
-      // STDOUT
-      process.nodeProcess?.stdout?.on("data", (newOutput: Buffer) => {
-        const formattedLogs = cleanStdData(newOutput);
-        setDebugLogs((prev) => ({
-          ...prev,
-          [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-        }));
-        setLogs((prev) => ({
-          ...prev,
-          [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-        }));
-        setAllLogs((prev) => [...prev, ...formattedLogs]);
-      });
-
-      // STDERR
-      process.nodeProcess?.stderr?.on("data", (newOutput: Buffer) => {
-        const formattedLogs = cleanStdData(newOutput);
-        setDebugLogs((prev) => ({
-          ...prev,
-          [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-        }));
-        setLogs((prev) => ({
-          ...prev,
-          [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-        }));
-        setAllLogs((prev) => [...prev, ...formattedLogs]);
-      });
+          setAllLogs((prev) => [...prev, ...formattedLogs]);
+        });
+      }
     }
   }, [agentProcesses]);
 

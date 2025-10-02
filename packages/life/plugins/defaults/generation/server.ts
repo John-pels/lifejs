@@ -154,7 +154,7 @@ export const generationPlugin = definePlugin("generation")
   .methods({
     getMessages: {
       schema: {
-        input: z.object(),
+        input: z.object().loose(),
         output: z.object({ messages: z.array(messageSchema) }),
       },
       run: ({ context }) => {

@@ -36,15 +36,13 @@ function formatErrorForTerminal(error: Error | unknown): string {
     message = error.message;
     stack = error.stack ? error.stack.split("\n").slice(3).join("\n") : "";
 
-    if (error.code === "Validation" && error.zodError) {
-      after += formatErrorForTerminal(error.zodError);
-    }
-    if (error.code === "Unknown" && error.error) {
+    if (error.cause) {
       // If that's an ESBuild error, return the error as is
-      if (isEsbuildError(error.error)) return formatErrorForTerminal(error.error);
+      if (isEsbuildError(error.cause)) return formatErrorForTerminal(error.cause);
       // Else, append the error after the unknown LifeError
-      after += formatErrorForTerminal(error.error);
+      after += formatErrorForTerminal(error.cause);
     }
+
     processed = true;
   }
 

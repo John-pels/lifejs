@@ -37,6 +37,6 @@ export const sha256 = async (value: SerializableValue) => {
     const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
     return op.success(hash);
   } catch (error) {
-    return op.failure({ code: "Unknown", error });
+    return op.failure({ code: "Unknown", cause: error });
   }
 };

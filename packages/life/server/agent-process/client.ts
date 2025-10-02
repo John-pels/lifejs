@@ -7,18 +7,20 @@ import chalk from "chalk";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { canon, type SerializableValue } from "@/shared/canon";
-import type { LifeErrorUnion } from "@/shared/error";
+import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
-import type { TelemetrySignal } from "@/telemetry/types";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/node";
 import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
 
-export class AgentProcess {
+export class AgentProcessClient {
   readonly id: string;
   readonly name: string;
   readonly sessionToken = randomBytes(32).toString("base64url");
   readonly #server: LifeServer;
+  readonly #telemetry: TelemetryClient;
 
   lastScope: AgentScope | null = null;
   lastTransportRoom: { name: string; token: string } | null = null;
@@ -37,7 +39,6 @@ export class AgentProcess {
   #restartTimeout: NodeJS.Timeout | null = null;
   #readyResolve: (() => void) | null = null;
   #handleChildExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
-  #telemetryCallbacks: Set<(signal: TelemetrySignal) => void | Promise<void>> = new Set();
 
   constructor({
     id,
@@ -51,10 +52,15 @@ export class AgentProcess {
     this.id = id ?? newId("agent");
     this.name = name;
     this.#server = server;
+
+    // Initialize telemetry client with scope "server.agentProcess"
+    this.#telemetry = createTelemetryClient("server", {
+      watch: server.options.watch,
+    });
   }
 
   async getDefinition() {
-    return await this.#server.telemetry.trace("AgentProcess.getDefinition()", async (span) => {
+    return await this.#telemetry.trace("AgentProcess.getDefinition()", async (span) => {
       span.setAttributes({ agentId: this.id });
       try {
         const [error, servers] = await op.attempt(
@@ -74,7 +80,7 @@ export class AgentProcess {
         }
         return op.success(definition);
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -86,8 +92,9 @@ export class AgentProcess {
     scope: AgentScope;
     transportRoom: { name: string; token: string };
   }) {
-    return await this.#server.telemetry.trace("AgentProcess.start()", async (span) => {
+    return await this.#telemetry.trace("AgentProcess.start()", async (span) => {
       span.setAttributes({ agentId: this.id });
+
       try {
         // Return early if the agent is already running or starting
         if (this.status === "running" || this.status === "starting") {
@@ -99,6 +106,7 @@ export class AgentProcess {
 
         // Error if the agent is stopping
         if (this.status === "stopping") {
+          await this.stop();
           return op.failure({
             code: "Conflict",
             message: `Cannot start agent in '${this.status}' state.`,
@@ -108,9 +116,7 @@ export class AgentProcess {
 
         // Update the status
         this.status = "starting";
-        const waitReady = new Promise<void>((resolve) => {
-          this.#readyResolve = resolve;
-        });
+        const waitReady = new Promise<void>((resolve) => (this.#readyResolve = resolve));
 
         // Update the scope and transport room
         this.lastScope = scope;
@@ -118,11 +124,25 @@ export class AgentProcess {
 
         // Get the agent definition
         const [errGet] = await this.getDefinition();
-        if (errGet) return op.failure(errGet);
+        if (errGet) {
+          await this.stop();
+          return op.failure(errGet);
+        }
 
         // Fork the child process
         const currentDir = path.dirname(fileURLToPath(import.meta.url));
-        const childPath = path.join(currentDir, "..", "server", "agent-process", "child.js");
+
+        // Since we're running from TypeScript source, but need to fork the compiled child,
+        // we need to resolve to the dist directory
+        const childPath = path.join(
+          currentDir,
+          "..",
+          "..",
+          "dist",
+          "server",
+          "agent-process",
+          "process.mjs",
+        );
         this.nodeProcess = fork(childPath, [], {
           serialization: "json",
           silent: false,
@@ -131,7 +151,7 @@ export class AgentProcess {
           env: { LIFE_TELEMETRY_DISABLED: "true" },
         });
 
-        // Set up RPC channel with the child process
+        // Set up RPC channel with the child process (after child is ready)
         this.#child = createBirpc<ChildMethods, ParentMethods>(
           {
             syncContext: (params) => {
@@ -140,29 +160,20 @@ export class AgentProcess {
                 this.lastSeenAt = Date.now();
                 return op.success();
               } catch (error) {
-                return op.failure({ code: "Unknown", error });
+                return op.failure({ code: "Unknown", cause: error });
               }
             },
             syncTelemetry: (signal) => {
               try {
-                this.#server.telemetry.sendSignal(signal);
-                // Forward signal to all registered callbacks
-                for (const callback of this.#telemetryCallbacks) {
-                  try {
-                    const result = callback(signal);
-                    if (result instanceof Promise) {
-                      result.catch((err) => {
-                        console.error("Error in telemetry callback:", err);
-                      });
-                    }
-                  } catch (err) {
-                    console.error("Error in telemetry callback:", err);
-                  }
-                }
-                this.lastSeenAt = Date.now();
+                // Override the attributes with the agent process attributes
+                signal.attributes ||= {};
+                signal.attributes.watch = this.#server.options.watch;
+
+                // Forward the signal to the client telemetry client
+                this.#telemetry.sendSignal(signal);
                 return op.success();
               } catch (error) {
-                return op.failure({ code: "Unknown", error });
+                return op.failure({ code: "Unknown", cause: error });
               }
             },
             ready: () => {
@@ -170,15 +181,61 @@ export class AgentProcess {
                 this.#readyResolve?.();
                 return op.success();
               } catch (error) {
-                return op.failure({ code: "Unknown", error });
+                return op.failure({ code: "Unknown", cause: error });
               }
             },
           },
           {
             post: (data) => this.nodeProcess?.send(data),
             on: (fn) => this.nodeProcess?.on("message", fn),
-            serialize: canon.serialize,
-            deserialize: canon.deserialize,
+            serialize: (data) => {
+              const [error, result] = canon.serialize(data);
+              if (error) {
+                throw lifeError({
+                  code: "Validation",
+                  message:
+                    "Failed to serialize data from server to agent process. The message has been discarded.",
+                  attributes: { agentId: this.id, agentName: this.name, data },
+                  cause: error,
+                });
+              }
+              return result;
+            },
+            deserialize: (data) => {
+              const [error, result] = canon.deserialize(data);
+              if (error) {
+                throw lifeError({
+                  code: "Validation",
+                  message:
+                    "Failed to deserialize data from server to agent process. The message has been discarded.",
+                  attributes: { agentId: this.id, agentName: this.name, data },
+                  cause: error,
+                });
+              }
+              return result;
+            },
+            onFunctionError: (error) => {
+              this.#telemetry.log.error(
+                isLifeError(error)
+                  ? error
+                  : lifeError({
+                      code: "Unknown",
+                      cause: error,
+                    }),
+              );
+            },
+            onGeneralError: (error) => {
+              this.#telemetry.log.error(
+                isLifeError(error)
+                  ? error
+                  : lifeError({
+                      code: "Unknown",
+                      cause: error,
+                    }),
+              );
+            },
+            // Disable Birpc timeout
+            onTimeoutError: () => true,
             timeout: -1,
           },
         );
@@ -188,7 +245,11 @@ export class AgentProcess {
         this.nodeProcess.on("exit", this.#handleChildExitCallback);
 
         // Inject environment variables into the child process
-        this.#child.injectEnvVars(process.env);
+        const [errEnv] = await this.#child.injectEnvVars(process.env);
+        if (errEnv) {
+          await this.stop();
+          return op.failure(errEnv);
+        }
 
         // Start the agent server in the child process
         const [errStart] = await this.#child.start({
@@ -199,7 +260,10 @@ export class AgentProcess {
           pluginsContexts: this.#pluginsContexts,
           isRestart: this.restartCount > 0,
         });
-        if (errStart) return op.failure(errStart);
+        if (errStart) {
+          await this.stop();
+          return op.failure(errStart);
+        }
 
         // Wait for the agent to be ready
         await waitReady;
@@ -216,37 +280,19 @@ export class AgentProcess {
         // Return that the agent was started successfully
         return op.success();
       } catch (error) {
-        // Uncaught error
-        this.status = "stopped";
-        this.nodeProcess = null;
-        this.lastStartedAt = undefined;
-        this.lastSeenAt = undefined;
-        this.#readyResolve = null;
-        return op.failure({ code: "Unknown", error });
+        await this.stop();
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
 
   async stop() {
-    return await this.#server.telemetry.trace("AgentProcess.stop()", async (span) => {
+    return await this.#telemetry.trace("AgentProcess.stop()", async (span) => {
       span.setAttributes({ agentId: this.id });
 
       try {
-        // Error if the agent is starting
-        if (this.status === "starting") {
-          return op.failure({
-            code: "Conflict",
-            message: `Cannot stop agent in '${this.status}' state.`,
-            isPublic: true,
-          });
-        }
-
-        // Warn if the agent is already stopped or stopping, that might be unexpected
-        if (this.status === "stopped" || this.status === "stopping") {
-          span.log.warn({
-            message: `stop() was called on an already '${this.status}' agent process.`,
-          });
-        }
+        // Return early if the agent is stopped or already stopping
+        if (this.status === "stopped" || this.status === "stopping") return op.success();
 
         // Update the status
         this.status = "stopping";
@@ -265,25 +311,19 @@ export class AgentProcess {
           this.nodeProcess?.off("exit", this.#handleChildExitCallback);
 
         // Gracefully stop the agent (10s timeout)
-        let stopErr: LifeErrorUnion | undefined;
-        let stopSuccess = false;
-        try {
-          await Promise.race([
-            (async () => {
-              const result = await this.#child?.stop();
-              stopErr = result?.[0];
-              stopSuccess = Boolean(!stopErr);
-            })(),
-            new Promise((resolve) => setTimeout(resolve, 10_000)),
+        if (this.#child) {
+          const [errStop] = await Promise.race([
+            this.#child.stop(),
+            new Promise<op.OperationResult<void>>((resolve) =>
+              setTimeout(() => resolve(op.failure({ code: "Timeout" })), 10_000),
+            ),
           ]);
-        } catch (_) {
-          // Ignore
-        }
-        if (!stopSuccess) {
-          span.log.warn({
-            message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${stopErr ? "see error" : "timeout"})`,
-            error: stopErr,
-          });
+          if (errStop) {
+            span.log.warn({
+              message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${errStop ? "see error" : "timeout"})`,
+              error: errStop,
+            });
+          }
         }
 
         // Terminate the child process
@@ -305,13 +345,13 @@ export class AgentProcess {
         this.nodeProcess = null;
         this.lastStartedAt = undefined;
         this.lastSeenAt = undefined;
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
 
   async restart() {
-    return await this.#server.telemetry.trace("AgentProcess.restart()", async (span) => {
+    return await this.#telemetry.trace("AgentProcess.restart()", async (span) => {
       span.setAttributes({ agentId: this.id });
 
       try {
@@ -332,34 +372,41 @@ export class AgentProcess {
         if (errStart) return op.failure(errStart);
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
 
+  // Start pinging the agent every 10 seconds
   startHealthCheck() {
-    // Start pinging the agent every 10 seconds
     this.#pingInterval = setInterval(async () => {
       if (this.#child && this.status === "running") {
-        try {
-          await Promise.race([
-            this.#child.ping(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Ping timeout")), 3000)),
-          ]);
-          this.lastSeenAt = Date.now();
-        } catch (_) {
-          this.#server.telemetry.log.error({
+        // Send a ping to the agent
+        const [errPing] = await Promise.race([
+          this.#child?.ping(),
+          new Promise<op.OperationResult<void>>((resolve) =>
+            setTimeout(() => resolve(op.failure({ code: "Timeout" })), 3000),
+          ),
+        ]);
+
+        // In case of error, kill the agent and restart
+        if (errPing) {
+          this.#telemetry.log.error({
             message: `Health check failed for agent '${this.name}'. Will kill and restart.`,
+            error: errPing,
           });
           if (this.nodeProcess) this.nodeProcess.kill("SIGKILL");
           this.lastSeenAt = undefined;
         }
+
+        // Otherwise, update the last seen at
+        else this.lastSeenAt = Date.now();
       }
     }, 10_000);
   }
 
+  // Stop pinging the agent
   stopHealthCheck() {
-    // Stop pinging the agent
     if (this.#pingInterval) {
       clearInterval(this.#pingInterval);
       this.#pingInterval = null;
@@ -415,7 +462,7 @@ export class AgentProcess {
       if (errStats) return op.failure(errStats);
       return op.success(stats);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -427,23 +474,7 @@ export class AgentProcess {
       if (errPing) return op.failure(errPing);
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
-  }
-
-  /**
-   * Register a callback to receive telemetry signals from the child process.
-   * The callback will be invoked whenever a syncTelemetry signal is received.
-   *
-   * @param callback - Function to be called with each telemetry signal
-   * @returns A cleanup function that removes the callback when called
-   */
-  onChildTelemetrySignal(callback: (signal: TelemetrySignal) => void | Promise<void>) {
-    this.#telemetryCallbacks.add(callback);
-
-    // Return a cleanup function that removes this callback
-    return () => {
-      this.#telemetryCallbacks.delete(callback);
-    };
   }
 }

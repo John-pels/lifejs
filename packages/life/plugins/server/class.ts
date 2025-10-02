@@ -161,7 +161,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     // Handle context synchronization via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
-      schema: { output: z.object() },
+      schema: { output: z.object().loose() },
       execute: () => op.success(this.#context),
     });
   }
@@ -330,7 +330,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
                 return op.failure({
                   code: "Validation",
                   message: `Invalid input for method ${name}.`,
-                  zodError: validationResult.error,
+                  cause: validationResult.error,
                 });
               }
 
@@ -356,13 +356,13 @@ export class PluginServer<const Definition extends PluginDefinition> {
                 return op.failure({
                   code: "Validation",
                   message: `Invalid output from method ${name}.`,
-                  zodError: outputValidation.error,
+                  cause: outputValidation.error,
                 });
               }
 
               return op.success(outputValidation.data);
             } catch (error) {
-              return op.failure({ code: "Unknown", error });
+              return op.failure({ code: "Unknown", cause: error });
             }
           },
         );

@@ -9,7 +9,7 @@ import z from "zod";
 import { themeChalk } from "@/cli/utils/theme";
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
-import { type LifeErrorUnion, makeErrorPublic } from "@/shared/error";
+import { type LifeErrorUnion, obfuscateLifeError } from "@/shared/error";
 import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
@@ -141,7 +141,7 @@ export class LifeApi {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -167,7 +167,7 @@ export class LifeApi {
 
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -189,7 +189,7 @@ export class LifeApi {
       // Helper to sanitize the result (public and stringified result)
       const sanitizeResult = (result: op.OperationResult<unknown>) => {
         const [error, data] = result;
-        const resultPublic = error ? op.failure(makeErrorPublic(error)) : op.success(data);
+        const resultPublic = error ? op.failure(obfuscateLifeError(error)) : op.success(data);
         const [errorCanon, response] = canon.stringify(
           resultPublic as unknown as SerializableValue,
         );
@@ -284,7 +284,7 @@ export class LifeApi {
             op.failure({
               code: "Validation",
               message: `Invalid input shape for handler '${rawInput.handlerId}'.`,
-              zodError: inputError,
+              cause: inputError,
             }),
           );
 
@@ -320,7 +320,7 @@ export class LifeApi {
         // Return the prepared response
         return prepareResponse(output);
       } catch (error) {
-        return prepareResponse(op.failure({ code: "Unknown", error }));
+        return prepareResponse(op.failure({ code: "Unknown", cause: error }));
       }
     });
   }
@@ -333,7 +333,7 @@ export class LifeApi {
       const result = await handler.onCall({ api: this, data: input.data as never, request });
       return result;
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -345,7 +345,7 @@ export class LifeApi {
       const result = await handler.onCast({ api: this, data: input.data as never });
       return result;
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 
@@ -367,7 +367,7 @@ export class LifeApi {
       });
       return op.success();
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown", cause: error });
     }
   }
 }

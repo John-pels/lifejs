@@ -2,13 +2,13 @@ import chalk from "chalk";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
-import type { AgentProcess } from "@/server/agent-process/parent";
+import type { AgentProcessClient } from "@/server/agent-process/client";
 import { getTabName } from "../lib/tabs";
 
 interface DevFooterProps {
   debugModeEnabled: boolean;
   selectedTab: string;
-  agentProcesses: Map<string, AgentProcess>;
+  agentProcesses: Map<string, AgentProcessClient>;
 }
 
 export const DevFooter: FC<DevFooterProps> = ({

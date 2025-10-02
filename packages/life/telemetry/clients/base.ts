@@ -36,9 +36,9 @@ import type {
 export abstract class TelemetryClient {
   static #clients: InstanceType<typeof TelemetryClient>[] = [];
 
-  protected readonly scope: string;
-  protected readonly resource: TelemetryResource;
-  protected clientAttributes: TelemetryAttributes = {};
+  readonly scope: string;
+  readonly resource: TelemetryResource;
+  clientAttributes: TelemetryAttributes = {};
 
   constructor(scope: string) {
     this.scope = scope;

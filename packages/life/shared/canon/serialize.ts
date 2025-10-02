@@ -1,21 +1,17 @@
-import { deserializeError, serializeError } from "serialize-error";
+import { deserializeError, isErrorLike, serializeError } from "serialize-error";
 import superjson, { type SuperJSONResult } from "superjson";
 import { ZodError, z } from "zod";
 import * as op from "@/shared/operation";
-import {
-  deserializeLifeError,
-  isLifeError,
-  type LifeErrorUnion,
-  serializeLifeError,
-} from "../error";
+import { isLifeError, type LifeErrorUnion, lifeErrorFromObject, lifeErrorToObject } from "../error";
 
 // Register custom transformer for LifeError objects
 // biome-ignore lint/suspicious/noExplicitAny: Record<string, unknown> is serializable
 superjson.registerCustom<LifeErrorUnion, any>(
   {
     isApplicable: (v): v is LifeErrorUnion => isLifeError(v),
-    serialize: (err) => serializeLifeError(err),
-    deserialize: (data) => deserializeLifeError(data),
+    // Using superjson.serialize ensures that 'err.cause' gets serialized properly
+    serialize: (err) => superjson.serialize(lifeErrorToObject(err)),
+    deserialize: (data) => lifeErrorFromObject(superjson.deserialize(data)),
   },
   "LifeError",
 );
@@ -27,7 +23,7 @@ superjson.registerCustom<LifeErrorUnion, any>(
 superjson.registerCustom<ZodError, any>(
   {
     isApplicable: (v): v is ZodError => v instanceof ZodError,
-    serialize: (zErr) => zErr.issues,
+    serialize: (err) => err.issues,
     deserialize: (data) => new ZodError(data as z.core.$ZodIssue[]),
   },
   "ZodError",
@@ -38,7 +34,7 @@ superjson.registerCustom<ZodError, any>(
 // biome-ignore lint/suspicious/noExplicitAny: serialize-error output is complex but serializable
 superjson.registerCustom<Error, any>(
   {
-    isApplicable: (v): v is Error => v instanceof Error,
+    isApplicable: (v): v is Error => isErrorLike(v),
     serialize: (err) => serializeError(err),
     deserialize: (data) => deserializeError(data),
   },

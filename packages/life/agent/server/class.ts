@@ -29,8 +29,8 @@ export class AgentServer {
   plugins: Record<string, PluginServer<PluginDefinition>> = {};
   scope: AgentScope<AgentDefinition["scope"]>;
   isRestart: boolean;
-  readonly #initialPluginsContexts: Record<string, SerializableValue>;
   telemetry: TelemetryClient;
+  readonly #initialPluginsContexts: Record<string, SerializableValue>;
 
   constructor({
     id,
@@ -176,7 +176,7 @@ export class AgentServer {
         // Return that the agent server was started successfully
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
@@ -200,7 +200,7 @@ export class AgentServer {
         // Return that the agent server was stopped successfully
         return op.success();
       } catch (error) {
-        return op.failure({ code: "Unknown", error });
+        return op.failure({ code: "Unknown", cause: error });
       }
     });
   }
