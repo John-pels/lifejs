@@ -1,5 +1,16 @@
 # life
 
+## 0.29.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [09e401d](https://github.com/lifejs/lifejs/commit/09e401dd0fcefa8a65edcf11daf703744c5d15cf) — Defer agent config parsing and enable global config merging
+- [@LilaRest](https://github.com/LilaRest) in [09e401d](https://github.com/lifejs/lifejs/commit/09e401dd0fcefa8a65edcf11daf703744c5d15cf) — Further improve agent server initialization and error handling, and logging display
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [09e401d](https://github.com/lifejs/lifejs/commit/09e401dd0fcefa8a65edcf11daf703744c5d15cf) — Various stability improvements
+
 ## 0.28.0
 
 ### Minor Changes
