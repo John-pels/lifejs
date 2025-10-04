@@ -1,5 +1,17 @@
 # life
 
+## 0.28.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [a6d9046](https://github.com/lifejs/lifejs/commit/a6d904619c4a2397b73cc87db3e00091688a18d0) — Agents processes in `life dev` sidebar now show a status badge and a helper message when not started
+- [@LilaRest](https://github.com/LilaRest) in [a6d9046](https://github.com/lifejs/lifejs/commit/a6d904619c4a2397b73cc87db3e00091688a18d0) — `life dev` command now show a "CLI" tab when --debug is enabled
+- [@LilaRest](https://github.com/LilaRest) in [b887aa8](https://github.com/lifejs/lifejs/commit/b887aa832071ab65cce4fc3e1e8569f065e4053e) — Various stability and error handling improvements in agent processes
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [425981a](https://github.com/lifejs/lifejs/commit/425981ab0250765ae4eae7b72d628fe1a49821d9) — Further refinements in client-side logging display and error handling
+
 ## 0.27.0
 
 ### Minor Changes
