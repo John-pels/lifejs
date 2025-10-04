@@ -18,14 +18,29 @@ import type {
 import { AsyncQueue } from "@/shared/async-queue";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { deepClone } from "@/shared/deep-clone";
+import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
 
+// - Local types
 type PluginExternalInterceptor = {
   server: PluginServer<PluginDefinition>;
   interceptor: PluginInterceptorFunction;
+};
+
+type PluginEventsListener<Definition extends PluginDefinition> = {
+  id: string;
+  // biome-ignore lint/suspicious/noExplicitAny: further type precision is not needed here
+  callback: ((event: any) => void | Promise<void>) | "remote";
+  selector: PluginEventsSelector<keyof Definition["events"]>;
+};
+
+type PluginContextListener<Definition extends PluginDefinition> = {
+  id: string;
+  selector: (context: PluginContext<Definition["context"], "output">) => unknown;
+  callback: (newValue: SerializableValue, oldValue: SerializableValue) => void | Promise<void>;
 };
 
 // - Server
@@ -33,28 +48,11 @@ export class PluginServer<const Definition extends PluginDefinition> {
   readonly _definition: Definition;
   readonly #agent: AgentServer;
   readonly #config: PluginConfig<Definition["config"], "output">;
-  readonly #eventsListeners = new Map<
-    string,
-    {
-      id: string;
-      // biome-ignore lint/suspicious/noExplicitAny: further type precision is not needed here and would just make code more complex
-      callback: ((event: any) => void | Promise<void>) | "remote";
-      selector: PluginEventsSelector<keyof Definition["events"]>;
-    }
-  >();
+  readonly #eventsListeners = new Map<string, PluginEventsListener<Definition>>();
   readonly #context: PluginContext<Definition["context"], "output">;
-  readonly #contextListeners = new Map<
-    string,
-    {
-      id: string;
-      selector: (context: PluginContext<Definition["context"], "output">) => unknown;
-      callback: (newValue: SerializableValue, oldValue: SerializableValue) => void | Promise<void>;
-    }
-  >();
+  readonly #contextListeners = new Map<string, PluginContextListener<Definition>>();
   readonly #externalInterceptors: PluginExternalInterceptor[] = [];
-  readonly #queue: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">> = new AsyncQueue<
-    PluginEvent<PluginEventsDefinition, "output">
-  >();
+  readonly #queue = new AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>();
   readonly #servicesQueues: AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>[] = [];
   readonly #telemetry: TelemetryClient;
 
@@ -66,27 +64,46 @@ export class PluginServer<const Definition extends PluginDefinition> {
   }: {
     agent: AgentServer;
     definition: Definition;
-    config: PluginConfig<Definition["config"], "output">;
+    config: PluginConfig<Definition["config"], "input">;
     context: SerializableValue;
   }) {
     this._definition = definition;
     this.#agent = agent;
-    this.#config = config;
-    this.#context = definition.context.parse(context) as PluginContext<
-      Definition["context"],
-      "output"
-    >;
+
+    // Validate config
+    const { error: errorConfig, data: parsedConfig } = definition.config.schema.safeParse(config);
+    if (errorConfig) {
+      throw lifeError({
+        code: "Validation",
+        message: `Invalid config provided to plugin server '${definition.name}'.`,
+        cause: errorConfig,
+      });
+    }
+    this.#config = parsedConfig as PluginConfig<Definition["config"], "output">;
+
+    // Validate context
+    const { error: errorContext, data: parsedContext } = definition.context.parse(context);
+    if (errorContext) {
+      throw lifeError({
+        code: "Validation",
+        message: `Invalid context provided to plugin server '${definition.name}'.`,
+        cause: errorContext,
+      });
+    }
+    this.#context = parsedContext as PluginContext<Definition["context"], "output">;
+
+    // Initialize telemetry
     this.#telemetry = createTelemetryClient("plugin.server", {
       agentId: agent.id,
       agentSha: agent.sha,
-      agentName: agent._definition.name,
-      agentConfig: agent._definition.config,
-      transportProviderName: agent._definition.config.transport.provider,
-      llmProviderName: agent._definition.config.models.llm.provider,
-      sttProviderName: agent._definition.config.models.stt.provider,
-      eouProviderName: agent._definition.config.models.eou.provider,
-      ttsProviderName: agent._definition.config.models.tts.provider,
-      vadProviderName: agent._definition.config.models.vad.provider,
+      agentName: agent.definition.name,
+      agentConfig: agent.config,
+      transportProviderName: agent.config.transport.provider,
+      llmProviderName: agent.config.models.llm.provider,
+      sttProviderName: agent.config.models.stt.provider,
+      eouProviderName: agent.config.models.eou.provider,
+      ttsProviderName: agent.config.models.tts.provider,
+      vadProviderName: agent.config.models.vad.provider,
       pluginName: definition.name,
       pluginServerConfig: definition.config.schemaTelemetry.parse(config),
     });

@@ -82,9 +82,10 @@ export class LifeClient {
     return await this.#telemetry.trace("#createAgent()", async () => {
       try {
         // Load the client build if not already loaded
-        const build = await importClientBuild();
-        const agentBuild = build[name as keyof ClientBuild];
-        if (!agentBuild) {
+        const [errIndex, buildIndex] = await importClientBuild();
+        if (errIndex) return op.failure(errIndex);
+        const build = buildIndex[name as keyof ClientBuild];
+        if (!build) {
           return op.failure({
             code: "NotFound",
             message: `Agent '${String(name)}' not found in client build.`,
@@ -98,8 +99,8 @@ export class LifeClient {
         // Create agent client with proper definition and plugins from build
         const agentClient = new AgentClient({
           id: data.id,
-          definition: agentBuild.definition,
-          plugins: agentBuild.plugins,
+          definition: build.definition,
+          plugins: build.plugins,
           life: this,
           config: data.clientConfig ?? {},
         }) as GeneratedAgentClient<Name>;

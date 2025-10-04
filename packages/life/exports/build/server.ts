@@ -2,6 +2,7 @@ import path from "path";
 import type { z } from "zod";
 import type { agentServerConfig } from "@/agent/server/config";
 import type { AgentDefinition } from "@/agent/server/types";
+import * as op from "@/shared/operation";
 
 // Those uppercased placeholders will be replaced during compilation.
 type Mode = "LIFE_BUILD_MODE";// @ts-expect-error
@@ -14,14 +15,17 @@ export type ServerBuild = Mode extends "production"
   : Awaited<ActualServerBuild>["default"] : typeof defaultBuild
 
 /* @__PURE__ */
-export async function importServerBuild(options: { projectDirectory: string , noCache: boolean} ): Promise<ServerBuild> {  
+export async function importServerBuild(options: { projectDirectory: string , noCache: boolean} ): Promise<op.OperationResult<ServerBuild>> {  
   try {
     const p = path.join(options.projectDirectory, ".life", "server", "dist", "index.js");
     const v = options.noCache ? (Math.random() * 100000000).toFixed(0) : "cached";
     const module = await import(p + `?v=${v}`);
-    return (module.default || module) as ServerBuild;
-  } catch {
-    return defaultBuild as ServerBuild;
+    return op.success((module.default || module) as ServerBuild);
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("Cannot find module")) {
+      return op.success(defaultBuild as ServerBuild);
+    }
+    return op.failure({ code: "Unknown", cause: e });
   }
 }
 

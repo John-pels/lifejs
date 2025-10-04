@@ -13,7 +13,7 @@ export type AgentScope<ScopeDefinition extends AgentScopeDefinition = AgentScope
 
 export type AgentDefinition = {
   name: string;
-  config: z.output<typeof agentServerConfig.schema>;
+  config: z.input<typeof agentServerConfig.schema>;
   plugins: Record<string, PluginDefinition>;
   pluginConfigs: Record<string, unknown>;
   scope: AgentScopeDefinition;

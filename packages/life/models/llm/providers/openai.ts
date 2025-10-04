@@ -9,7 +9,7 @@ import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } fr
 export const openAILLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("openai"),
-    apiKey: z.string().prefault(process.env.OPENAI_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.OPENAI_API_KEY as string),
     model: z.enum(["gpt-4o-mini", "gpt-4o"]).prefault("gpt-4o-mini"),
     temperature: z.number().min(0).max(2).prefault(0.5),
   }),
@@ -27,10 +27,6 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
 
   constructor(config: z.input<typeof openAILLMConfig.schema>) {
     super(openAILLMConfig.schema, config);
-    if (!config.apiKey)
-      throw new Error(
-        "OPENAI_API_KEY environment variable or config.apiKey must be provided to use this model.",
-      );
     this.#client = new OpenAI({ apiKey: config.apiKey });
   }
 

@@ -17,7 +17,8 @@ export const DevFooter: FC<DevFooterProps> = ({
   agentProcesses,
 }) => {
   return (
-    <Box flexDirection="column" width="100%">
+    // flexShrink={0} is needed to prevent the footer from sometimes shrinking when the content is too long
+    <Box flexDirection="column" flexShrink={0} width="100%">
       {debugModeEnabled && (
         <Box alignItems="center" justifyContent="flex-end" marginTop={5} width="100%">
           <Box borderColor={"gray"} borderStyle={"round"} paddingX={1}>

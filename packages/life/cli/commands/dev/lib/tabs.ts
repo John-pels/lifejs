@@ -18,6 +18,6 @@ export const getTabName = (
 
   // Match agent process names
   const agentId = selectedTab;
-  const agentName = agentProcesses.get(agentId)?.name ?? "unknown";
+  const agentName = agentProcesses.get(agentId)?.definition.name ?? "unknown";
   return `${chalk.gray.italic(agentName)} (${agentId.replace("agent_", "").slice(0, 6) ?? "unknown"})`;
 };

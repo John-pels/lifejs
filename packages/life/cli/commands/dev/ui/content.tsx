@@ -2,30 +2,36 @@ import chalk from "chalk";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
+import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
+import type { DevOptions } from "../action";
 import { Divider } from "../components/divider";
 import { ScrollBox } from "../components/scroll-box";
 import { DEFAULT_TABS } from "../lib/tabs";
+import type { DevLog } from "./types";
 
 interface DevContentProps {
+  options: DevOptions;
   debugModeEnabled: boolean;
   selectedTab: string;
-  logs: Record<string, string[]>;
-  debugLogs: Record<string, string[]>;
+  logs: Record<string, DevLog[]>;
 }
 
 export const DevContent: FC<DevContentProps> = ({
   debugModeEnabled,
   selectedTab,
   logs,
-  debugLogs,
+  options,
 }) => {
-  const currentTabLogs = (debugModeEnabled ? debugLogs[selectedTab] : logs[selectedTab]) ?? [];
+  const currentTabLogs = (logs[selectedTab] ?? []).filter(
+    (log) =>
+      debugModeEnabled ||
+      logLevelPriority(log.level) >= logLevelPriority(options.debug ? "debug" : "info"),
+  );
 
   return (
     <Box
       borderColor={debugModeEnabled ? undefined : "gray"}
       borderStyle={debugModeEnabled ? undefined : "round"}
-      height="100%"
       paddingLeft={debugModeEnabled ? 0 : 1}
       width="100%"
     >
@@ -47,25 +53,23 @@ export const DevContent: FC<DevContentProps> = ({
   );
 };
 
-const Logs = ({ logs, selectedTab }: { logs: string[]; selectedTab: string }) => {
+const Logs = ({ logs, selectedTab }: { logs: DevLog[]; selectedTab: string }) => {
   const hasLogs = logs.length > 0;
   const isAgentTab = !DEFAULT_TABS.includes(selectedTab);
-  return (
-    <>
-      {hasLogs
-        ? (logs || []).map((log, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: expected
-            <Text key={`${selectedTab}-log-${index}`} wrap="wrap">
-              {log}
-            </Text>
-          ))
-        : null}
-      {!hasLogs && isAgentTab ? (
-        <Text color={theme.gray.light} italic>
-          This agent running.{"\n\n"}Run `{chalk.bold("agent.start()")}` on the frontend to start
-          it.
-        </Text>
-      ) : null}
-    </>
-  );
+  if (hasLogs) {
+    return (logs || []).map((log) => (
+      <Text key={log.id} wrap="wrap">
+        {log.line}
+      </Text>
+    ));
+  }
+  if (!hasLogs && isAgentTab) {
+    return (
+      <Text color={theme.gray.light} italic>
+        This agent is not running.{"\n\n"}Run `{chalk.bold("agent.start()")}` on the frontend to
+        start it.
+      </Text>
+    );
+  }
+  return null;
 };

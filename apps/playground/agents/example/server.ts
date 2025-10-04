@@ -4,16 +4,22 @@ import { testPlugin } from "./plugins/test/server";
 
 export default defineAgent("example")
   .plugins([...defaults.plugins, testPlugin])
-  .scope({
-    schema: z.object({
-      userId: z.string(),
-    }),
-    hasAccess: ({ request, scope }) => {
-      return request.headers.get("Authorization") === scope.userId;
-    },
-  })
+  // .scope({
+  //   schema: z.object({
+  //     userId: z.string(),
+  //   }),
+  //   hasAccess: ({ request, scope }) => {
+  //     return request.headers.get("Authorization") === scope.userId;
+  //   },
+  // })
   .test({
     items: ["item1", "item3"] as const,
+  })
+  .memories({
+    items: [],
+  })
+  .stores({
+    items: [],
   })
   .generation({
     collections: ["collection1", "collection2"],

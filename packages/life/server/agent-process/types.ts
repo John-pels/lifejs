@@ -27,9 +27,6 @@ export interface ParentMethods {
 
 // Methods the child process exposes to parent
 export interface ChildMethods {
-  // Inject environment variables into the child process
-  injectEnvVars: (vars: Record<string, string | undefined>) => Promise<op.OperationResult<void>>;
-
   // Initialize and start the AgentServer with given configuration
   start: (params: {
     id: string;

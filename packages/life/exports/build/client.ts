@@ -1,5 +1,6 @@
 
 import type { AgentClientDefinition, AgentClientPluginsMapping } from "@/agent/client/types";
+import * as op from "@/shared/operation";
 
 // Those uppercased placeholders will be replaced during compilation.
 type Mode = "LIFE_BUILD_MODE";
@@ -14,8 +15,8 @@ export type ClientBuild = Mode extends "production"
   : Awaited<ActualClientBuild>["default"] : typeof defaultBuild
 
 /* @__PURE__ */
-export async function importClientBuild(): Promise<ClientBuild> {  
-  if (typeof module === "string") return defaultBuild as ClientBuild; 
-  else return (await module).default as ClientBuild;
+export async function importClientBuild(): Promise<op.OperationResult<ClientBuild>> {  
+  if (typeof module === "string") return op.success(defaultBuild as ClientBuild); 
+  else return op.success((await module).default as ClientBuild);
 }
 

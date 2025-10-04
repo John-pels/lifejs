@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type agentServerConfig, defineConfig } from "@/agent/server/config";
+import type { agentServerConfig } from "@/agent/server/config";
 import type {
   PluginConfig,
   PluginDefinition,
@@ -22,11 +22,11 @@ export class AgentBuilder<
     this._definition = definition;
   }
 
-  config(params: z.input<typeof agentServerConfig.schema>) {
+  config(config: z.input<typeof agentServerConfig.schema>) {
     // Create a new builder instance with the provided config
     const builder = new AgentBuilder({
       ...this._definition,
-      config: defineConfig(params).withDefaults,
+      config,
     }) as AgentBuilder<Definition, ExcludedMethods | "config">;
 
     // Return the new builder with the plugins methods, minus excluded methods
@@ -100,7 +100,7 @@ export class AgentBuilder<
   ) {
     for (const plugin of Object.values(plugins)) {
       Object.assign(builder, {
-        [plugin.name]: this.#pluginMethod(plugin, plugins),
+        [plugin.name]: builder.#pluginMethod(plugin, plugins),
       });
     }
     return builder;
@@ -111,8 +111,8 @@ export class AgentBuilder<
       const builder = new AgentBuilder({
         ...this._definition,
         pluginConfigs: {
-          ...((this._definition as Definition).pluginConfigs ?? {}),
-          [plugin.name]: plugin.config.schema.parse(config),
+          ...(this._definition.pluginConfigs ?? {}),
+          [plugin.name]: config,
         },
       });
       return this.#withPluginsMethods(builder, plugins) as Omit<
@@ -126,7 +126,7 @@ export class AgentBuilder<
 export function defineAgent<const Name extends string>(name: Name) {
   return new AgentBuilder({
     name,
-    config: defineConfig({}).withDefaults,
+    config: {},
     plugins: {},
     pluginConfigs: {},
     scope: { schema: z.object(), hasAccess: () => true },

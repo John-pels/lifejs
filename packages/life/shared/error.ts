@@ -206,6 +206,11 @@ export type LifeErrorUnion<Code extends LifeErrorCode = LifeErrorCode> = Code ex
  * @returns
  */
 export function lifeError<Code extends LifeErrorCode>(params: LifeErrorParameters<Code>) {
+  // If the cause is a LifeError and it's an "Unknown" error, use the cause instead
+  if (params.code === "Unknown" && isLifeError(params.cause)) {
+    return params.cause as LifeError<Code>;
+  }
+  // Else, create a new LifeError instance
   return new LifeErrorClass(params) as LifeError<Code>;
 }
 

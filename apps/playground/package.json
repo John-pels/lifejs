@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "life": "../../packages/life/dist/cli/index.mjs",
+    "life": "dotenv -e ../../.env -- ../../packages/life/dist/cli/index.mjs",
     "dev": "next dev --turbopack --port 3000",
     "build": "# next build --turbopack",
     "start": "next start",

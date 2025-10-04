@@ -9,7 +9,7 @@ import { TTSBase, type TTSGenerateJob } from "../base";
 export const cartesiaTTSConfig = createConfig({
   schema: z.object({
     provider: z.literal("cartesia"),
-    apiKey: z.string().prefault(process.env.CARTESIA_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.CARTESIA_API_KEY as string),
     model: z.enum(["sonic-2", "sonic-turbo", "sonic"]).prefault("sonic-2"),
     language: z
       .enum([
@@ -48,10 +48,6 @@ export class CartesiaTTS extends TTSBase<typeof cartesiaTTSConfig.schema> {
 
   constructor(config: z.input<typeof cartesiaTTSConfig.schema>) {
     super(cartesiaTTSConfig.schema, config);
-    if (!config.apiKey)
-      throw new Error(
-        "CARTESIA_API_KEY environment variable or config.apiKey must be provided to use this model.",
-      );
     this.#cartesia = new CartesiaClient({ apiKey: config.apiKey });
     this.#socket = this.#cartesia.tts.websocket({
       container: "raw",

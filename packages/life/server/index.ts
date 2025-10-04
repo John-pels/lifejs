@@ -4,8 +4,7 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import chalk from "chalk";
 import chokidar, { type FSWatcher } from "chokidar";
-import { agentClientConfig } from "@/agent/client/config";
-import { agentServerConfig } from "@/agent/server/config";
+import { prepareAgentConfig } from "@/agent/server/config";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
 import { ns } from "@/shared/nanoseconds";
@@ -263,7 +262,7 @@ export class LifeServer {
               // Find all running processes for this agent
               const processesToRestart: AgentProcessClient[] = [];
               for (const [, process] of this.agentProcesses) {
-                if (process.name === agentName && process.status === "running") {
+                if (process.definition.name === agentName && process.status === "running") {
                   processesToRestart.push(process);
                 }
               }
@@ -361,16 +360,13 @@ export class LifeServer {
     available: async () => {
       return await this.telemetry.trace("server.available()", async () => {
         try {
-          const [errImport, build] = await op.attempt(
-            async () =>
-              await importServerBuild({
-                projectDirectory: this.options.projectDirectory,
-                noCache: true,
-              }),
-          );
-          if (errImport) return op.failure(errImport);
+          const [errIndex, buildIndex] = await importServerBuild({
+            projectDirectory: this.options.projectDirectory,
+            noCache: true,
+          });
+          if (errIndex) return op.failure(errIndex);
           return op.success(
-            Object.entries(build).map(([name, { definition }]) => ({
+            Object.entries(buildIndex).map(([name, { definition }]) => ({
               name,
               scopeKeys: definition?.scope?.schema?.shape
                 ? Object.keys(definition.scope.schema.shape)
@@ -411,7 +407,7 @@ export class LifeServer {
           return op.success(
             Array.from(this.agentProcesses.values()).map((process) => ({
               id: process.id,
-              name: process.name,
+              name: process.definition.name,
               status: process.status,
               lastStartedAt: process.lastStartedAt,
             })),
@@ -451,45 +447,43 @@ export class LifeServer {
       return await this.telemetry.trace("agent.create()", async (span) => {
         try {
           // Ensure the request agent exists
-          const build = await importServerBuild({
+          const [errIndex, buildIndex] = await importServerBuild({
             projectDirectory: this.options.projectDirectory,
             noCache: true,
           });
-          const definition = build[name as keyof typeof build]?.definition;
-          if (!definition)
+          if (errIndex) return op.failure(errIndex);
+          const build = buildIndex[name as keyof typeof buildIndex];
+          if (!build)
             return op.failure({
               code: "NotFound",
               message: `Agent '${name}' not found.`,
               isPublic: true,
             });
 
+          // Obtain the final agent config
+          const [errConfig, config] = prepareAgentConfig(
+            build.definition.config,
+            build.globalConfigs,
+          );
+          if (errConfig) return op.failure(errConfig);
+
           // Create the agent process
-          const process = new AgentProcessClient({ id, name, server: this });
+          const process = new AgentProcessClient({
+            id,
+            definition: build.definition,
+            config: config.server,
+            server: this,
+          });
           span.setAttributes({ id: process.id, name });
 
           // Add the agent process to the map
           this.agentProcesses.set(process.id, process);
 
-          // Clean the agent process if not started after 10 minutes
-          setTimeout(
-            async () => {
-              if (process.status === "stopped" && process.restartCount === 0) {
-                await process.stop();
-                this.agentProcesses.delete(process.id);
-              }
-            },
-            10 * 60 * 1000,
-          );
-
-          // Return the agent's client-side config
-          const serverConfig = agentServerConfig.schema.parse(definition.config);
-          const clientConfig = agentClientConfig.schema.parse(serverConfig);
-
-          return op.success({ id: process.id, clientConfig });
+          return op.success({ id: process.id, clientConfig: config.client });
         } catch (error) {
           return op.failure({
             code: "Unknown",
-            message: `Failed to create agent process '${id}'.`,
+            message: `Failed to create agent process '${name}'.`,
             cause: error,
           });
         }
@@ -505,13 +499,10 @@ export class LifeServer {
           if (errGet) return op.failure(errGet);
 
           // Ensure the request emitter has access to this agent and scope
-          const [errDefinition, definition] = await process.getDefinition();
-          if (errDefinition) return op.failure(errDefinition);
-
-          if (!(await definition.scope.hasAccess({ request, scope }))) {
+          if (!(await process.definition.scope.hasAccess({ request, scope }))) {
             return op.failure({
               code: "Forbidden",
-              message: `Access denied for agent '${process.name}'.`,
+              message: `Access denied for agent '${process.definition.name}'.`,
               isPublic: true,
             });
           }
@@ -520,17 +511,17 @@ export class LifeServer {
           const roomName = newId("room");
 
           // Generate transport tokens for both the agent and the user
-          const transportProvider = definition.config.transport.provider;
+          const transportProvider = process.config.transport.provider;
           const transportGetToken =
             transportProviderGetToken[transportProvider as keyof typeof transportProviderGetToken];
           const [errAgentToken, agentToken] = await transportGetToken(
-            definition.config.transport,
+            process.config.transport,
             roomName,
             "agent",
           );
           if (errAgentToken) return op.failure(errAgentToken);
           const [errUserToken, userToken] = await transportGetToken(
-            definition.config.transport,
+            process.config.transport,
             roomName,
             "user",
           );
@@ -545,10 +536,10 @@ export class LifeServer {
 
           // Log operation with timing
           span.end();
-          const formattedName = chalk.bold.italic(process.name);
+          const formattedName = chalk.bold.italic(process.definition.name);
           this.telemetry.log.info({
             message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+            attributes: { id, agentName: process.definition.name },
           });
 
           return op.success({
@@ -589,10 +580,10 @@ export class LifeServer {
 
           // Log operation with timing
           span.end();
-          const formattedName = chalk.bold.italic(process.name);
+          const formattedName = chalk.bold.italic(process.definition.name);
           this.telemetry.log.info({
             message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+            attributes: { id, agentName: process.definition.name },
           });
 
           return op.success();
@@ -627,10 +618,10 @@ export class LifeServer {
 
           // Log operation with timing
           span.end();
-          const formattedName = chalk.bold.italic(process.name);
+          const formattedName = chalk.bold.italic(process.definition.name);
           this.telemetry.log.info({
             message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.name },
+            attributes: { id, agentName: process.definition.name },
           });
 
           return op.success();
@@ -691,7 +682,7 @@ export class LifeServer {
 
           return op.success({
             id,
-            name: process.name,
+            name: process.definition.name,
             scope: process.lastScope,
             status: process.status,
             lastStartedAt: process.lastStartedAt,

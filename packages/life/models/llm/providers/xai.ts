@@ -8,7 +8,7 @@ import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } fr
 export const xaiLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("xai"),
-    apiKey: z.string().prefault(process.env.XAI_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.XAI_API_KEY as string),
     model: z
       .enum([
         "grok-3",
@@ -36,10 +36,6 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
 
   constructor(config: z.input<typeof xaiLLMConfig.schema>) {
     super(xaiLLMConfig.schema, config);
-    if (!config.apiKey)
-      throw new Error(
-        "XAI_API_KEY environment variable or config.apiKey must be provided to use this model.",
-      );
     this.#client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: "https://api.x.ai/v1",

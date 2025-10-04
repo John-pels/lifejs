@@ -13,7 +13,7 @@ import { STTBase, type STTGenerateJob } from "../base";
 export const deepgramSTTConfig = createConfig({
   schema: z.object({
     provider: z.literal("deepgram"),
-    apiKey: z.string().prefault(process.env.DEEPGRAM_API_KEY ?? ""),
+    apiKey: z.string().prefault(process.env.DEEPGRAM_API_KEY as string),
     model: z
       .enum([
         "nova-3",
@@ -69,10 +69,6 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
 
   constructor(config: z.input<typeof deepgramSTTConfig.schema>) {
     super(deepgramSTTConfig.schema, config);
-    if (!config.apiKey)
-      throw new Error(
-        "DEEPGRAM_API_KEY environment variable or config.apiKey must be provided to use this model.",
-      );
     this.#deepgram = createClient(config.apiKey);
   }
 

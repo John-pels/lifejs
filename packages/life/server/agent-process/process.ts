@@ -1,5 +1,6 @@
 import { createBirpc } from "birpc";
 import { AgentServer } from "@/agent/server/class";
+import { prepareAgentConfig } from "@/agent/server/config";
 import { importServerBuild } from "@/exports/build/server";
 import type { AsyncQueue } from "@/shared/async-queue";
 import { canon } from "@/shared/canon";
@@ -10,40 +11,46 @@ import { createTelemetryClient, TelemetryNodeClient } from "@/telemetry/clients/
 import type { TelemetrySignal } from "@/telemetry/types";
 import type { ChildMethods, ParentMethods } from "./types";
 
-let agentServer: AgentServer | null = null;
-
+// Keep track of process stats
 const processStats = new ProcessStats();
 
-// Attributes are going to be rewritten by the parent process anyway
+// Holds the agent server instance created in start()
+let agentServer: AgentServer | null = null;
+
+// Note: Attributes are going to be rewritten by the parent process anyway
 const telemetry = createTelemetryClient("server", { watch: false });
 
 const rpc = createBirpc<ParentMethods, ChildMethods>(
   {
-    // biome-ignore lint/suspicious/useAwait: not needed
-    async injectEnvVars(vars) {
-      process.env = { ...process.env, ...vars };
-      return op.success();
-    },
+    //
     async start(params) {
       try {
         // Retrieve the agent definition
-        const [errImport, imports] = await op.attempt(
-          importServerBuild({ projectDirectory: process.cwd(), noCache: true }),
-        );
-        if (errImport) return op.failure(errImport);
-        const server = imports?.[params.name as keyof typeof imports];
-        if (!server)
+        const [errIndex, buildIndex] = await importServerBuild({
+          projectDirectory: process.cwd(),
+          noCache: true,
+        });
+        if (errIndex) return op.failure(errIndex);
+        const build = buildIndex?.[params.name as keyof typeof buildIndex];
+        if (!build)
           return op.failure({ code: "NotFound", message: `Agent '${params.name}' not found.` });
-        const definition = server.definition;
+
+        // Obtain the final agent config
+        const [errConfig, config] = prepareAgentConfig(
+          build.definition.config,
+          build.globalConfigs,
+        );
+        if (errConfig) return op.failure(errConfig);
 
         // Create the agent server
         const [errCreate, instance] = op.attempt(
           () =>
             new AgentServer({
               id: params.id,
-              definition: server.definition,
+              definition: build.definition,
               scope: params.scope,
-              sha: server.sha,
+              sha: build.sha,
+              config: config.server,
               pluginsContexts: params.pluginsContexts,
               isRestart: params.isRestart,
             }),
@@ -52,7 +59,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
         agentServer = instance;
 
         // Stream plugin context changes to parent
-        for (const pluginName of Object.keys(definition.plugins)) {
+        for (const pluginName of Object.keys(build.definition.plugins)) {
           agentServer.plugins[pluginName]?.onContextChange(
             (c) => c,
             async (c) => {
@@ -65,7 +72,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
               });
               if (error)
                 telemetry.log.error({
-                  message: `Failed to sync for plugin '${pluginName}' in agent '${agentServer._definition.name}' process.`,
+                  message: `Failed to sync for plugin '${pluginName}' in agent '${agentServer.definition.name}' process.`,
                   error,
                 });
             },
@@ -126,7 +133,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
           code: "Validation",
           message:
             "Failed to serialize data from agent process to server. The message has been discarded.",
-          attributes: { agentId: agentServer?.id, agentName: agentServer?._definition.name, data },
+          attributes: { agentId: agentServer?.id, agentName: agentServer?.definition.name, data },
           cause: error,
         });
       }
@@ -139,7 +146,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
           code: "Validation",
           message:
             "Failed to deserialize data from agent process to server. The message has been discarded.",
-          attributes: { agentId: agentServer?.id, agentName: agentServer?._definition.name, data },
+          attributes: { agentId: agentServer?.id, agentName: agentServer?.definition.name, data },
           cause: error,
         });
       }
@@ -175,6 +182,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
 TelemetryNodeClient.registerGlobalConsumer({
   start: async (queue: AsyncQueue<TelemetrySignal>) => {
     for await (const signal of queue) {
+      // console.log("syncTelemetry", signal.type);
       rpc.syncTelemetry(signal);
     }
   },

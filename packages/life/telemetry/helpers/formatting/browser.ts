@@ -92,12 +92,16 @@ export async function formatErrorForBrowser(error: Error | unknown) {
     message = error.message;
     const prettyStack = await errorToPrettyStack(error);
     stack = prettyStack;
-
     if (error.cause) {
+      // If the cause is a LifeError
+      if (isLifeError(error.cause)) {
+        // And the main error is "Unknown" with no message, skip it
+        return formatErrorForBrowser(error.cause);
+      }
+      // Else, append the error after the LifeError
       const formatted = await formatErrorForBrowser(error.cause);
       after.push(formatted.content, ...formatted.after);
     }
-
     processed = true;
   }
 

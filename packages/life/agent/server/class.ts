@@ -1,3 +1,4 @@
+import type z from "zod";
 import { type EOUProvider, eouProviders } from "@/models/eou";
 import { type LLMProvider, llmProviders } from "@/models/llm";
 import { type STTProvider, sttProviders } from "@/models/stt";
@@ -10,13 +11,15 @@ import * as op from "@/shared/operation";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
 import { TransportNodeClient } from "@/transport/client/node";
+import type { agentServerConfig } from "./config";
 import type { AgentDefinition, AgentScope } from "./types";
 
 export class AgentServer {
-  _definition: AgentDefinition;
   _isAgentServer = true;
+  definition: AgentDefinition;
   id: string;
   sha: string;
+  config: z.output<typeof agentServerConfig.schema>;
   transport: TransportNodeClient;
   storage = null;
   models: {
@@ -37,40 +40,43 @@ export class AgentServer {
     sha,
     definition,
     scope,
+    config,
     pluginsContexts,
     isRestart,
   }: {
     id: string;
     sha: string;
     definition: AgentDefinition;
+    config: z.output<typeof agentServerConfig.schema>;
     scope?: AgentScope<AgentDefinition["scope"]>;
     isRestart?: boolean;
     pluginsContexts?: Record<string, SerializableValue>;
   }) {
-    this._definition = definition;
     this.id = id;
     this.sha = sha;
-    this.scope = scope ?? definition.scope.schema.parse({});
+    this.definition = definition;
+    this.scope = scope ?? this.definition.scope.schema.parse({});
+    this.config = config;
     this.isRestart = isRestart ?? false;
     this.#initialPluginsContexts = pluginsContexts ?? {};
 
     // Initialize telemetry
     this.telemetry = createTelemetryClient("agent.server", {
       agentId: id,
-      agentSha: sha,
-      agentName: definition.name,
-      agentConfig: definition.config,
-      transportProviderName: definition.config.transport.provider,
-      llmProviderName: definition.config.models.llm.provider,
-      sttProviderName: definition.config.models.stt.provider,
-      eouProviderName: definition.config.models.eou.provider,
-      ttsProviderName: definition.config.models.tts.provider,
-      vadProviderName: definition.config.models.vad.provider,
+      agentSha: this.sha,
+      agentName: this.definition.name,
+      agentConfig: this.config,
+      transportProviderName: this.config.transport.provider,
+      llmProviderName: this.config.models.llm.provider,
+      sttProviderName: this.config.models.stt.provider,
+      eouProviderName: this.config.models.eou.provider,
+      ttsProviderName: this.config.models.tts.provider,
+      vadProviderName: this.config.models.vad.provider,
     });
 
     // Initialize transport
     this.transport = new TransportNodeClient({
-      config: definition.config.transport,
+      config: this.config.transport,
       filterPublic: true,
     });
 
@@ -78,17 +84,17 @@ export class AgentServer {
     // TODO
 
     // Initialize models
-    const vadProvider = vadProviders[definition.config.models.vad.provider];
-    const sttProvider = sttProviders[definition.config.models.stt.provider];
-    const eouProvider = eouProviders[definition.config.models.eou.provider];
-    const llmProvider = llmProviders[definition.config.models.llm.provider];
-    const ttsProvider = ttsProviders[definition.config.models.tts.provider];
+    const vadProvider = vadProviders[this.config.models.vad.provider];
+    const sttProvider = sttProviders[this.config.models.stt.provider];
+    const eouProvider = eouProviders[this.config.models.eou.provider];
+    const llmProvider = llmProviders[this.config.models.llm.provider];
+    const ttsProvider = ttsProviders[this.config.models.tts.provider];
     this.models = {
-      vad: new vadProvider.class(definition.config.models.vad),
-      stt: new sttProvider.class(definition.config.models.stt),
-      eou: new eouProvider.class(definition.config.models.eou as never),
-      llm: new llmProvider.class(definition.config.models.llm as never),
-      tts: new ttsProvider.class(definition.config.models.tts),
+      vad: new vadProvider.class(this.config.models.vad),
+      stt: new sttProvider.class(this.config.models.stt),
+      eou: new eouProvider.class(this.config.models.eou as never),
+      llm: new llmProvider.class(this.config.models.llm as never),
+      tts: new ttsProvider.class(this.config.models.tts),
     };
 
     // Validate plugins
@@ -97,23 +103,23 @@ export class AgentServer {
 
   #validatePlugins() {
     // Validate plugins have unique names
-    const pluginNames = Object.values(this._definition.plugins).map((plugin) => plugin.name);
+    const pluginNames = Object.values(this.definition.plugins).map((plugin) => plugin.name);
     const duplicates = pluginNames.filter((name, index) => pluginNames.indexOf(name) !== index);
     if (duplicates.length > 0) {
       const uniqueDuplicates = [...new Set(duplicates)];
       throw new Error(
-        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this._definition.name}')`,
+        `Two or more plugins are named "${uniqueDuplicates.join('", "')}". Plugin names must be unique. (agent: '${this.definition.name}')`,
       );
     }
 
     // Validate plugin dependencies
-    for (const plugin of Object.values(this._definition.plugins)) {
+    for (const plugin of Object.values(this.definition.plugins)) {
       for (const [depName, depDef] of Object.entries(plugin.dependencies || {})) {
         // - Ensure the plugin is provided
-        const depPlugin = Object.values(this._definition.plugins).find((p) => p.name === depName);
+        const depPlugin = Object.values(this.definition.plugins).find((p) => p.name === depName);
         if (!depPlugin) {
           throw new Error(
-            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this._definition.name}')`,
+            `Plugin "${plugin.name}" depends on plugin "${depName}", but "${depName}" is not registered. (agent: '${this.definition.name}')`,
           );
         }
 
@@ -123,7 +129,7 @@ export class AgentServer {
           const actualEventDef = depPlugin.events?.[eventType];
           if (!actualEventDef) {
             throw new Error(
-              `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}", but this event does not exist. (agent: '${this._definition.name}')`,
+              `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}", but this event does not exist. (agent: '${this.definition.name}')`,
             );
           }
 
@@ -133,13 +139,13 @@ export class AgentServer {
             const actualSchema = actualEventDef.dataSchema;
             if (!actualSchema) {
               throw new Error(
-                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this._definition.name}')`,
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with a data schema, but the event has no data schema. (agent: '${this.definition.name}')`,
               );
             }
 
             if (!canon.equalSchema(expectedSchema, actualSchema)) {
               throw new Error(
-                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this._definition.name}')`,
+                `Plugin "${plugin.name}" depends on event "${eventType}" from plugin "${depName}" with incompatible data schema. (agent: '${this.definition.name}')`,
               );
             }
           }
@@ -152,21 +158,26 @@ export class AgentServer {
     return await this.telemetry.trace("AgentServer.start()", async () => {
       try {
         // Create plugin servers
-        for (const definition of Object.values(this._definition.plugins)) {
-          const config = definition.config.schema.parse(
-            this._definition.pluginConfigs[definition.name] ?? {},
+        for (const definition of Object.values(this.definition.plugins)) {
+          const [errCreate, instance] = op.attempt(
+            () =>
+              new PluginServer({
+                agent: this,
+                definition,
+                config: (this.definition.pluginConfigs?.[definition.name] ?? {}) as Record<
+                  string,
+                  unknown
+                >,
+                context: this.#initialPluginsContexts?.[definition.name] ?? {},
+              }),
           );
-          this.plugins[definition.name] = new PluginServer({
-            agent: this,
-            definition,
-            config,
-            context: this.#initialPluginsContexts?.[definition.name] ?? {},
-          });
+          if (errCreate) return op.failure(errCreate);
+          this.plugins[definition.name] = instance;
         }
 
         // Prepare all plugins (this sets up services, interceptors, etc.)
-        for (const plugin of Object.values(this._definition.plugins))
-          this.plugins[plugin.name as keyof typeof this.plugins]?.init();
+        for (const plugin of Object.values(this.definition.plugins))
+          this.plugins[plugin.name]?.init();
 
         // Start all plugin servers
         const result = await Promise.all(Object.values(this.plugins).map((p) => p.start()));

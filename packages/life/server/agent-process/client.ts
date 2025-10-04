@@ -4,8 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type BirpcReturn, createBirpc } from "birpc";
 import chalk from "chalk";
-import type { AgentScope } from "@/agent/server/types";
-import { importServerBuild } from "@/exports/build/server";
+import type z from "zod";
+import type { agentServerConfig } from "@/agent/server/config";
+import type { AgentDefinition, AgentScope } from "@/agent/server/types";
 import { canon, type SerializableValue } from "@/shared/canon";
 import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
@@ -17,8 +18,9 @@ import type { ChildMethods, ParentMethods } from "./types";
 
 export class AgentProcessClient {
   readonly id: string;
-  readonly name: string;
   readonly sessionToken = randomBytes(32).toString("base64url");
+  readonly config: z.output<typeof agentServerConfig.schema>;
+  readonly definition: AgentDefinition;
   readonly #server: LifeServer;
   readonly #telemetry: TelemetryClient;
 
@@ -32,57 +34,36 @@ export class AgentProcessClient {
   restartCount = 0;
   nodeProcess: ChildProcess | null = null;
 
+  // Stdio output captured immediately after fork
+  stdLines: string[] = [];
+  #stdLineCallbacks: Array<(line: string) => void> = [];
+
   //
   readonly #pluginsContexts = {} as Record<string, SerializableValue>;
-  #child: BirpcReturn<ChildMethods, ParentMethods> | null = null;
+  #process: BirpcReturn<ChildMethods, ParentMethods> | null = null;
   #pingInterval: NodeJS.Timeout | null = null;
   #restartTimeout: NodeJS.Timeout | null = null;
   #readyResolve: (() => void) | null = null;
-  #handleChildExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
+  #handleProcessExitCallback: ((code: number | null, signal: string | null) => void) | null = null;
 
   constructor({
     id,
-    name,
+    definition,
+    config,
     server,
   }: {
     id?: string;
-    name: string;
+    definition: AgentDefinition;
+    config: z.output<typeof agentServerConfig.schema>;
     server: LifeServer;
   }) {
     this.id = id ?? newId("agent");
-    this.name = name;
+    this.definition = definition;
+    this.config = config;
     this.#server = server;
 
     // Initialize telemetry client with scope "server.agentProcess"
-    this.#telemetry = createTelemetryClient("server", {
-      watch: server.options.watch,
-    });
-  }
-
-  async getDefinition() {
-    return await this.#telemetry.trace("AgentProcess.getDefinition()", async (span) => {
-      span.setAttributes({ agentId: this.id });
-      try {
-        const [error, servers] = await op.attempt(
-          importServerBuild({
-            projectDirectory: this.#server.options.projectDirectory,
-            noCache: true,
-          }),
-        );
-        if (error) return op.failure(error);
-        const definition = servers?.[this.name as keyof typeof servers]?.definition;
-        if (!definition) {
-          return op.failure({
-            code: "NotFound",
-            message: `Agent '${this.name}' not found.`,
-            isPublic: true,
-          });
-        }
-        return op.success(definition);
-      } catch (error) {
-        return op.failure({ code: "Unknown", cause: error });
-      }
-    });
+    this.#telemetry = server.telemetry;
   }
 
   async start({
@@ -122,13 +103,6 @@ export class AgentProcessClient {
         this.lastScope = scope;
         this.lastTransportRoom = transportRoom;
 
-        // Get the agent definition
-        const [errGet] = await this.getDefinition();
-        if (errGet) {
-          await this.stop();
-          return op.failure(errGet);
-        }
-
         // Fork the child process
         const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -145,14 +119,34 @@ export class AgentProcessClient {
         );
         this.nodeProcess = fork(childPath, [], {
           serialization: "json",
-          silent: false,
+          silent: true,
           cwd: this.#server.options.projectDirectory,
           // Disable anonymous telemetry in the child process (managed by the parent)
-          env: { LIFE_TELEMETRY_DISABLED: "true" },
+          env: { ...process.env, LIFE_TELEMETRY_DISABLED: "true" },
+        });
+
+        // Capture stdout/stderr immediately to avoid losing output
+        this.nodeProcess.stdout?.on("data", (data: Buffer) => {
+          const lines = data.toString().split("\n").filter((line) => line.trim());
+          this.stdLines.push(...lines);
+          for (const line of lines) {
+            for (const callback of this.#stdLineCallbacks) {
+              callback(line);
+            }
+          }
+        });
+        this.nodeProcess.stderr?.on("data", (data: Buffer) => {
+          const lines = data.toString().split("\n").filter((line) => line.trim());
+          this.stdLines.push(...lines);
+          for (const line of lines) {
+            for (const callback of this.#stdLineCallbacks) {
+              callback(line);
+            }
+          }
         });
 
         // Set up RPC channel with the child process (after child is ready)
-        this.#child = createBirpc<ChildMethods, ParentMethods>(
+        this.#process = createBirpc<ChildMethods, ParentMethods>(
           {
             syncContext: (params) => {
               try {
@@ -195,7 +189,7 @@ export class AgentProcessClient {
                   code: "Validation",
                   message:
                     "Failed to serialize data from server to agent process. The message has been discarded.",
-                  attributes: { agentId: this.id, agentName: this.name, data },
+                  attributes: { agentId: this.id, agentName: this.definition.name, data },
                   cause: error,
                 });
               }
@@ -208,7 +202,7 @@ export class AgentProcessClient {
                   code: "Validation",
                   message:
                     "Failed to deserialize data from server to agent process. The message has been discarded.",
-                  attributes: { agentId: this.id, agentName: this.name, data },
+                  attributes: { agentId: this.id, agentName: this.definition.name, data },
                   cause: error,
                 });
               }
@@ -241,20 +235,13 @@ export class AgentProcessClient {
         );
 
         // Handle child process exit
-        this.#handleChildExitCallback = this.handleChildExit.bind(this);
-        this.nodeProcess.on("exit", this.#handleChildExitCallback);
-
-        // Inject environment variables into the child process
-        const [errEnv] = await this.#child.injectEnvVars(process.env);
-        if (errEnv) {
-          await this.stop();
-          return op.failure(errEnv);
-        }
+        this.#handleProcessExitCallback = this.handleProcessExit.bind(this);
+        this.nodeProcess.on("exit", this.#handleProcessExitCallback);
 
         // Start the agent server in the child process
-        const [errStart] = await this.#child.start({
+        const [errStart] = await this.#process.start({
           id: this.id,
-          name: this.name,
+          name: this.definition.name,
           scope: this.lastScope,
           transportRoom,
           pluginsContexts: this.#pluginsContexts,
@@ -307,20 +294,20 @@ export class AgentProcessClient {
         this.stopHealthCheck();
 
         // Stop listening for child process exit
-        if (this.#handleChildExitCallback)
-          this.nodeProcess?.off("exit", this.#handleChildExitCallback);
+        if (this.#handleProcessExitCallback)
+          this.nodeProcess?.off("exit", this.#handleProcessExitCallback);
 
         // Gracefully stop the agent (10s timeout)
-        if (this.#child) {
+        if (this.#process) {
           const [errStop] = await Promise.race([
-            this.#child.stop(),
+            this.#process.stop(),
             new Promise<op.OperationResult<void>>((resolve) =>
               setTimeout(() => resolve(op.failure({ code: "Timeout" })), 10_000),
             ),
           ]);
           if (errStop) {
             span.log.warn({
-              message: `Agent process '${this.name}' did not shutdown gracefully, will force kill. (${errStop ? "see error" : "timeout"})`,
+              message: `Agent process '${this.definition.name}' did not shutdown gracefully, will force kill. (${errStop ? "see error" : "timeout"})`,
               error: errStop,
             });
           }
@@ -334,6 +321,10 @@ export class AgentProcessClient {
         this.nodeProcess = null;
         this.lastStartedAt = undefined;
         this.lastSeenAt = undefined;
+
+        // Clear stdio buffer and callbacks
+        this.stdLines = [];
+        this.#stdLineCallbacks = [];
 
         // Return that the agent was stopped successfully
         return op.success();
@@ -380,10 +371,10 @@ export class AgentProcessClient {
   // Start pinging the agent every 10 seconds
   startHealthCheck() {
     this.#pingInterval = setInterval(async () => {
-      if (this.#child && this.status === "running") {
+      if (this.#process && this.status === "running") {
         // Send a ping to the agent
         const [errPing] = await Promise.race([
-          this.#child?.ping(),
+          this.#process?.ping(),
           new Promise<op.OperationResult<void>>((resolve) =>
             setTimeout(() => resolve(op.failure({ code: "Timeout" })), 3000),
           ),
@@ -392,7 +383,7 @@ export class AgentProcessClient {
         // In case of error, kill the agent and restart
         if (errPing) {
           this.#telemetry.log.error({
-            message: `Health check failed for agent '${this.name}'. Will kill and restart.`,
+            message: `Health check failed for agent '${this.definition.name}'. Will kill and restart.`,
             error: errPing,
           });
           if (this.nodeProcess) this.nodeProcess.kill("SIGKILL");
@@ -413,7 +404,7 @@ export class AgentProcessClient {
     }
   }
 
-  handleChildExit(code: number | null, signal: string | null) {
+  handleProcessExit(code: number | null, signal: string | null) {
     // Figure whether a restart is needed
     const wasRunning = this.status === "running" || this.status === "starting";
     const needRestart = wasRunning && this.restartCount < 3;
@@ -429,7 +420,7 @@ export class AgentProcessClient {
     );
     this.#server.telemetry.log.error({
       message: `Agent process crashed. ${restartMessage}`,
-      attributes: { name: this.name, id: this.id, code, signal },
+      attributes: { name: this.definition.name, id: this.id, code, signal },
     });
 
     // Update the status
@@ -455,10 +446,10 @@ export class AgentProcessClient {
   }
 
   async getProcessStats() {
-    if (!this.#child || this.status !== "running")
+    if (!this.#process || this.status !== "running")
       return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
     try {
-      const [errStats, stats] = await this.#child.getProcessStats();
+      const [errStats, stats] = await this.#process.getProcessStats();
       if (errStats) return op.failure(errStats);
       return op.success(stats);
     } catch (error) {
@@ -468,13 +459,23 @@ export class AgentProcessClient {
 
   async ping() {
     try {
-      if (!this.#child || this.status !== "running")
+      if (!this.#process || this.status !== "running")
         return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
-      const [errPing] = await this.#child.ping();
+      const [errPing] = await this.#process.ping();
       if (errPing) return op.failure(errPing);
       return op.success();
     } catch (error) {
       return op.failure({ code: "Unknown", cause: error });
     }
+  }
+
+  onStdLine(callback: (line: string) => void): () => void {
+    this.#stdLineCallbacks.push(callback);
+    return () => {
+      const index = this.#stdLineCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.#stdLineCallbacks.splice(index, 1);
+      }
+    };
   }
 }

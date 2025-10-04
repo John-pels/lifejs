@@ -11,10 +11,11 @@ import { LifeServer } from "@/server";
 import type { AgentProcessClient } from "@/server/agent-process/client";
 import { canon, type SerializableValue } from "@/shared/canon";
 import * as op from "@/shared/operation";
+import { newId } from "@/shared/prefixed-id";
 import type { MaybePromise } from "@/shared/types";
-import type { TelemetryClient } from "@/telemetry/clients/base";
+import { TelemetryClient } from "@/telemetry/clients/base";
 import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
-import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
+import type { TelemetryLogLevel } from "@/telemetry/types";
 import { theme, themeChalk } from "../../../utils/theme";
 import type { DevOptions } from "../action";
 import { ConditionalMouseProvider } from "../components/conditional-mouse-provider";
@@ -28,6 +29,7 @@ import { DevContent } from "./content";
 import { DevFooter } from "./footer";
 import { DevLoader } from "./loader";
 import { DevSidebar } from "./sidebar";
+import type { DevLog } from "./types";
 
 export const DevUI = ({
   options,
@@ -65,22 +67,24 @@ export const DevUI = ({
   const [selectedTab, setSelectedTab] = useState("server");
 
   // Logs
-  const [logs, setLogs] = useState<Record<string, string[]>>({
+  const [logs, setLogs] = useState<Record<string, DevLog[]>>({
     server: [],
     compiler: [],
     webrtc: [],
     cli: [],
   });
-  const [debugLogs, setDebugLogs] = useState<Record<string, string[]>>({
-    server: [],
-    compiler: [],
-    webrtc: [],
-    cli: [],
-  });
-  const [allLogs, setAllLogs] = useState<string[]>([]);
+
+  // Helper to add a log line
+  const addLogLine = (tab: string, level: TelemetryLogLevel, line: string) => {
+    setLogs((prev) => ({
+      ...prev,
+      [tab]: [...(prev[tab] ?? []), { timestamp: Date.now(), level, line, id: newId("line") }],
+    }));
+  };
 
   // Intervals
   const intervals = useRef<NodeJS.Timeout[]>([]);
+  const processUnsubscribes = useRef<WeakMap<AgentProcessClient, () => void>>(new WeakMap());
 
   // Cleanup function, used on process exit
   async function exit() {
@@ -112,13 +116,11 @@ export const DevUI = ({
   // Helper function to execute initialization commands and capture output
   const initCommand = (command: string) => {
     try {
-      telemetry.log.debug({ message: `Running initCommand('${command}').` });
+      telemetry.log.debug({ message: `Running init command \`${command}\`.` });
       const output = execSync(command, { stdio: ["pipe", "pipe", "pipe"] });
-      if (output)
-        setAllLogs((prev) => [
-          ...prev,
-          ...cleanStdData(output).map((line) => `[${command}] ${line}`),
-        ]);
+      for (const line of cleanStdData(output ?? []).map((l) => `[${command}] ${l}`)) {
+        addLogLine("cli", "info", line);
+      }
       return op.success();
     } catch (error) {
       // Node's execSync error includes stderr property when command fails
@@ -147,7 +149,7 @@ export const DevUI = ({
     timeout?: number;
   }): Promise<T> => {
     try {
-      telemetry.log.debug({ message: `Starting initStep('${name}').` });
+      telemetry.log.debug({ message: `Running init step '${name}'.` });
 
       // Reflect current step status in the UI
       setInitStatus(name);
@@ -159,7 +161,7 @@ export const DevUI = ({
           resolve(
             op.failure({
               code: "Timeout",
-              message: `Step '${name}' timed out after ${timeout}ms.`,
+              message: `Init step '${name}' timed out after ${timeout}ms.`,
             }) as T,
           );
         }, timeout);
@@ -175,7 +177,7 @@ export const DevUI = ({
     } catch (error) {
       return op.failure({
         code: "Unknown",
-        message: `Uncaught error during initStep('${name}').`,
+        message: `Failed to run init step '${name}'.`,
         cause: error,
       }) as T;
     }
@@ -183,46 +185,42 @@ export const DevUI = ({
 
   // Initilization task
   async function init() {
-    // Pipe all the CLI logs to allLogs
     const [errSetupLogging] = await initStep({
       name: "Setup logging...",
       progressAfter: 5,
       run: () => {
-        telemetry.registerConsumer({
-          async start(queue) {
-            for await (const item of queue) {
-              if (item.type !== "log") continue;
-              const formattedLog = formatLogForTerminal(item);
-              setAllLogs((prev) => [...prev, formattedLog]);
-
-              // Push any log to debug logs for CLI tab
-              setDebugLogs((prev) => ({
-                ...prev,
-                cli: [...(prev.cli ?? []), formattedLog],
-              }));
-
-              // Ignore logs lower than the requested log level
-              if (
-                logLevelPriority(item.level) >= logLevelPriority(options.debug ? "debug" : "info")
-              ) {
-                setLogs((prev) => ({
-                  ...prev,
-                  cli: [...(prev.cli ?? []), formattedLog],
-                }));
-              }
-            }
-          },
-        });
         // Intercept console methods to capture logs without interfering with stdin
         const consoleMethods = ["log", "error", "warn", "info", "debug"] as const;
         for (const method of consoleMethods) {
           const original = console[method];
           console[method] = (...args: unknown[]) => {
             const logLine = args.map((arg) => String(arg)).join(" ");
-            setAllLogs((prev) => [...prev, `[console.${method}] ${logLine}`]);
+            addLogLine("cli", "info", `[console.${method}] ${logLine}`);
             original(...args);
           };
         }
+
+        // Forward all telemetry logs to their respective tabs
+        TelemetryClient.registerGlobalConsumer({
+          start: async (queue) => {
+            for await (const signal of queue) {
+              if (signal.type !== "log") continue;
+
+              // Find the tab the log belongs to
+              let tab = "cli";
+              if (signal.scope === "server") tab = "server";
+              if (signal.scope === "compiler") tab = "compiler";
+              if (signal.scope === "agent.server" || signal.scope === "plugin.server")
+                tab = (signal.attributes?.agentId as string) ?? "server";
+
+              // Format the log
+              const formattedLog = formatLogForTerminal(signal);
+
+              // Push to the logs states
+              addLogLine(tab, signal.level, formattedLog);
+            }
+          },
+        });
         return op.success();
       },
     });
@@ -383,11 +381,13 @@ export const DevUI = ({
       name: "Starting LiveKit server...",
       progressAfter: 40,
       run: () => {
+        // Spawn the LiveKit server process
         const livekitServer = spawn("livekit-server", ["--dev"], {
           stdio: ["ignore", "pipe", "pipe"],
         });
         livekitProcess.current = livekitServer;
 
+        // Clean LiveKit logs and push them to the logs states
         const cleanLivekitLogs = (lines: string[]): string[] => {
           return lines
             .map(
@@ -398,33 +398,17 @@ export const DevUI = ({
                   .replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s*/, "")
                   .trim(),
             )
+            .filter((line) => !line.trim().includes("DEBUG livekit"))
             .filter(Boolean);
         };
 
-        livekitServer.stdout?.on("data", (data) => {
-          const formattedLogs = cleanLivekitLogs(cleanStdData(data));
-          setDebugLogs((prev) => ({
-            ...prev,
-            webrtc: [...(prev.webrtc ?? []), ...formattedLogs],
-          }));
-          setLogs((prev) => ({
-            ...prev,
-            webrtc: [...(prev.webrtc ?? []), ...formattedLogs],
-          }));
-          setAllLogs((prev) => [...prev, ...formattedLogs]);
-        });
-        livekitServer.stderr?.on("data", (data) => {
-          const formattedLogs = cleanLivekitLogs(cleanStdData(data));
-          setDebugLogs((prev) => ({
-            ...prev,
-            webrtc: [...(prev.webrtc ?? []), ...formattedLogs],
-          }));
-          setLogs((prev) => ({
-            ...prev,
-            webrtc: [...(prev.webrtc ?? []), ...formattedLogs],
-          }));
-          setAllLogs((prev) => [...prev, ...formattedLogs]);
-        });
+        for (const channel of ["stdout", "stderr"] as const) {
+          livekitServer[channel]?.on("data", (data) => {
+            const formattedLogs = cleanLivekitLogs(cleanStdData(data));
+            for (const line of formattedLogs) addLogLine("webrtc", "info", line);
+          });
+        }
+
         return op.success();
       },
     });
@@ -463,36 +447,6 @@ export const DevUI = ({
           watch: true,
         });
         compiler.current = newCompiler;
-
-        // Consume compiler telemetry logs
-        newCompiler.telemetry.registerConsumer({
-          async start(queue) {
-            for await (const signal of queue) {
-              if (signal.type !== "log") continue;
-
-              // Format the log
-              const formattedLog = formatLogForTerminal(signal);
-
-              // Push any log to debug logs
-              setDebugLogs((prev) => ({
-                ...prev,
-                compiler: [...(prev.compiler ?? []), formattedLog],
-              }));
-              setAllLogs((prev) => [...prev, formattedLog]);
-
-              // Ignore logs lower than the requested log level
-              if (
-                logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")
-              ) {
-                // Format and record the logs
-                setLogs((prev) => ({
-                  ...prev,
-                  compiler: [...(prev.compiler ?? []), formattedLog],
-                }));
-              }
-            }
-          },
-        });
         return op.success();
       },
     });
@@ -529,38 +483,6 @@ export const DevUI = ({
           port: options.port,
         });
         server.current = newServer;
-
-        // Consume server telemetry logs
-        newServer.telemetry.registerConsumer({
-          async start(queue) {
-            for await (const signal of queue) {
-              if (signal.type !== "log") continue;
-
-              // Format the log
-              const formattedLog = formatLogForTerminal(signal);
-
-              // Tab
-
-              // Push any log to debug logs
-              setDebugLogs((prev) => ({
-                ...prev,
-                server: [...(prev.server ?? []), formattedLog],
-              }));
-              setAllLogs((prev) => [...prev, formattedLog]);
-
-              // Ignore logs lower than the requested log level
-              if (
-                logLevelPriority(signal.level) >= logLevelPriority(options.debug ? "debug" : "info")
-              ) {
-                // Format and record the logs
-                setLogs((prev) => ({
-                  ...prev,
-                  server: [...(prev.server ?? []), formattedLog],
-                }));
-              }
-            }
-          },
-        });
         return op.success();
       },
     });
@@ -680,21 +602,27 @@ export const DevUI = ({
       setLogs((prev) => ({ ...prev, [processId]: [] }));
     }
 
-    // Properly capture logs of added processes
+    // Subscribe to stdio logs of added processes
     for (const process of addedProcesses) {
-      for (const channel of ["stdout", "stderr"] as const) {
-        process.nodeProcess?.[channel]?.on("data", (newOutput: Buffer) => {
-          const formattedLogs = cleanStdData(newOutput);
-          setDebugLogs((prev) => ({
-            ...prev,
-            [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-          }));
-          setLogs((prev) => ({
-            ...prev,
-            [process.id]: [...(prev[process.id] ?? []), ...formattedLogs],
-          }));
-          setAllLogs((prev) => [...prev, ...formattedLogs]);
-        });
+      // Initialize with any existing lines that were captured before subscription
+      for (const line of process.stdLines) addLogLine(process.id, "info", line);
+
+      // Subscribe to future lines
+      const unsubscribe = process.onStdLine((line) => addLogLine(process.id, "info", line));
+
+      // Store unsubscribe function to be called when component unmounts or process is removed
+      processUnsubscribes.current.set(process, unsubscribe);
+    }
+
+    // Cleanup subscriptions for removed processes
+    for (const processId of removedProcessesIds) {
+      const process = Array.from(agentProcesses.values()).find((p) => p.id === processId);
+      if (process) {
+        const unsubscribe = processUnsubscribes.current.get(process);
+        if (unsubscribe) {
+          unsubscribe();
+          processUnsubscribes.current.delete(process);
+        }
       }
     }
   }, [agentProcesses]);
@@ -747,12 +675,6 @@ export const DevUI = ({
               {"    "}
               <Link url="https://discord.gg/U5wHjT5Ryj">Get support</Link>
             </Text>
-            {!options.debug && (
-              <>
-                <Divider borderDimColor={true} width={40} />
-                <Text dimColor={true}>Run with --debug to see logs.</Text>
-              </>
-            )}
           </Box>
         )}
 
@@ -776,12 +698,12 @@ export const DevUI = ({
             </Box>
             <Text color={"red"}>{initError}</Text>
             {!options.debug && (
-              <>
+              <Box flexDirection="column">
                 <Divider borderDimColor={true} color={"red"} width={40} />
                 <Text color={"red"} dimColor={true}>
                   Run with --debug to see logs.
                 </Text>
-              </>
+              </Box>
             )}
           </Box>
         )}
@@ -790,7 +712,7 @@ export const DevUI = ({
         {initProgress === 100 && exitProgress === 0 && (
           <ConditionalMouseProvider enabled={!debugModeEnabled}>
             <Box flexDirection="column" height={"100%"} width="100%">
-              <Box flexGrow={1} gap={1} width="100%">
+              <Box flexGrow={1} gap={1} overflow="hidden" width="100%">
                 {!debugModeEnabled && server && (
                   <DevSidebar
                     agentProcesses={agentProcesses}
@@ -800,9 +722,9 @@ export const DevUI = ({
                   />
                 )}
                 <DevContent
-                  debugLogs={debugLogs}
                   debugModeEnabled={debugModeEnabled}
                   logs={logs}
+                  options={options}
                   selectedTab={selectedTab}
                 />
               </Box>
@@ -815,20 +737,17 @@ export const DevUI = ({
           </ConditionalMouseProvider>
         )}
       </Container>
+
       {/* Debug logs */}
       {exitProgress === 100 && initError && options.debug && (
         <Box flexDirection="column" padding={1}>
-          {allLogs.length > 0 && (
-            <>
-              <Text>Debug logs:</Text>
-              <Divider color={theme.orange} minWidth={"100%"} width="100%" />
-              {allLogs.map((log, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: expected
-                <Text key={`loading-log-${i}`}>{log}</Text>
-              ))}
-            </>
+          <Text>Debug logs:</Text>
+          <Divider color={theme.orange} minWidth={"100%"} width="100%" />
+          {logs.cli?.length ? (
+            logs.cli.map((log) => <Text key={log.id}>{log.line}</Text>)
+          ) : (
+            <Text>No debug logs.</Text>
           )}
-          {allLogs.length === 0 && <Text>No debug logs.</Text>}
         </Box>
       )}
     </ThemeProvider>

@@ -37,9 +37,12 @@ function formatErrorForTerminal(error: Error | unknown): string {
     stack = error.stack ? error.stack.split("\n").slice(3).join("\n") : "";
 
     if (error.cause) {
-      // If that's an ESBuild error, return the error as is
-      if (isEsbuildError(error.cause)) return formatErrorForTerminal(error.cause);
-      // Else, append the error after the unknown LifeError
+      // If the cause is a LifeError or Esbuild error
+      if (isLifeError(error.cause) || isEsbuildError(error.cause)) {
+        // And the main error is "Unknown" with no message, skip it
+        return formatErrorForTerminal(error.cause);
+      }
+      // Else, append the error after the LifeError
       after += formatErrorForTerminal(error.cause);
     }
 
@@ -50,9 +53,16 @@ function formatErrorForTerminal(error: Error | unknown): string {
   else if (error instanceof z.ZodError) {
     code = "ZodError";
     message = z.prettifyError(error);
-    stack = error.stack
-      ? (error.stack.split("at new ZodError")?.[1]?.split("\n").slice(2).join("\n") ?? "")
-      : "";
+    stack = error.stack ?? "";
+    if (stack.includes(" at ")) {
+      stack = `   ${
+        stack
+          .split(" at ")
+          .slice(1)
+          .map((line) => ` at ${line}`)
+          .join("") ?? ""
+      }`;
+    }
     processed = true;
   }
 
@@ -97,8 +107,9 @@ function formatErrorForTerminal(error: Error | unknown): string {
     if (!stack) stack = "";
   }
 
-  // If a cause is present, format it as other as well
-  if (error instanceof Error && error.cause) {
+  // If a cause is present, format it as well (unless already processed)
+  // Note: LifeError already handles its cause above, so we skip it here
+  if (error instanceof Error && error.cause && !isLifeError(error)) {
     after += `${formatErrorForTerminal(error.cause)}`;
   }
 

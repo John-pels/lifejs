@@ -207,14 +207,13 @@ export class LifeApi {
         const [error] = result;
         const status = error ? (error.httpEquivalent ?? 500) : 200;
         let statusColor = chalk.gray;
-        if (status >= 500) statusColor = themeChalk.level.error;
-        else if (status >= 400) statusColor = themeChalk.level.warn;
+        if (status >= 400) statusColor = themeChalk.level.error;
         else if (status >= 300) statusColor = themeChalk.level.info;
-        else if (status >= 200) statusColor = themeChalk.level.info;
+        else if (status >= 200) statusColor = chalk.green;
         const logFn =
           status >= 400 ? this.server.telemetry.log.error : this.server.telemetry.log.info;
         logFn({
-          message: `Request /${handlerId} ${type === "http" ? `${statusColor.bold(status)}` : ""} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms.`)}`,
+          message: `Request ${type === "http" ? `${statusColor.bold(status)}` : ""} /${handlerId} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms.`)}`,
           error,
         });
 
