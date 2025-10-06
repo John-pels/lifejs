@@ -6,8 +6,8 @@ export const testPluginClient = definePluginClient<typeof testPlugin>("test")
   .dependencies([defaults.plugins.generation])
   .config({
     schema: z.object({
-      refreshRate: z.number().default(1000),
-      connectors: z.array(z.string()),
+      refreshRate: z.number().prefault(1000),
+      connectors: z.array(z.string()).prefault([]),
     }),
     toTelemetryAttribute: (data) => data,
   })

@@ -107,7 +107,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
             op.toPublic(
               new PluginClass(
                 pluginInfo.definition,
-                this._definition.pluginConfigs[name] as Record<string, unknown>,
+                (this._definition.pluginConfigs[name] ?? {}) as Record<string, unknown>,
                 this,
               ),
             ),

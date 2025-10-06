@@ -4,7 +4,7 @@ import z from "zod";
 export const testPlugin = definePlugin("test")
   .config({
     schema: z.object({
-      items: z.array(z.string()),
+      items: z.array(z.string()).prefault([]),
     }),
     toTelemetryAttribute: (data) => data,
   })

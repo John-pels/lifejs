@@ -24,7 +24,7 @@ import { FullScreenBox } from "../components/fullscreen-box.js";
 import { checkLivekitInstall } from "../lib/check-livekit-install";
 import { cleanStdData } from "../lib/clean-std-data";
 import { customInkUITheme } from "../lib/inkui-theme";
-import { DEFAULT_TABS } from "../lib/tabs";
+import { DEFAULT_TABS, getSortedTabs } from "../lib/tabs";
 import { DevContent } from "./content";
 import { DevFooter } from "./footer";
 import { DevLoader } from "./loader";
@@ -512,15 +512,13 @@ export const DevUI = ({
       run: () => {
         const intervalId = setInterval(() => {
           setAgentProcesses((value) => {
-            const newAgentProcesses = new Map(server.current?.agentProcesses);
-            const [, areEqual] = canon.equal(
-              value as unknown as SerializableValue,
-              newAgentProcesses as unknown as SerializableValue,
-            );
-            if (areEqual) return value;
-            return newAgentProcesses;
+            const currentIds = Array.from(value.keys());
+            const newIds = Array.from(server.current?.agentProcesses.keys() ?? []);
+            const [, areEqual] = canon.equal(currentIds, newIds);
+            if (!areEqual) return new Map(server.current?.agentProcesses ?? []);
+            return value;
           });
-        }, 1000);
+        }, 500);
         intervals.current.push(intervalId);
         return op.success();
       },
@@ -560,13 +558,14 @@ export const DevUI = ({
 
   // Add keyboard navigation
   useInput((input, key) => {
-    const currentIndex = tabs.indexOf(selectedTab);
+    const sortedTabs = getSortedTabs(tabs, agentProcesses);
+    const currentIndex = sortedTabs.indexOf(selectedTab);
     if (key.upArrow) {
-      const newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-      setSelectedTab(tabs[newIndex] || "server");
+      const newIndex = (currentIndex - 1 + sortedTabs.length) % sortedTabs.length;
+      setSelectedTab(sortedTabs[newIndex] || "server");
     } else if (key.downArrow) {
-      const newIndex = (currentIndex + 1) % tabs.length;
-      setSelectedTab(tabs[newIndex] || "server");
+      const newIndex = (currentIndex + 1) % sortedTabs.length;
+      setSelectedTab(sortedTabs[newIndex] || "server");
     } else if (input.toLowerCase() === "d") {
       setDebugModeEnabled((prev) => !prev);
     } else if (input.toLowerCase() === "q" || (key.ctrl && input === "c")) {

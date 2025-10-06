@@ -17,7 +17,7 @@ import { definePlugin } from "../../server/define";
 import { GenerationOrchestrator } from "./orchestrator";
 
 const configSchema = z.object({
-  tools: z.array(toolSchema),
+  tools: z.array(toolSchema).prefault([]),
   voiceDetection: z
     .object({
       scoreInThreshold: z.number().prefault(0.5),

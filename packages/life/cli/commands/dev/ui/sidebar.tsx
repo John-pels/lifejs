@@ -4,7 +4,7 @@ import { theme } from "@/cli/utils/theme";
 import { formatVersion, type VersionInfo } from "@/cli/utils/version";
 import type { AgentProcessClient } from "@/server/agent-process/client";
 import { Divider } from "../components/divider";
-import { DEFAULT_TABS, getTabName } from "../lib/tabs";
+import { DEFAULT_TABS, getSortedTabs, getTabName } from "../lib/tabs";
 
 const getStatusIndicator = (process: AgentProcessClient) => {
   const { status, restartCount } = process;
@@ -88,20 +88,8 @@ export const DevSidebar: FC<DevSidebarProps> = ({ version, selectedTab, tabs, ag
               </Text>
             </Box>
             <Box flexDirection="column" paddingLeft={2}>
-              {tabs
+              {getSortedTabs(tabs, agentProcesses)
                 .filter((tab) => !DEFAULT_TABS.includes(tab))
-                .sort((a, b) => {
-                  const aProcess = agentProcesses.get(a);
-                  const bProcess = agentProcesses.get(b);
-
-                  const getPriority = (status: string | undefined) => {
-                    if (status === "running") return 0;
-                    if (status === "starting" || status === "stopping") return 1;
-                    return 2; // stopped
-                  };
-
-                  return getPriority(aProcess?.status) - getPriority(bProcess?.status);
-                })
                 .map((agentId) => {
                   const process = agentProcesses.get(agentId);
                   return (
