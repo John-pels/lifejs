@@ -70,9 +70,6 @@ type OperationDataOrResult = OperationData | OperationResult<OperationData>;
 type OperationEnsureResult<DR extends OperationDataOrResult> = DR extends OperationResult<infer D1>
   ? OperationResult<D1>
   : OperationResult<DR>;
-type OperationEnsureData<DR extends OperationDataOrResult> = DR extends OperationResult<infer D1>
-  ? D1
-  : DR;
 
 /**
  * To be returned by functions to indicate success.
@@ -94,12 +91,10 @@ type OperationEnsureData<DR extends OperationDataOrResult> = DR extends Operatio
  * // nested: [null, { id: 1, name: "Alice" }] (not double-wrapped)
  * ```
  */
-export const success = <const DR extends OperationDataOrResult = void>(
-  data?: DR,
-): OperationSuccess<OperationEnsureData<DR>> => {
+export const success = <const D extends OperationData>(data?: D): OperationSuccess<D> => {
   const result = Object.assign([undefined, isResult(data) ? data[1] : data] as const, {
     [OPERATION_RESULT]: true as const,
-  }) as OperationSuccess<OperationEnsureData<DR>>;
+  }) as OperationSuccess<D>;
   return result;
 };
 

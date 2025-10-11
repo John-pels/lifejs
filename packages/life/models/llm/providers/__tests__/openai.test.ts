@@ -5,8 +5,8 @@ import { z } from "zod";
 // Mock at module level
 vi.mock("openai");
 
-import { OpenAILLM, openAILLMConfig } from "../openai";
 import { OpenAI } from "openai";
+import { OpenAILLM, openAILLMConfig } from "../openai";
 
 const MockedOpenAI = vi.mocked(OpenAI);
 
@@ -39,7 +39,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({
@@ -53,9 +53,9 @@ describe("OpenAILLM", () => {
 
       const [err, res] = await llm.generateObject({ messages: [], schema });
       expect(err).toBeUndefined();
-      expect(res?.success).toBe(true);
-      if (res?.success) {
-        expect(res.data).toEqual({ ok: true, n: 1 });
+      expect(res).toBeDefined();
+      if (res) {
+        expect(res).toEqual({ ok: true, n: 1 });
       }
     });
 
@@ -72,7 +72,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({
@@ -102,7 +102,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({
@@ -132,7 +132,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({
@@ -178,7 +178,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({
@@ -244,7 +244,7 @@ describe("OpenAILLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = openAILLMConfig.schema.parse({

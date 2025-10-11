@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createConfig } from "@/shared/config";
 import * as op from "@/shared/operation";
 import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
+import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 // Config
 export const openAILLMConfig = createConfig({
@@ -101,95 +101,100 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
   ): Promise<op.OperationResult<LLMGenerateMessageJob>> {
-    // Create a new job
-    const job = this.createGenerateMessageJob();
+    try {
+      // Create a new job
+      const [errJob, job] = this.createGenerateMessageJob();
+      if (errJob) return op.failure(errJob);
 
-    // Prepare tools and messages in OpenAI format
-    const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
-    const openaiMessages = this.#toOpenAIMessages(params.messages);
+      // Prepare tools and messages in OpenAI format
+      const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
+      const openaiMessages = this.#toOpenAIMessages(params.messages);
 
-    // Prepare job stream
-    const stream = await this.#client.chat.completions.create(
-      {
-        model: this.config.model,
-        temperature: this.config.temperature,
-        messages: openaiMessages,
-        stream: true,
-        ...(openaiTools?.length
-          ? {
-              tools: openaiTools,
-              parallel_tool_calls: true,
-            }
-          : {}),
-      },
-      { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
-    );
+      // Prepare job stream
+      const stream = await this.#client.chat.completions.create(
+        {
+          model: this.config.model,
+          temperature: this.config.temperature,
+          messages: openaiMessages,
+          stream: true,
+          ...(openaiTools?.length
+            ? {
+                tools: openaiTools,
+                parallel_tool_calls: true,
+              }
+            : {}),
+        },
+        { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
+      );
 
-    // Start streaming in the background (don't await)
-    (async () => {
-      let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
+      // Start streaming in the background (don't await)
+      (async () => {
+        let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
 
-      for await (const chunk of stream) {
-        // Ignore chunks if job was cancelled
-        if (job.raw.abortController.signal.aborted) break;
+        for await (const chunk of stream) {
+          // Ignore chunks if job was cancelled
+          if (job.raw.abortController.signal.aborted) break;
 
-        // Extract the choice and delta (if any)
-        const choice = chunk.choices[0];
-        if (!choice) throw new Error("No choice");
-        const delta = choice.delta;
+          // Extract the choice and delta (if any)
+          const choice = chunk.choices[0];
+          if (!choice) throw new Error("No choice");
+          const delta = choice.delta;
 
-        // Handle content tokens
-        if (delta.content) {
-          job.raw.receiveChunk({ type: "content", content: delta.content });
-          continue;
-        }
-
-        // Handle tool calls tokens
-        if (delta.tool_calls) {
-          for (const toolCall of delta.tool_calls) {
-            // Retrieve the tool call ID
-            const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
-            if (!id) throw new Error("No tool call ID");
-
-            // Ensure the tool call is tracked
-            if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
-
-            // Compound name tokens
-            if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
-
-            // Compound arguments tokens
-            if (toolCall.function?.arguments)
-              pendingToolCalls[id].arguments += toolCall.function.arguments;
+          // Handle content tokens
+          if (delta.content) {
+            job.raw.receiveChunk({ type: "content", content: delta.content });
+            continue;
           }
+
+          // Handle tool calls tokens
+          if (delta.tool_calls) {
+            for (const toolCall of delta.tool_calls) {
+              // Retrieve the tool call ID
+              const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
+              if (!id) throw new Error("No tool call ID");
+
+              // Ensure the tool call is tracked
+              if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
+
+              // Compound name tokens
+              if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
+
+              // Compound arguments tokens
+              if (toolCall.function?.arguments)
+                pendingToolCalls[id].arguments += toolCall.function.arguments;
+            }
+          }
+
+          // Handle finish reasons
+          // - Tool calls completion
+          if (choice.finish_reason === "tool_calls") {
+            job.raw.receiveChunk({
+              type: "tools",
+              tools: Object.values(pendingToolCalls).map((toolCall) => ({
+                id: toolCall.id,
+                name: toolCall.name,
+                input: JSON.parse(toolCall.arguments || "{}"),
+              })),
+            });
+            pendingToolCalls = {};
+          }
+
+          // - End of stream
+          if (choice.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
         }
+      })();
 
-        // Handle finish reasons
-        // - Tool calls completion
-        if (choice.finish_reason === "tool_calls") {
-          job.raw.receiveChunk({
-            type: "tools",
-            tools: Object.values(pendingToolCalls).map((toolCall) => ({
-              id: toolCall.id,
-              name: toolCall.name,
-              input: JSON.parse(toolCall.arguments || "{}"),
-            })),
-          });
-          pendingToolCalls = {};
-        }
-
-        // - End of stream
-        if (choice.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
-      }
-    })();
-
-    // Return the job immediately
-    return op.success(job);
+      // Return the job immediately
+      return op.success(job);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   async generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }) {
+  }): Promise<op.OperationResult<z.output<T>>> {
     try {
       // Prepare messages in OpenAI format
       const openaiMessages = this.#toOpenAIMessages(params.messages);
@@ -224,7 +229,9 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
       // Validate using schema - this is a validation issue
       const result = params.schema.safeParse(parsedContent);
       if (!result.success) {
-        const issues = result.error.issues.map(err => `${err.path.join(".")}: ${err.message}`).join(", ");
+        const issues = result.error.issues
+          .map((err) => `${err.path.join(".")}: ${err.message}`)
+          .join(", ");
         return op.failure({
           code: "Validation",
           message: `Schema validation failed: ${issues}`,

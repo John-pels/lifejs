@@ -4,11 +4,10 @@ import { z } from "zod";
 // Mock at module level
 vi.mock("openai");
 
-import { XaiLLM, xaiLLMConfig } from "../xai";
 import { OpenAI } from "openai";
+import { XaiLLM, xaiLLMConfig } from "../xai";
 
 const MockedOpenAI = vi.mocked(OpenAI);
-
 
 describe("XaiLLM", () => {
   beforeEach(() => {
@@ -39,7 +38,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({
@@ -53,9 +52,9 @@ describe("XaiLLM", () => {
 
       const [err, res] = await llm.generateObject({ messages: [], schema });
       expect(err).toBeUndefined();
-      expect(res?.success).toBe(true);
-      if (res?.success) {
-        expect(res.data).toEqual({ ok: true, s: "x" });
+      expect(res).toBeDefined();
+      if (res) {
+        expect(res).toEqual({ ok: true, s: "x" });
       }
     });
 
@@ -72,7 +71,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({
@@ -102,7 +101,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({
@@ -132,7 +131,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({
@@ -150,7 +149,7 @@ describe("XaiLLM", () => {
     });
   });
 
-    describe("generateMessage", () => {
+  describe("generateMessage", () => {
     test("returns success and streams content chunks", async () => {
       const contentChunks = [
         { choices: [{ delta: { content: "Hello" }, finish_reason: null }] },
@@ -176,7 +175,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({
@@ -201,8 +200,7 @@ describe("XaiLLM", () => {
       ]);
     });
 
-      test("handles tool calls in streaming response", async () => {
-   
+    test("handles tool calls in streaming response", async () => {
       const contentChunks = [
         {
           choices: [
@@ -220,7 +218,7 @@ describe("XaiLLM", () => {
             },
           ],
         },
-          { choices: [{ delta: {}, finish_reason: "stop" }] },
+        { choices: [{ delta: {}, finish_reason: "stop" }] },
       ];
       const mockCreate = vi.fn().mockResolvedValue({
         [Symbol.asyncIterator]() {
@@ -241,7 +239,7 @@ describe("XaiLLM", () => {
                 create: mockCreate,
               },
             },
-          }) as any
+          }) as any,
       );
 
       const cfg = xaiLLMConfig.schema.parse({

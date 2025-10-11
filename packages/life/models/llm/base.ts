@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
-import type * as op from "@/shared/operation";
+import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { Message, ToolDefinition, ToolRequests } from "@/shared/resources";
 
@@ -25,26 +25,30 @@ export interface LLMGenerateMessageJob {
 /**
  * Base class for all LLMs providers.
  */
-export abstract class LLMBase<ConfigSchema extends z.ZodObject<any, any>> {
+export abstract class LLMBase<ConfigSchema extends z.ZodObject> {
   config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });
   }
 
-  protected createGenerateMessageJob(): LLMGenerateMessageJob {
-    const queue = new AsyncQueue<LLMGenerateMessageStreamChunk>();
-    const job: LLMGenerateMessageJob = {
-      id: newId("job"),
-      getStream: () => queue,
-      cancel: () => job.raw.abortController.abort(),
-      raw: {
-        asyncQueue: queue,
-        abortController: new AbortController(),
-        receiveChunk: (chunk: LLMGenerateMessageStreamChunk) => queue.push(chunk),
-      },
-    };
-    return job;
+  protected createGenerateMessageJob() {
+    try {
+      const queue = new AsyncQueue<LLMGenerateMessageStreamChunk>();
+      const job: LLMGenerateMessageJob = {
+        id: newId("job"),
+        getStream: () => queue,
+        cancel: () => job.raw.abortController.abort(),
+        raw: {
+          asyncQueue: queue,
+          abortController: new AbortController(),
+          receiveChunk: (chunk: LLMGenerateMessageStreamChunk) => queue.push(chunk),
+        },
+      };
+      return op.success(job);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
   // To be implemented by subclasses
@@ -53,8 +57,8 @@ export abstract class LLMBase<ConfigSchema extends z.ZodObject<any, any>> {
     tools: ToolDefinition[];
   }): Promise<op.OperationResult<LLMGenerateMessageJob>>;
 
-  abstract generateObject<T extends z.ZodObject<any, any>>(params: {
+  abstract generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<op.OperationResult<z.infer<T>>>;
+  }): Promise<op.OperationResult<z.output<T>>>;
 }

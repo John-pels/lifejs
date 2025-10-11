@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createConfig } from "@/shared/config";
 import * as op from "@/shared/operation";
 import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
+import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 export const xaiLLMConfig = createConfig({
   schema: z.object({
@@ -113,9 +113,10 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
     messages: Message[];
     tools: ToolDefinition[];
   }): Promise<op.OperationResult<LLMGenerateMessageJob>> {
-    const [err, job] = await op.attempt(async () => {
+    try {
       // Create a new job
-      const job = this.createGenerateMessageJob();
+      const [errJob, job] = this.createGenerateMessageJob();
+      if (errJob) return op.failure(errJob);
 
       // Prepare tools and messages in OpenAI format
       const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
@@ -141,7 +142,8 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       // Start streaming in the background (don't await)
       (async () => {
         try {
-          let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
+          let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> =
+            {};
 
           for await (const chunk of stream) {
             // Ignore chunks if job was cancelled
@@ -162,7 +164,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
             if (delta.tool_calls && delta.tool_calls.length > 0) {
               for (const toolCall of delta.tool_calls) {
                 if (!toolCall) continue;
-                
+
                 // Retrieve the tool call ID
                 const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
                 if (!id) throw new Error("No tool call ID");
@@ -175,7 +177,8 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
                 // Compound name and arguments tokens
                 if (toolCall.function) {
                   if (toolCall.function.name) pendingToolCalls[id].name += toolCall.function.name;
-                  if (toolCall.function.arguments) pendingToolCalls[id].arguments += toolCall.function.arguments;
+                  if (toolCall.function.arguments)
+                    pendingToolCalls[id].arguments += toolCall.function.arguments;
                 }
               }
             }
@@ -205,18 +208,17 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       })();
 
       // Return the job immediately
-      return job;
-    });
-
-    if (err) return op.failure(err);
-    return op.success(job);
+      return op.success(job);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 
-  async generateObject<T extends z.ZodObject<any, any>>(params: {
+  async generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<op.OperationResult<LLMObjectGenerationChunk<T>>> {
-    const [err, result] = await op.attempt(async () => {
+  }): Promise<op.OperationResult<z.output<T>>> {
+    try {
       // Prepare messages in OpenAI format
       const openaiMessages = this.#toOpenAIMessages(params.messages);
 
@@ -248,22 +250,20 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       }
 
       // Validate using schema - this is a validation issue
-      const schemaResult = params.schema.safeParse(parsedContent);
-      if (!schemaResult.success) {
-        const issues = schemaResult.error.issues.map(err => `${err.path.join(".")}: ${err.message}`).join(", ");
+      const result = params.schema.safeParse(parsedContent);
+      if (!result.success) {
+        const issues = result.error.issues
+          .map((err) => `${err.path.join(".")}: ${err.message}`)
+          .join(", ");
         return op.failure({
           code: "Validation",
           message: `Schema validation failed: ${issues}`,
         });
       }
 
-      return op.success({
-        success: true,
-        data: schemaResult.data,
-      });
-    });
-
-    if (err) return op.failure(err);
-    return op.success(result);
+      return op.success(result.data);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
+    }
   }
 }

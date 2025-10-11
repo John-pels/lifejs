@@ -1,6 +1,7 @@
 import { Mistral } from "@mistralai/mistralai";
 import type {
   AssistantMessage,
+  CompletionEvent,
   SystemMessage,
   Tool,
   ToolMessage,
@@ -9,9 +10,9 @@ import type {
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
 import * as op from "@/shared/operation";
-import type { Message, ToolDefinition } from "@/shared/resources";
-import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 import { newId } from "@/shared/prefixed-id";
+import type { Message, ToolDefinition } from "@/shared/resources";
+import { LLMBase, type LLMGenerateMessageJob } from "../base";
 
 // Define Mistral-specific message types with required role properties
 type MistralUserMessage = UserMessage & { role: "user" };
@@ -140,40 +141,45 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
   ): Promise<op.OperationResult<LLMGenerateMessageJob>> {
-    // Create a new job
-    const job = this.createGenerateMessageJob();
+    try {
+      // Create a new job
+      const [errJob, job] = this.createGenerateMessageJob();
+      if (errJob) return op.failure(errJob);
 
-    // Prepare tools and messages in Mistral format
-    const mistralTools = params.tools.length > 0 ? this.#toMistralTools(params.tools) : undefined;
-    const mistralMessages = this.#toMistralMessages(params.messages);
+      // Prepare tools and messages in Mistral format
+      const mistralTools = params.tools.length > 0 ? this.#toMistralTools(params.tools) : undefined;
+      const mistralMessages = this.#toMistralMessages(params.messages);
 
-    // Wrap stream creation in op.attempt()
-    const [streamErr, stream] = await op.attempt(async () => {
-      return await this.#client.chat.stream({
-        model: this.config.model,
-        temperature: this.config.temperature,
-        messages: mistralMessages,
-        ...(mistralTools?.length ? { tools: mistralTools } : {}),
+      // Wrap stream creation in op.attempt()
+      const [errStream, stream] = await op.attempt(async () => {
+        return await this.#client.chat.stream({
+          model: this.config.model,
+          temperature: this.config.temperature,
+          messages: mistralMessages,
+          ...(mistralTools?.length ? { tools: mistralTools } : {}),
+        });
       });
-    });
 
-    // Handle stream creation errors
-    if (streamErr) {
-      return op.failure({
-        code: "Upstream",
-        message: "Failed to create stream",
-        error: streamErr,
+      // Handle stream creation errors
+      if (errStream) {
+        return op.failure({
+          code: "Upstream",
+          message: "Failed to create stream",
+          error: errStream,
+        });
+      }
+
+      // Process the stream and feed chunks into the job's queue
+      // Use setImmediate to defer processing but keep it synchronous-ish
+      setImmediate(async () => {
+        await this.#processStream(job, stream);
       });
+
+      // Return the job immediately
+      return op.success(job);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
-
-    // Process the stream and feed chunks into the job's queue
-    // Use setImmediate to defer processing but keep it synchronous-ish
-    setImmediate(async () => {
-      await this.#processStream(job, stream);
-    });
-
-    // Return the job immediately
-    return op.success(job);
   }
 
   /**
@@ -181,7 +187,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
    */
   async #processStream(
     job: LLMGenerateMessageJob,
-    stream: AsyncIterable<any>,
+    stream: AsyncIterable<CompletionEvent>,
   ): Promise<void> {
     let pendingToolCalls: Record<
       string,
@@ -265,79 +271,80 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
   async generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<op.OperationResult<LLMObjectGenerationChunk<T>>> {
-    // Add a system message to encourage proper JSON formatting
-    const formatMessage: Message = {
-      role: "system",
-      content:
-        "Please respond with a valid JSON object that matches the required schema. Format the response as a JSON object.",
-      id: newId("msg"),
-      createdAt: Date.now(),
-      lastUpdated: Date.now(),
-    };
-    const messageWithFormatting = [formatMessage, ...params.messages];
+  }): Promise<op.OperationResult<z.output<T>>> {
+    try {
+      // Add a system message to encourage proper JSON formatting
+      const formatMessage: Message = {
+        role: "system",
+        content:
+          "Please respond with a valid JSON object that matches the required schema. Format the response as a JSON object.",
+        id: newId("msg"),
+        createdAt: Date.now(),
+        lastUpdated: Date.now(),
+      };
+      const messageWithFormatting = [formatMessage, ...params.messages];
 
-    // Prepare messages in Mistral format
-    const mistralMessages = this.#toMistralMessages(messageWithFormatting);
+      // Prepare messages in Mistral format
+      const mistralMessages = this.#toMistralMessages(messageWithFormatting);
 
-    // Wrap API call in op.attempt()
-    const [apiErr, response] = await op.attempt(async () => {
-      return await this.#client.chat.complete({
-        model: this.config.model,
-        messages: mistralMessages,
-        temperature: this.config.temperature,
+      // Wrap API call in op.attempt()
+      const [apiErr, response] = await op.attempt(async () => {
+        return await this.#client.chat.complete({
+          model: this.config.model,
+          messages: mistralMessages,
+          temperature: this.config.temperature,
+        });
       });
-    });
 
-    // Handle API errors
-    if (apiErr) {
-      return op.failure({
-        code: "Upstream",
-        message: apiErr instanceof Error ? apiErr.message : "Failed to generate object",
-        error: apiErr,
+      // Handle API errors
+      if (apiErr) {
+        return op.failure({
+          code: "Upstream",
+          message: apiErr instanceof Error ? apiErr.message : "Failed to generate object",
+          error: apiErr,
+        });
+      }
+
+      // Validate response structure
+      if (!response.choices?.[0]?.message?.content) {
+        return op.failure({
+          code: "Upstream",
+          message: "Invalid response format from Mistral API",
+        });
+      }
+
+      // Extract content
+      const rawContent = Array.isArray(response.choices[0].message.content)
+        ? JSON.stringify(response.choices[0].message.content)
+        : response.choices[0].message.content;
+
+      // Parse JSON - wrap in op.attempt() to catch parse errors
+      const [parseErr, parsedContent] = op.attempt(() => {
+        return JSON.parse(rawContent);
       });
+
+      if (parseErr) {
+        return op.failure({
+          code: "Validation",
+          message: `Failed to parse response as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        });
+      }
+
+      // Validate using schema
+      const result = params.schema.safeParse(parsedContent);
+      if (!result.success) {
+        const issues = result.error.issues
+          .map((err) => `${err.path.join(".")}: ${err.message}`)
+          .join(", ");
+        return op.failure({
+          code: "Validation",
+          message: `Schema validation failed: ${issues}`,
+        });
+      }
+
+      return op.success(result.data);
+    } catch (error) {
+      return op.failure({ code: "Unknown", error });
     }
-
-    // Validate response structure
-    if (!response.choices?.[0]?.message?.content) {
-      return op.failure({
-        code: "Upstream",
-        message: "Invalid response format from Mistral API",
-      });
-    }
-
-    // Extract content
-    const rawContent = Array.isArray(response.choices[0].message.content)
-      ? JSON.stringify(response.choices[0].message.content)
-      : response.choices[0].message.content;
-
-    // Parse JSON - wrap in op.attempt() to catch parse errors
-    const [parseErr, parsedContent] =  op.attempt(() => {
-      return JSON.parse(rawContent);
-    });
-
-    if (parseErr) {
-      return op.failure({
-        code: "Validation",
-        message: `Failed to parse response as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
-      });
-    }
-
-    // Validate using schema
-    const result = params.schema.safeParse(parsedContent);
-    if (!result.success) {
-      const issues = result.error.issues
-        .map((err) => `${err.path.join(".")}: ${err.message}`)
-        .join(", ");
-      return op.failure({
-        code: "Validation",
-        message: `Schema validation failed: ${issues}`,
-      });
-    }
-
-    return op.success({
-      success: true,
-      data: result.data,
-    });
   }
 }

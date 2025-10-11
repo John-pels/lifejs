@@ -17,6 +17,7 @@
       "!**/.life"
     ]
   },
+
   "linter": {
     "rules": {
       "style": {
@@ -43,7 +44,9 @@
         "noDelete": "off",
         "useTopLevelRegex": "warn"
       },
-      "nursery": {}
+      "nursery": {
+        "useConsistentTypeDefinitions": "off"
+      }
     }
   }
 }
