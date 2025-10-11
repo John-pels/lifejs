@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
+import type * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import { tokenizer } from "./lib/spoken-text-tokenizer";
 import { WeightedAverage } from "./lib/weighted-average";
@@ -50,7 +51,8 @@ export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
     this.config = configSchema.parse({ ...config });
 
     // Start a minimal generation on instantion, so pace is set
-    this.generate().then(async (job) => {
+    this.generate().then(async ([err, job]) => {
+      if (err || !job) return;
       job.pushText("Isn't Life beautiful? I'm talking about the Typescript framework.");
       for await (const chunk of job.getStream()) if (chunk.type === "end") break;
     });
@@ -72,7 +74,8 @@ export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
         if (!this.#jobsFullText[jobId]) this.#jobsFullText[jobId] = "";
         this.#jobsFullText[jobId] += text;
 
-        this._onGeneratePushText(job, text, isLast);
+        // Fire-and-forget the async push; errors will be handled in the provider implementation
+        void this._onGeneratePushText(job, text, isLast);
       },
       raw: {
         asyncQueue: queue,
@@ -165,11 +168,11 @@ export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
     return job;
   }
 
-  // To be impemented by subclasses
-  abstract generate(): Promise<TTSGenerateJob>;
+  // To be implemented by subclasses
+  abstract generate(): Promise<op.OperationResult<TTSGenerateJob>>;
   protected abstract _onGeneratePushText(
     job: TTSGenerateJob,
     text: string,
     isLast: boolean,
-  ): Promise<void>;
+  ): Promise<op.OperationResult<void>>;
 }

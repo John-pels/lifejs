@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import type { Message } from "@/shared/resources";
 import { EOUBase } from "../../base";
 
@@ -12,15 +13,15 @@ const transformers = import("@huggingface/transformers");
 export const livekitEOUConfig = createConfig({
   schema: z.object({
     provider: z.literal("livekit"),
-    quantized: z.boolean().prefault(true),
+    quantized: z.boolean().default(true),
     /**
      * Quick benchmarks have shown that Livekit models are very optimized for multi-turn
      * inferences, the most balanced value considering inference time and accuracy was
      * in the 2-5 messages range for the quantized version. Carefully benchmark the change
      * if you consider increasing / decreasing this value outside of that range.
      */
-    maxMessages: z.number().prefault(3),
-    maxTokens: z.number().prefault(512),
+    maxMessages: z.number().default(3),
+    maxTokens: z.number().default(512),
   }),
 });
 
@@ -145,17 +146,26 @@ export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.schema> {
     return this.#untokenize(keptTokens.reverse());
   }
 
-  async predict(messages: Message[]): Promise<number> {
-    try {
-      if (!messages || messages.length === 0) return 0;
+  async predict(messages: Message[]): Promise<op.OperationResult<number>> {
+    // Validate input - null or undefined is an Invalid error
+    if (messages === null || messages === undefined) {
+      return op.failure({ code: "Validation", message: "Messages must be provided" })
+    }
+
+    const [err, prob] = await op.attempt(async () => {
+      // Handle empty messages
+      if (!messages || messages.length === 0) {
+        return op.success(0);
+      }
 
       const session = await this.#getSession();
 
       // Format and tokenize the conversation
       const livekitMessages = await this.#toLivekitMessages(messages);
-      if (livekitMessages.length === 0) return 0;
+      if (livekitMessages.length === 0) return op.success(0);
+      
       const tokens = await this.#tokenize(livekitMessages);
-      if (tokens.length === 0) return 0;
+      if (tokens.length === 0) return op.success(0);
 
       // Run inference
       const outputs = await session.run({
@@ -164,11 +174,11 @@ export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.schema> {
 
       // Extract and return the EOU probability
       const eouProbability = outputs.prob?.data[0];
-      if (!eouProbability) return 0;
-      return Number(eouProbability);
-    } catch (error) {
-      console.error("Livekit EOU error:", error);
-      return 0;
-    }
+      if (!eouProbability) return op.success(0);
+      return op.success(Number(eouProbability));
+    });
+
+    if (err) return op.failure({code:'Upstream', message: 'Livekit EOU error', error: err});
+    return op.success(prob);
   }
 }

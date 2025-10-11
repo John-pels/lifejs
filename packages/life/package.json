@@ -31,7 +31,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "types": "tsc --noEmit --emitDeclarationOnly false",
-    "test": "dotenv -e ../../.env -- vitest run",
+    "test": "vitest run",
     "prepack": "cp ../../README.md README.md && cp ../../LICENSE LICENSE && cp ../../LICENSE.SERVICES LICENSE.SERVICES"
   },
   "bin": {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
   "extends": ["ultracite"],
   "javascript": {
     "formatter": {
@@ -23,14 +23,13 @@
         "useSelfClosingElements": "off",
         "useBlockStatements": "off",
         "noUselessElse": "off",
+        "noParameterAssign": "off",
         "noMagicNumbers": "off",
-        "useReadonlyClassProperties": "warn",
-        "noParameterAssign": "off"
+        "useReadonlyClassProperties": "warn"
       },
       "suspicious": {
         "noConsole": "off",
-        "noAssignInExpressions": "off",
-        "noUnknownAtRules": "off"
+        "noAssignInExpressions": "off"
       },
       "correctness": {
         "useExhaustiveDependencies": "off"
@@ -40,15 +39,11 @@
       },
       "performance": {
         "noBarrelFile": "off",
-        "noAwaitInLoops": "error",
         "noNamespaceImport": "off",
         "noDelete": "off",
         "useTopLevelRegex": "warn"
       },
-      "nursery": {
-        "useConsistentTypeDefinitions": "off",
-        "noUnnecessaryConditions": "off"
-      }
+      "nursery": {}
     }
   }
 }

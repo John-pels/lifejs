@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import type { Message } from "@/shared/resources";
 import { EOUBase } from "../../base";
 
@@ -14,14 +15,14 @@ const MAX_TOKENS = 256; // Hardcoded in the model
 export const turnSenseEOUConfig = createConfig({
   schema: z.object({
     provider: z.literal("turnsense"),
-    quantized: z.boolean().prefault(true),
+    quantized: z.boolean().default(true),
     /**
      * Quick benchmark have shown that Turnsense models are very optimized for single
      * message inferences, and their documentation shows single message inferences as
      * well. Hence why this value defaults to 1. Carefully benchmark the change if you
      * consider increasing this value.
      */
-    maxMessages: z.number().prefault(1),
+    maxMessages: z.number().default(1),
   }),
 });
 
@@ -148,15 +149,26 @@ export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.schema> {
     return this.#untokenize(keptTokens.reverse());
   }
 
-  async predict(messages: Message[]): Promise<number> {
-    try {
+  async predict(messages: Message[]): Promise<op.OperationResult<number>> {
+    // Validate input - null or undefined is an Invalid error
+    if (messages === null || messages === undefined) {
+      return op.failure({ code: "Validation", message: "Messages must be provided" })
+    }
+
+    // Handle empty messages early
+    if (!messages || messages.length === 0) {
+      return op.success(0);
+    }
+
+    const [err, prob] = await op.attempt(async () => {
       const session = await this.#getSession();
 
       // Format and tokenize the conversation
       const turnsenseMessages = await this.#toTurnsenseMessages(messages);
-      if (turnsenseMessages.length === 0) return 0;
+      if (turnsenseMessages.length === 0) return op.success(0);
+      
       const { tokens, attentionMask } = await this.#tokenize(turnsenseMessages);
-      if (tokens.length === 0) return 0;
+      if (tokens.length === 0) return op.success(0);
 
       // Run inference
       const outputs = await session.run({
@@ -166,12 +178,12 @@ export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.schema> {
 
       // Retrieve and return the EOU probability
       const probabilities = outputs.probabilities;
-      if (!probabilities?.data || probabilities.data.length < 2) return 0;
+      if (!probabilities?.data || probabilities.data.length < 2) return op.success(0);
       const eouProbability = probabilities.data[1];
-      return typeof eouProbability === "number" ? eouProbability : 0;
-    } catch (error) {
-      console.error("TurnSense EOU error:", error);
-      return 0;
-    }
+      return typeof eouProbability === "number" ? op.success(eouProbability) : op.success(0);
+    });
+
+    if (err) return op.failure({code:'Upstream', message: 'TurnSense EOU error', error: err});
+    return op.success(prob);
   }
 }

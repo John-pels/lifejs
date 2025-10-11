@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
+import type * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 
 // STTBase.generate()
@@ -38,7 +39,8 @@ export abstract class STTBase<ConfigSchema extends z.ZodObject> {
       cancel: () => job.raw.abortController.abort(),
       getStream: () => queue,
       pushVoice: (pcm: Int16Array) => {
-        this._onGeneratePushVoice(job, pcm);
+        // Fire-and-forget the async push; errors will be handled in provider
+        void this._onGeneratePushVoice(job, pcm);
       },
       raw: {
         asyncQueue: queue,
@@ -52,7 +54,10 @@ export abstract class STTBase<ConfigSchema extends z.ZodObject> {
     return job;
   }
 
-  // To be impemented by subclasses
-  abstract generate(): Promise<STTGenerateJob>;
-  protected abstract _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array): Promise<void>;
+  // To be implemented by subclasses
+  abstract generate(): Promise<op.OperationResult<STTGenerateJob>>;
+  protected abstract _onGeneratePushVoice(
+    job: STTGenerateJob,
+    pcm: Int16Array,
+  ): Promise<op.OperationResult<void>>;
 }

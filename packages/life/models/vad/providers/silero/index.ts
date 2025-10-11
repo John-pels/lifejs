@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import { VADBase } from "../../base";
 
 const WINDOW_SAMPLES = 512;
@@ -60,7 +61,7 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
     return this.#_session;
   }
 
-  // Converts 16‑bit PCM to normalized 32‑bit float (‑1 … 1).
+  // Converts 16‑bit PCM to normalized 32‑bit float (‑1 … 1).
   #int16ToFloat32(src: Int16Array, dst?: Float32Array) {
     const out = dst ?? new Float32Array(src.length);
     for (let i = 0; i < src.length; ++i) out[i] = (src[i] as number) / 32_768;
@@ -71,9 +72,32 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
    * Check voice activity of one 10ms chunk (160 samples) of 16‑bit PCM audio.
    * After the initial warm‑up (3 calls) a probability in the range [0,1] is returned.
    * Until then, 0 is returned.
-   * @param pcm – Int16Array of length 160 (10ms @ 16 kHz)
+   * @param pcm – Int16Array of length 160 (10ms @ 16 kHz)
    */
-  async checkActivity(pcm: Int16Array): Promise<number> {
+  async checkActivity(pcm: Int16Array): Promise<op.OperationResult<number>> {
+    // Input validation - check for null/undefined
+    if (pcm === null) {
+      return op.failure({
+        code: "Validation",
+        message: "Audio data cannot be null or undefined",
+      });
+    }
+
+    if (pcm === undefined) {
+      return op.failure({
+        code: "Validation",
+        message: "Invalid audio data",
+      });
+    }
+
+    // Input validation - check type
+    if (!(pcm instanceof Int16Array)) {
+      return op.failure({
+        code: "Validation", 
+        message: "Invalid audio data type",
+      });
+    }
+
     // 1. Convert to Float32 in‑place (no allocations after warm‑up)
     const f32 = this.#int16ToFloat32(pcm);
 
@@ -86,10 +110,10 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
     // (need at least 32ms of context before first inference)
     if (concatenated.length < WINDOW_SAMPLES) {
       this.#residual = concatenated;
-      return 0;
+      return op.success(0);
     }
 
-    // 4. Slice last 32ms window & update residual (< 22ms)
+    // 4. Slice last 32ms window & update residual (< 22ms)
     const frameStart = concatenated.length - WINDOW_SAMPLES;
     const currentFrame = concatenated.subarray(frameStart);
     this.#residual = concatenated.subarray(frameStart + HOP_SAMPLES);
@@ -98,14 +122,36 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
     this.#contextWindow.set(this.#pastContext); // copy past context
     this.#contextWindow.set(currentFrame, PAST_CONTEXT_SAMPLES);
 
-    // 6. Run ONNX inference
-    const session = await this.#getSession();
-    const { output, stateN } = (await session.run({
-      input: new Tensor("float32", this.#contextWindow, [1, this.#contextWindow.length]),
-      state: new Tensor("float32", this.#rnnState, [2, 1, 128]),
-      sr: new Tensor("int64", this.#srTensor),
-    })) as Record<string, Tensor>;
-    if (!(output && stateN)) throw new Error("Unexpected ONNX output");
+    // 6. Run ONNX inference - wrap in op.attempt() to catch errors
+    const [inferenceErr, result] = await op.attempt(async () => {
+      const session = await this.#getSession();
+      return await session.run({
+        input: new Tensor("float32", this.#contextWindow, [1, this.#contextWindow.length]),
+        state: new Tensor("float32", this.#rnnState, [2, 1, 128]),
+        sr: new Tensor("int64", this.#srTensor),
+      });
+    });
+
+    // Handle inference errors
+    if (inferenceErr) {
+      return op.failure({
+        code: "Upstream",
+        message: "ONNX inference failed",
+        error: inferenceErr,
+      });
+    }
+
+    // Extract output and state tensors
+    const output = result.output as Tensor | undefined;
+    const stateN = result.stateN as Tensor | undefined;
+
+    // Validate output tensors exist
+    if (!output || !stateN) {
+      return op.failure({
+        code: "Upstream",
+        message: "Unexpected ONNX output: missing output or state tensors",
+      });
+    }
 
     // 7. Persist state & past context for next call
     this.#rnnState.set(stateN.data as Float32Array);
@@ -113,6 +159,15 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
       this.#contextWindow.subarray(this.#contextWindow.length - PAST_CONTEXT_SAMPLES),
     );
 
-    return (output.data as Float32Array)[0] ?? 0;
+    // Extract probability value
+    const probability = (output.data as Float32Array)[0] ?? 0;
+    if (typeof probability !== "number") {
+      return op.failure({
+        code: "Upstream",
+        message: "Unexpected ONNX output: missing output or state tensors",
+      });
+    }
+
+    return op.success(probability);
   }
 }

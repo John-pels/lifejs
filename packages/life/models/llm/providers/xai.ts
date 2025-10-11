@@ -2,13 +2,18 @@ import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 
 export const xaiLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("xai"),
+<<<<<<< HEAD
     apiKey: z.string().prefault(process.env.XAI_API_KEY as string),
+=======
+    apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
+>>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "grok-3",
@@ -20,8 +25,8 @@ export const xaiLLMConfig = createConfig({
         "grok-beta",
         "grok-vision-beta",
       ])
-      .prefault("grok-3-mini"),
-    temperature: z.number().min(0).max(2).prefault(0.5),
+      .default("grok-3-mini"),
+    temperature: z.number().min(0).max(2).default(0.5),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -104,118 +109,161 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
   /**
    * Generate a message with job management - returns jobId along with stream
    */
-  async generateMessage(
-    params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
-  ): Promise<LLMGenerateMessageJob> {
-    // Create a new job
-    const job = this.createGenerateMessageJob();
-
-    // Prepare tools and messages in OpenAI format
-    const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
-    const openaiMessages = this.#toOpenAIMessages(params.messages);
-
-    // Prepare job stream
-    const stream = await this.#client.chat.completions.create(
-      {
-        model: this.config.model,
-        temperature: this.config.temperature,
-        messages: openaiMessages,
-        stream: true,
-        ...(openaiTools?.length
-          ? {
-              tools: openaiTools,
-              parallel_tool_calls: true,
-            }
-          : {}),
-      },
-      { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
-    );
-
-    // Start streaming in the background (don't await)
-    (async () => {
-      let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
-
-      for await (const chunk of stream) {
-        // Ignore chunks if job was cancelled
-        if (job.raw.abortController.signal.aborted) continue;
-
-        // Extract the choice and delta (if any)
-        const choice = chunk.choices[0];
-        if (!choice) throw new Error("No choice");
-        const delta = choice.delta;
-
-        // Handle content tokens
-        if (delta.content) {
-          job.raw.receiveChunk({ type: "content", content: delta.content });
-          continue;
-        }
-
-        // Handle tool calls tokens
-        if (delta.tool_calls) {
-          for (const toolCall of delta.tool_calls) {
-            // Retrieve the tool call ID
-            const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
-            if (!id) throw new Error("No tool call ID");
-
-            // Ensure the tool call is tracked
-            if (!pendingToolCalls[id]) pendingToolCalls[id] = { id, name: "", arguments: "" };
-
-            // Compound name tokens
-            if (toolCall.function?.name) pendingToolCalls[id].name += toolCall.function.name;
-
-            // Compound arguments tokens
-            if (toolCall.function?.arguments)
-              pendingToolCalls[id].arguments += toolCall.function.arguments;
-          }
-        }
-
-        // Handle tool call completion
-        if (chunk.choices[0]?.finish_reason === "tool_calls") {
-          job.raw.receiveChunk({
-            type: "tools",
-            tools: Object.values(pendingToolCalls).map((toolCall) => ({
-              id: toolCall.id,
-              name: toolCall.name,
-              input: JSON.parse(toolCall.arguments || "{}"),
-            })),
-          });
-          pendingToolCalls = {};
-        }
-
-        // Handle end of stream
-        if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
-      }
-    })();
-
-    // Return the job immediately
-    return job;
-  }
-
-  async generateObject<T extends z.ZodObject>(params: {
+  async generateMessage(params: {
     messages: Message[];
-    schema: T;
-  }): Promise<LLMObjectGenerationChunk<T>> {
-    // Prepare messages in OpenAI format
-    const openaiMessages = this.#toOpenAIMessages(params.messages);
+    tools: ToolDefinition[];
+  }): Promise<op.OperationResult<LLMGenerateMessageJob>> {
+    const [err, job] = await op.attempt(async () => {
+      // Create a new job
+      const job = this.createGenerateMessageJob();
 
-    // Prepare JSON schema
-    const jsonSchema = z.toJSONSchema(params.schema);
+      // Prepare tools and messages in OpenAI format
+      const openaiTools = params.tools.length > 0 ? this.#toOpenAITools(params.tools) : undefined;
+      const openaiMessages = this.#toOpenAIMessages(params.messages);
 
-    // Generate the object
-    const response = await this.#client.chat.completions.create({
-      model: this.config.model,
-      messages: openaiMessages,
-      temperature: this.config.temperature,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "avc", schema: jsonSchema },
-      },
+      // Prepare job stream
+      const stream = await this.#client.chat.completions.create(
+        {
+          model: this.config.model,
+          temperature: this.config.temperature,
+          messages: openaiMessages,
+          stream: true,
+          ...(openaiTools?.length
+            ? {
+                tools: openaiTools,
+                parallel_tool_calls: true,
+              }
+            : {}),
+        },
+        { signal: job.raw.abortController.signal }, // Allows the stream to be cancelled
+      );
+
+      // Start streaming in the background (don't await)
+      (async () => {
+        try {
+          let pendingToolCalls: Record<string, { id: string; name: string; arguments: string }> = {};
+
+          for await (const chunk of stream) {
+            // Ignore chunks if job was cancelled
+            if (job.raw.abortController.signal.aborted) continue;
+
+            // Extract the choice and delta (if any)
+            const choice = chunk.choices[0];
+            if (!choice) throw new Error("No choice");
+            const delta = choice.delta;
+
+            // Handle content tokens
+            if (delta.content) {
+              job.raw.receiveChunk({ type: "content", content: delta.content });
+              continue;
+            }
+
+            // Handle tool calls tokens
+            if (delta.tool_calls && delta.tool_calls.length > 0) {
+              for (const toolCall of delta.tool_calls) {
+                if (!toolCall) continue;
+                
+                // Retrieve the tool call ID
+                const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
+                if (!id) throw new Error("No tool call ID");
+
+                // Ensure the tool call is tracked
+                if (!pendingToolCalls[id]) {
+                  pendingToolCalls[id] = { id, name: "", arguments: "" };
+                }
+
+                // Compound name and arguments tokens
+                if (toolCall.function) {
+                  if (toolCall.function.name) pendingToolCalls[id].name += toolCall.function.name;
+                  if (toolCall.function.arguments) pendingToolCalls[id].arguments += toolCall.function.arguments;
+                }
+              }
+            }
+
+            // Handle tool call completion
+            if (chunk.choices[0]?.finish_reason === "tool_calls") {
+              job.raw.receiveChunk({
+                type: "tools",
+                tools: Object.values(pendingToolCalls).map((toolCall) => ({
+                  id: toolCall.id,
+                  name: toolCall.name,
+                  input: JSON.parse(toolCall.arguments || "{}"),
+                })),
+              });
+              pendingToolCalls = {};
+            }
+
+            // Handle end of stream
+            if (chunk.choices[0]?.finish_reason === "stop") job.raw.receiveChunk({ type: "end" });
+          }
+        } catch (error) {
+          job.raw.receiveChunk({
+            type: "error",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+
+      // Return the job immediately
+      return job;
     });
 
-    // Parse the response
-    const obj = JSON.parse(response.choices[0]?.message?.content || "{}");
+    if (err) return op.failure(err);
+    return op.success(job);
+  }
 
-    // Return the object
-    return { success: true, data: obj };
+  async generateObject<T extends z.ZodObject<any, any>>(params: {
+    messages: Message[];
+    schema: T;
+  }): Promise<op.OperationResult<LLMObjectGenerationChunk<T>>> {
+    const [err, result] = await op.attempt(async () => {
+      // Prepare messages in OpenAI format
+      const openaiMessages = this.#toOpenAIMessages(params.messages);
+
+      // Generate the object with structured JSON response format
+      const response = await this.#client.chat.completions.create({
+        model: this.config.model,
+        messages: openaiMessages,
+        temperature: this.config.temperature,
+        response_format: { type: "json_object" },
+      });
+
+      // Validate response structure - this is an upstream issue, not validation
+      if (!response.choices?.[0]?.message?.content) {
+        return op.failure({
+          code: "Upstream",
+          message: "Invalid response format from X.ai API",
+        });
+      }
+
+      // Parse the response - this is a validation issue
+      let parsedContent: unknown;
+      try {
+        parsedContent = JSON.parse(response.choices[0].message.content);
+      } catch (parseError) {
+        return op.failure({
+          code: "Validation",
+          message: `Failed to parse response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        });
+      }
+
+      // Validate using schema - this is a validation issue
+      const schemaResult = params.schema.safeParse(parsedContent);
+      if (!schemaResult.success) {
+        const issues = schemaResult.error.issues.map(err => `${err.path.join(".")}: ${err.message}`).join(", ");
+        return op.failure({
+          code: "Validation",
+          message: `Schema validation failed: ${issues}`,
+        });
+      }
+
+      return op.success({
+        success: true,
+        data: schemaResult.data,
+      });
+    });
+
+    if (err) return op.failure(err);
+    return op.success(result);
   }
 }

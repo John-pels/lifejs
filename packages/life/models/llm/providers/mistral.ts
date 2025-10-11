@@ -8,8 +8,10 @@ import type {
 } from "@mistralai/mistralai/models/components";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
+import { newId } from "@/shared/prefixed-id";
 
 // Define Mistral-specific message types with required role properties
 type MistralUserMessage = UserMessage & { role: "user" };
@@ -26,7 +28,11 @@ type MistralMessage =
 export const mistralLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("mistral"),
+<<<<<<< HEAD
     apiKey: z.string().prefault(process.env.MISTRAL_API_KEY as string),
+=======
+    apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
+>>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "mistral-large-latest",
@@ -48,8 +54,8 @@ export const mistralLLMConfig = createConfig({
         "open-mixtral-8x7b",
         "open-mixtral-8x22b",
       ])
-      .prefault("mistral-small-latest"),
-    temperature: z.number().min(0).max(1).prefault(0.5),
+      .default("mistral-small-latest"),
+    temperature: z.number().min(0).max(1).default(0.5),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -119,7 +125,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: z.toJSONSchema(tool.schema.input),
+        parameters: tool.schema.input.describe("Tool input parameters"),
       },
     };
   }
@@ -133,7 +139,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
    */
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
-  ): Promise<LLMGenerateMessageJob> {
+  ): Promise<op.OperationResult<LLMGenerateMessageJob>> {
     // Create a new job
     const job = this.createGenerateMessageJob();
 
@@ -141,141 +147,197 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
     const mistralTools = params.tools.length > 0 ? this.#toMistralTools(params.tools) : undefined;
     const mistralMessages = this.#toMistralMessages(params.messages);
 
-    try {
-      // Create the stream
-      const stream = await this.#client.chat.stream({
+    // Wrap stream creation in op.attempt()
+    const [streamErr, stream] = await op.attempt(async () => {
+      return await this.#client.chat.stream({
         model: this.config.model,
         temperature: this.config.temperature,
         messages: mistralMessages,
         ...(mistralTools?.length ? { tools: mistralTools } : {}),
       });
+    });
 
-      // Process the stream
-      (async () => {
-        let pendingToolCalls: Record<
-          string,
-          {
-            id: string;
-            name: string;
-            arguments: string;
-          }
-        > = {};
+    // Handle stream creation errors
+    if (streamErr) {
+      return op.failure({
+        code: "Upstream",
+        message: "Failed to create stream",
+        error: streamErr,
+      });
+    }
 
-        try {
-          for await (const chunk of stream) {
-            // Ignore chunks if job was cancelled
-            if (job.raw.abortController.signal.aborted) break;
+    // Process the stream and feed chunks into the job's queue
+    // Use setImmediate to defer processing but keep it synchronous-ish
+    setImmediate(async () => {
+      await this.#processStream(job, stream);
+    });
 
-            // Extract the choice and delta (if any)
-            const choice = chunk.data.choices[0];
-            if (!choice) throw new Error("No choice");
-            const delta = choice.delta;
+    // Return the job immediately
+    return op.success(job);
+  }
 
-            // Handle content tokens
-            if (delta.content) {
-              const content = delta.content;
-              const contentString = typeof content === "string" ? content : JSON.stringify(content);
-              job.raw.receiveChunk({
-                type: "content",
-                content: contentString,
-              });
-            }
+  /**
+   * Process stream chunks
+   */
+  async #processStream(
+    job: LLMGenerateMessageJob,
+    stream: AsyncIterable<any>,
+  ): Promise<void> {
+    let pendingToolCalls: Record<
+      string,
+      {
+        id: string;
+        name: string;
+        arguments: string;
+      }
+    > = {};
 
-            // Handle tool calls tokens
-            const toolCalls = delta.toolCalls;
-            if (toolCalls) {
-              for (const toolCall of toolCalls) {
-                // Retrieve the tool call ID
-                const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
-                if (!id) throw new Error("No tool call ID");
+    try {
+      for await (const chunk of stream) {
+        // Ignore chunks if job was cancelled
+        if (job.raw.abortController.signal.aborted) break;
 
-                // Ensure the tool call is tracked
-                if (!pendingToolCalls[id]) {
-                  pendingToolCalls[id] = { id, name: "", arguments: "" };
-                }
+        // Extract the choice and delta (if any)
+        const choice = chunk.data.choices[0];
+        if (!choice) throw new Error("No choice");
+        const delta = choice.delta;
 
-                // Compound name tokens
-                if (toolCall.function?.name) {
-                  pendingToolCalls[id].name += toolCall.function.name;
-                }
-
-                // Compound arguments tokens
-                if (toolCall.function?.arguments) {
-                  pendingToolCalls[id].arguments += toolCall.function.arguments;
-                }
-              }
-            }
-
-            // Handle finish reasons
-            // - Tool calls completion
-            if (choice.finishReason === "tool_calls") {
-              job.raw.receiveChunk({
-                type: "tools",
-                tools: Object.values(pendingToolCalls).map((toolCall) => ({
-                  id: toolCall.id,
-                  name: toolCall.name,
-                  input: JSON.parse(toolCall.arguments || "{}"),
-                })),
-              });
-              pendingToolCalls = {};
-            }
-
-            // - End of stream
-            if (choice.finishReason === "stop") job.raw.receiveChunk({ type: "end" });
-          }
-        } catch (error) {
+        // Handle content tokens
+        if (delta.content) {
+          const content = delta.content;
+          const contentString = typeof content === "string" ? content : JSON.stringify(content);
           job.raw.receiveChunk({
-            type: "error",
-            error: error instanceof Error ? error.message : "Unknown error",
+            type: "content",
+            content: contentString,
           });
         }
-      })();
 
-      // Return the job
-      return job;
+        // Handle tool calls tokens
+        const toolCalls = delta.toolCalls;
+        if (toolCalls) {
+          for (const toolCall of toolCalls) {
+            // Retrieve the tool call ID
+            const id = toolCall.id ?? Object.keys(pendingToolCalls).at(-1);
+            if (!id) throw new Error("No tool call ID");
+
+            // Ensure the tool call is tracked
+            if (!pendingToolCalls[id]) {
+              pendingToolCalls[id] = { id, name: "", arguments: "" };
+            }
+
+            // Compound name tokens
+            if (toolCall.function?.name) {
+              pendingToolCalls[id].name += toolCall.function.name;
+            }
+
+            // Compound arguments tokens
+            if (toolCall.function?.arguments) {
+              pendingToolCalls[id].arguments += toolCall.function.arguments;
+            }
+          }
+        }
+
+        // Handle finish reasons
+        // - Tool calls completion
+        if (choice.finishReason === "tool_calls") {
+          job.raw.receiveChunk({
+            type: "tools",
+            tools: Object.values(pendingToolCalls).map((toolCall) => ({
+              id: toolCall.id,
+              name: toolCall.name,
+              input: JSON.parse(toolCall.arguments || "{}"),
+            })),
+          });
+          pendingToolCalls = {};
+        }
+
+        // - End of stream
+        if (choice.finishReason === "stop") job.raw.receiveChunk({ type: "end" });
+      }
     } catch (error) {
       job.raw.receiveChunk({
         type: "error",
-        error: error instanceof Error ? error.message : "Failed to create stream",
+        error: error instanceof Error ? error.message : "Unknown error",
       });
-      return job;
     }
   }
 
   async generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<LLMObjectGenerationChunk<T>> {
-    try {
-      // Prepare messages in Mistral format
-      const mistralMessages = this.#toMistralMessages(params.messages);
+  }): Promise<op.OperationResult<LLMObjectGenerationChunk<T>>> {
+    // Add a system message to encourage proper JSON formatting
+    const formatMessage: Message = {
+      role: "system",
+      content:
+        "Please respond with a valid JSON object that matches the required schema. Format the response as a JSON object.",
+      id: newId("msg"),
+      createdAt: Date.now(),
+      lastUpdated: Date.now(),
+    };
+    const messageWithFormatting = [formatMessage, ...params.messages];
 
-      // Prepare JSON schema
-      const jsonSchema = z.toJSONSchema(params.schema);
+    // Prepare messages in Mistral format
+    const mistralMessages = this.#toMistralMessages(messageWithFormatting);
 
-      // Generate the object using schema-enforced parse method
-      // This uses Mistral's built-in schema validation with the Zod schema
-      const response = await this.#client.chat.complete({
+    // Wrap API call in op.attempt()
+    const [apiErr, response] = await op.attempt(async () => {
+      return await this.#client.chat.complete({
         model: this.config.model,
         messages: mistralMessages,
         temperature: this.config.temperature,
-
-        responseFormat: {
-          type: "json_schema",
-          jsonSchema: { name: "avc", schemaDefinition: jsonSchema },
-        },
       });
+    });
 
-      // Extract parsed content from response - already validated by Mistral API
-      const data = JSON.parse((response.choices?.[0]?.message?.content as string) || "{}");
-
-      // Return the validated object (no additional validation needed)
-      return { success: true, data };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to generate object",
-      };
+    // Handle API errors
+    if (apiErr) {
+      return op.failure({
+        code: "Upstream",
+        message: apiErr instanceof Error ? apiErr.message : "Failed to generate object",
+        error: apiErr,
+      });
     }
+
+    // Validate response structure
+    if (!response.choices?.[0]?.message?.content) {
+      return op.failure({
+        code: "Upstream",
+        message: "Invalid response format from Mistral API",
+      });
+    }
+
+    // Extract content
+    const rawContent = Array.isArray(response.choices[0].message.content)
+      ? JSON.stringify(response.choices[0].message.content)
+      : response.choices[0].message.content;
+
+    // Parse JSON - wrap in op.attempt() to catch parse errors
+    const [parseErr, parsedContent] =  op.attempt(() => {
+      return JSON.parse(rawContent);
+    });
+
+    if (parseErr) {
+      return op.failure({
+        code: "Validation",
+        message: `Failed to parse response as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+      });
+    }
+
+    // Validate using schema
+    const result = params.schema.safeParse(parsedContent);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((err) => `${err.path.join(".")}: ${err.message}`)
+        .join(", ");
+      return op.failure({
+        code: "Validation",
+        message: `Schema validation failed: ${issues}`,
+      });
+    }
+
+    return op.success({
+      success: true,
+      data: result.data,
+    });
   }
 }

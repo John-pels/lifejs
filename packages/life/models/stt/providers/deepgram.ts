@@ -7,13 +7,17 @@ import {
 } from "@deepgram/sdk";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import { STTBase, type STTGenerateJob } from "../base";
-
 // Config
 export const deepgramSTTConfig = createConfig({
   schema: z.object({
     provider: z.literal("deepgram"),
+<<<<<<< HEAD
     apiKey: z.string().prefault(process.env.DEEPGRAM_API_KEY as string),
+=======
+    apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
+>>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "nova-3",
@@ -51,8 +55,8 @@ export const deepgramSTTConfig = createConfig({
         "whisper-medium",
         "whisper-large",
       ])
-      .prefault("nova-2-general"),
-    language: z.string().prefault("en"),
+      .default("nova-2-general"),
+    language: z.string().default("en"),
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -73,7 +77,7 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
   }
 
   // biome-ignore lint/suspicious/useAwait: need async to match STTBase abstract method
-  async generate(): Promise<STTGenerateJob> {
+  async generate(): Promise<op.OperationResult<STTGenerateJob>> {
     // Create a new generation job
     const job = this.createGenerateJob();
 
@@ -110,11 +114,30 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
     // Ensure the socket is kept alive until the job is cancelled
     setInterval(() => socket.keepAlive(), 1000);
 
-    return job;
+    return op.success(job);
   }
 
   // biome-ignore lint/suspicious/useAwait: Need async to match STTBase abstract method
   protected async _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array) {
-    this.#jobsSockets.get(job.id)?.send(pcm.buffer);
+    // Validate audio data first
+    if (!pcm || !(pcm instanceof Int16Array)) {
+      return op.failure({
+        code: "Validation",
+        message: "Invalid audio data",
+      });
+    }
+    // Use op.attempt() to wrap risky operation
+    const [sendErr] = op.attempt(() => {
+      this.#jobsSockets.get(job.id)?.send(pcm.buffer);
+    });
+
+    if (sendErr) {
+      return op.failure({
+        code: "Upstream",
+        message: "Failed to send audio",
+        error: sendErr,
+      });
+    }
+    return op.success();
   }
 }

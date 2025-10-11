@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
+import type * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { Message, ToolDefinition, ToolRequests } from "@/shared/resources";
 
@@ -21,15 +22,10 @@ export interface LLMGenerateMessageJob {
   };
 }
 
-// LLMBase.generateObject()
-export type LLMObjectGenerationChunk<T extends z.ZodObject> =
-  | { success: true; data: z.infer<T> }
-  | { success: false; error: string };
-
 /**
  * Base class for all LLMs providers.
  */
-export abstract class LLMBase<ConfigSchema extends z.ZodObject> {
+export abstract class LLMBase<ConfigSchema extends z.ZodObject<any, any>> {
   config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
@@ -51,14 +47,14 @@ export abstract class LLMBase<ConfigSchema extends z.ZodObject> {
     return job;
   }
 
-  // To be impemented by subclasses
+  // To be implemented by subclasses
   abstract generateMessage(params: {
     messages: Message[];
     tools: ToolDefinition[];
-  }): Promise<LLMGenerateMessageJob>;
+  }): Promise<op.OperationResult<LLMGenerateMessageJob>>;
 
-  abstract generateObject<T extends z.ZodObject>(params: {
+  abstract generateObject<T extends z.ZodObject<any, any>>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<LLMObjectGenerationChunk<T>>;
+  }): Promise<op.OperationResult<z.infer<T>>>;
 }

@@ -2,6 +2,7 @@ import { OpenAI } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/index.js";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
+import * as op from "@/shared/operation";
 import type { Message, ToolDefinition } from "@/shared/resources";
 import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } from "../base";
 
@@ -9,9 +10,15 @@ import { LLMBase, type LLMGenerateMessageJob, type LLMObjectGenerationChunk } fr
 export const openAILLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("openai"),
+<<<<<<< HEAD
     apiKey: z.string().prefault(process.env.OPENAI_API_KEY as string),
     model: z.enum(["gpt-4o-mini", "gpt-4o", "gpt-5", "gpt-5-nano"]).prefault("gpt-4o"),
     temperature: z.number().min(0).max(2).prefault(1),
+=======
+    apiKey: z.string().default(process.env.OPENAI_API_KEY ?? ""),
+    model: z.enum(["gpt-4o-mini", "gpt-4o"]).default("gpt-4o-mini"),
+    temperature: z.number().min(0).max(2).default(0.5),
+>>>>>>> f052a3a (refactor: refactor all models using the operation library)
   }),
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
@@ -93,7 +100,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
    */
   async generateMessage(
     params: Parameters<typeof LLMBase.prototype.generateMessage>[0],
-  ): Promise<LLMGenerateMessageJob> {
+  ): Promise<op.OperationResult<LLMGenerateMessageJob>> {
     // Create a new job
     const job = this.createGenerateMessageJob();
 
@@ -132,7 +139,10 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
         const delta = choice.delta;
 
         // Handle content tokens
-        if (delta.content) job.raw.receiveChunk({ type: "content", content: delta.content });
+        if (delta.content) {
+          job.raw.receiveChunk({ type: "content", content: delta.content });
+          continue;
+        }
 
         // Handle tool calls tokens
         if (delta.tool_calls) {
@@ -173,34 +183,60 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
     })();
 
     // Return the job immediately
-    return job;
+    return op.success(job);
   }
 
   async generateObject<T extends z.ZodObject>(params: {
     messages: Message[];
     schema: T;
-  }): Promise<LLMObjectGenerationChunk<T>> {
-    // Prepare messages in OpenAI format
-    const openaiMessages = this.#toOpenAIMessages(params.messages);
+  }) {
+    try {
+      // Prepare messages in OpenAI format
+      const openaiMessages = this.#toOpenAIMessages(params.messages);
 
-    // Prepare JSON schema
-    const jsonSchema = z.toJSONSchema(params.schema);
+      // Generate the object with structured JSON response format
+      const response = await this.#client.chat.completions.create({
+        model: this.config.model,
+        messages: openaiMessages,
+        temperature: this.config.temperature,
+        response_format: { type: "json_object" },
+      });
 
-    // Generate the object
-    const response = await this.#client.chat.completions.create({
-      model: this.config.model,
-      messages: openaiMessages,
-      temperature: this.config.temperature,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "avc", schema: jsonSchema },
-      },
-    });
+      // Validate response structure - this is an upstream issue, not validation
+      if (!response.choices?.[0]?.message?.content) {
+        return op.failure({
+          code: "Upstream",
+          message: "Invalid response format from OpenAI API",
+        });
+      }
 
-    // Parse the response
-    const data = JSON.parse(response.choices[0]?.message?.content || "{}");
+      // Parse the response - this is a validation issue
+      let parsedContent: unknown;
+      try {
+        parsedContent = JSON.parse(response.choices[0].message.content);
+      } catch (parseError) {
+        return op.failure({
+          code: "Validation",
+          message: `Failed to parse response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        });
+      }
 
-    // Return the object
-    return { success: true, data };
+      // Validate using schema - this is a validation issue
+      const result = params.schema.safeParse(parsedContent);
+      if (!result.success) {
+        const issues = result.error.issues.map(err => `${err.path.join(".")}: ${err.message}`).join(", ");
+        return op.failure({
+          code: "Validation",
+          message: `Schema validation failed: ${issues}`,
+        });
+      }
+
+      return op.success(result.data);
+    } catch (error) {
+      return op.failure({
+        code: "Upstream",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }

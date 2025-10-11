@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Command } from "commander";
-import { TelemetryClient } from "@/telemetry/clients/base";
-import { BuildOptions, executeBuild } from "./action";
+import type { TelemetryClient } from "@/telemetry/clients/base";
+import { type BuildOptions, executeBuild } from "./action";
 
 export function createBuildCommand(telemetry: TelemetryClient) {
   const command = new Command("build")

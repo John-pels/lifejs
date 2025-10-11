@@ -4,6 +4,7 @@ import { defineConfig, defineProject } from "vitest/config";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
+
 export default defineConfig({
   test: {
     projects: [
@@ -12,12 +13,10 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
+          globals: true,
           include: ["**/*.test.ts"],
           exclude: [
             "**/*.browser.test.ts",
-            // Temporarily exclude model tests
-            "models/llm/tests/mistral.test.ts",
-            "models/llm/tests/openai-compatible.test.ts",
           ],
           pool: "forks",
         },
@@ -31,6 +30,7 @@ export default defineConfig({
       defineProject({
         test: {
           name: "browser",
+          globals: true,
           browser: {
             enabled: true,
             provider: "playwright",
