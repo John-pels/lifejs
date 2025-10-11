@@ -391,14 +391,15 @@ describe("operation", () => {
       expect(pub.prop).toBe("value");
     });
 
-    test("handles nested object methods", () => {
+    test("handles nested object methods (legacy test - replaced by deep nesting suite)", () => {
       const obj = {
         nested: {
           method: () => success("nested result"),
         },
       };
       const pub = toPublic(obj);
-      expect(pub.nested).toEqual(obj.nested);
+      // Deep nesting now wraps nested methods too
+      expect(pub.nested.method()).toBe("nested result");
     });
   });
 
@@ -457,6 +458,525 @@ describe("operation", () => {
       const PublicService: PublicServiceType = toPublic(InternalService);
       const instance = new PublicService("TestService");
       expect(instance.getName()).toBe("TestService");
+    });
+  });
+
+  describe("toPublic with deep nesting", () => {
+    describe("nested plain objects", () => {
+      test("wraps methods at depth 2", () => {
+        const obj = {
+          level1: {
+            method: () => success("depth 2"),
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.level1.method()).toBe("depth 2");
+      });
+
+      test("wraps methods at depth 3", () => {
+        const obj = {
+          level1: {
+            level2: {
+              method: () => success("depth 3"),
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.level1.level2.method()).toBe("depth 3");
+      });
+
+      test("wraps methods at arbitrary depth", () => {
+        const obj = {
+          a: {
+            b: {
+              c: {
+                d: {
+                  e: {
+                    deepMethod: () => success("very deep"),
+                  },
+                },
+              },
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.a.b.c.d.e.deepMethod()).toBe("very deep");
+      });
+
+      test("wraps async methods at nested levels", async () => {
+        const obj = {
+          api: {
+            users: {
+              async fetch() {
+                return await success({ id: 1, name: "Alice" });
+              },
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        const result = await pub.api.users.fetch();
+        expect(result).toEqual({ id: 1, name: "Alice" });
+      });
+
+      test("throws on nested method failures", () => {
+        const obj = {
+          nested: {
+            failingMethod: () => failure({ code: "NotFound" }),
+          },
+        };
+        const pub = toPublic(obj);
+        expect(() => pub.nested.failingMethod()).toThrow();
+      });
+
+      test("preserves non-function properties at all levels", () => {
+        const obj = {
+          level1: {
+            prop1: "value1",
+            level2: {
+              prop2: 42,
+              level3: {
+                prop3: true,
+              },
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.level1.prop1).toBe("value1");
+        expect(pub.level1.level2.prop2).toBe(42);
+        expect(pub.level1.level2.level3.prop3).toBe(true);
+      });
+    });
+
+    describe("nested class instances", () => {
+      class NestedService {
+        getData() {
+          return success("nested service data");
+        }
+      }
+
+      class ParentService {
+        nested = new NestedService();
+        getParentData() {
+          return success("parent data");
+        }
+      }
+
+      test("wraps methods on nested class instances", () => {
+        const instance = new ParentService();
+        const pub = toPublic(instance);
+        expect(pub.nested.getData()).toBe("nested service data");
+      });
+
+      test("wraps both parent and nested methods", () => {
+        const instance = new ParentService();
+        const pub = toPublic(instance);
+        expect(pub.getParentData()).toBe("parent data");
+        expect(pub.nested.getData()).toBe("nested service data");
+      });
+
+      test("maintains binding context for nested class methods", () => {
+        class Inner {
+          private value = "inner value";
+          getValue() {
+            return success(this.value);
+          }
+        }
+        class Outer {
+          inner = new Inner();
+        }
+        const instance = new Outer();
+        const pub = toPublic(instance);
+        expect(pub.inner.getValue()).toBe("inner value");
+      });
+    });
+
+    describe("mixed nesting (objects and classes)", () => {
+      test("handles objects containing class instances", () => {
+        class Service {
+          fetch() {
+            return success("service data");
+          }
+        }
+        const obj = {
+          services: {
+            primary: new Service(),
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.services.primary.fetch()).toBe("service data");
+      });
+
+      test("handles classes containing nested objects", () => {
+        class Container {
+          methods = {
+            nested: {
+              deepFunc: () => success("deep in class"),
+            },
+          };
+        }
+        const instance = new Container();
+        const pub = toPublic(instance);
+        expect(pub.methods.nested.deepFunc()).toBe("deep in class");
+      });
+
+      test("handles complex mixed structures", () => {
+        class InnerService {
+          process() {
+            return success("processed");
+          }
+        }
+        const obj = {
+          api: {
+            v1: {
+              service: new InnerService(),
+              helpers: {
+                transform: () => success("transformed"),
+              },
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.api.v1.service.process()).toBe("processed");
+        expect(pub.api.v1.helpers.transform()).toBe("transformed");
+      });
+    });
+
+    describe(".safe property with deep nesting", () => {
+      test("root .safe provides access to entire unwrapped tree", () => {
+        const obj = {
+          level1: {
+            level2: {
+              method: () => success("deep result"),
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        // biome-ignore lint/suspicious/noExplicitAny: needed for testing raw safe access
+        const [error, data] = (pub.safe as any).level1.level2.method();
+        expect(error).toBeUndefined();
+        expect(data).toBe("deep result");
+      });
+
+      test(".safe works with nested class instances", () => {
+        class Nested {
+          getData() {
+            return success("nested data");
+          }
+        }
+        class Parent {
+          nested = new Nested();
+        }
+        const instance = new Parent();
+        const pub = toPublic(instance);
+        // biome-ignore lint/suspicious/noExplicitAny: needed for testing raw safe access
+        const [error, data] = (pub.safe as any).nested.getData();
+        expect(error).toBeUndefined();
+        expect(data).toBe("nested data");
+      });
+
+      test(".safe returns OperationResult at any depth", async () => {
+        const obj = {
+          a: {
+            b: {
+              async asyncMethod() {
+                return await success({ nested: true });
+              },
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        const [error, data] = await pub.safe.a.b.asyncMethod();
+        expect(error).toBeUndefined();
+        expect(data).toEqual({ nested: true });
+      });
+
+      test(".safe with nested failures", () => {
+        const obj = {
+          nested: {
+            fail: () => failure({ code: "Validation", message: "Invalid input" }),
+          },
+        };
+        const pub = toPublic(obj);
+        const [error, data] = pub.safe.nested.fail();
+        expect(error?.code).toBe("Validation");
+        expect(error?.message).toBe("Invalid input");
+        expect(data).toBeUndefined();
+      });
+    });
+
+    describe("circular references", () => {
+      test("handles self-referencing objects", () => {
+        const obj: any = {
+          method: () => success("works"),
+        };
+        obj.self = obj;
+        const pub = toPublic(obj);
+        expect(pub.method()).toBe("works");
+        expect(pub.self.method()).toBe("works");
+        expect(pub.self.self.method()).toBe("works");
+      });
+
+      test("handles circular class instances", () => {
+        class CircularClass {
+          child?: CircularClass;
+          getData() {
+            return success("circular data");
+          }
+        }
+        const instance = new CircularClass();
+        instance.child = instance;
+        const pub = toPublic(instance);
+        expect(pub.getData()).toBe("circular data");
+        expect(pub.child?.getData()).toBe("circular data");
+        expect(pub.child?.child?.getData()).toBe("circular data");
+      });
+
+      test("handles parent-child circular references", () => {
+        class Child {
+          parent?: Parent;
+          getChild() {
+            return success("child");
+          }
+        }
+        class Parent {
+          child = new Child();
+          getParent() {
+            return success("parent");
+          }
+        }
+        const parent = new Parent();
+        parent.child.parent = parent;
+        const pub = toPublic(parent);
+        expect(pub.getParent()).toBe("parent");
+        expect(pub.child.getChild()).toBe("child");
+        expect(pub.child.parent?.getParent()).toBe("parent");
+        expect(pub.child.parent?.child.getChild()).toBe("child");
+      });
+
+      test("handles complex circular graphs", () => {
+        const a: any = { name: "a", method: () => success("a") };
+        const b: any = { name: "b", method: () => success("b") };
+        const c: any = { name: "c", method: () => success("c") };
+        a.next = b;
+        b.next = c;
+        c.next = a;
+        const pub = toPublic(a);
+        expect(pub.method()).toBe("a");
+        expect(pub.next.method()).toBe("b");
+        expect(pub.next.next.method()).toBe("c");
+        expect(pub.next.next.next.method()).toBe("a");
+      });
+    });
+
+    describe("built-in types at nested levels", () => {
+      test("preserves nested arrays without wrapping", () => {
+        const obj = {
+          data: {
+            items: [1, 2, 3],
+          },
+        };
+        const pub = toPublic(obj);
+        expect(Array.isArray(pub.data.items)).toBe(true);
+        expect(pub.data.items).toEqual([1, 2, 3]);
+      });
+
+      test("preserves nested Dates without wrapping", () => {
+        const date = new Date("2024-01-01");
+        const obj = {
+          nested: {
+            timestamp: date,
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.timestamp).toBe(date);
+        expect(pub.nested.timestamp instanceof Date).toBe(true);
+      });
+
+      test("preserves nested Maps without wrapping", () => {
+        const map = new Map([["key", "value"]]);
+        const obj = {
+          nested: {
+            cache: map,
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.cache).toBe(map);
+        expect(pub.nested.cache.get("key")).toBe("value");
+      });
+
+      test("preserves nested Sets without wrapping", () => {
+        const set = new Set([1, 2, 3]);
+        const obj = {
+          nested: {
+            unique: set,
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.unique).toBe(set);
+        expect(pub.nested.unique.has(2)).toBe(true);
+      });
+
+      test("preserves nested Promises without wrapping", () => {
+        const promise = Promise.resolve("test");
+        const obj = {
+          nested: {
+            async: promise,
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.async).toBe(promise);
+      });
+
+      test("preserves nested RegExp without wrapping", () => {
+        const regex = /test/g;
+        const obj = {
+          nested: {
+            pattern: regex,
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.pattern).toBe(regex);
+        expect(pub.nested.pattern.test("test")).toBe(true);
+      });
+    });
+
+    describe("edge cases with deep nesting", () => {
+      test("handles null values in nested structures", () => {
+        const obj = {
+          nested: {
+            nullValue: null,
+            method: () => success("works"),
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.nullValue).toBeNull();
+        expect(pub.nested.method()).toBe("works");
+      });
+
+      test("handles undefined values in nested structures", () => {
+        const obj = {
+          nested: {
+            undefinedValue: undefined,
+            method: () => success("works"),
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.undefinedValue).toBeUndefined();
+        expect(pub.nested.method()).toBe("works");
+      });
+
+      test("handles empty nested objects", () => {
+        const obj = {
+          nested: {
+            empty: {},
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.nested.empty).toEqual({});
+      });
+
+      test("handles methods returning nested objects", () => {
+        const obj = {
+          getNestedApi: () =>
+            success({
+              method: () => success("nested in return value"),
+            }),
+        };
+        const pub = toPublic(obj);
+        const api = pub.getNestedApi();
+        // Note: The returned object from the method is not automatically wrapped
+        // because it's data returned from the function, not part of the original structure
+        expect(typeof api.method).toBe("function");
+      });
+
+      test("handles very deep nesting (performance test)", () => {
+        let deep: any = { method: () => success("bottom") };
+        for (let i = 0; i < 100; i++) {
+          deep = { next: deep };
+        }
+        const pub = toPublic(deep);
+        let current = pub;
+        for (let i = 0; i < 100; i++) {
+          current = current.next;
+        }
+        expect(current.method()).toBe("bottom");
+      });
+
+      test("handles nested structures with multiple methods", () => {
+        const obj = {
+          api: {
+            method1: () => success("m1"),
+            method2: () => success("m2"),
+            nested: {
+              method3: () => success("m3"),
+              method4: () => success("m4"),
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.api.method1()).toBe("m1");
+        expect(pub.api.method2()).toBe("m2");
+        expect(pub.api.nested.method3()).toBe("m3");
+        expect(pub.api.nested.method4()).toBe("m4");
+      });
+    });
+
+    describe("method parameters with deep nesting", () => {
+      test("preserves method parameters at nested levels", () => {
+        const obj = {
+          math: {
+            operations: {
+              add: (a: number, b: number) => success(a + b),
+              multiply: (a: number, b: number) => success(a * b),
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        expect(pub.math.operations.add(5, 3)).toBe(8);
+        expect(pub.math.operations.multiply(5, 3)).toBe(15);
+      });
+
+      test("handles complex parameters in nested methods", () => {
+        const obj = {
+          api: {
+            users: {
+              create: (data: { name: string; email: string }) => success({ id: 1, ...data }),
+            },
+          },
+        };
+        const pub = toPublic(obj);
+        const result = pub.api.users.create({ name: "Alice", email: "alice@test.com" });
+        expect(result).toEqual({ id: 1, name: "Alice", email: "alice@test.com" });
+      });
+    });
+
+    describe("caching behavior with deep nesting", () => {
+      test("returns same proxy instance for same nested object", () => {
+        const obj = {
+          nested: {
+            method: () => success("test"),
+          },
+        };
+        const pub = toPublic(obj);
+        const nested1 = pub.nested;
+        const nested2 = pub.nested;
+        expect(nested1).toBe(nested2);
+      });
+
+      test("caching prevents infinite loops in circular structures", () => {
+        const obj: any = {};
+        obj.self = obj;
+        obj.method = () => success("works");
+        const pub = toPublic(obj);
+
+        // Access multiple times to verify cache is working
+        expect(pub.method()).toBe("works");
+        expect(pub.self.method()).toBe("works");
+        expect(pub.self.self.method()).toBe("works");
+
+        // Verify same proxy is returned
+        expect(pub.self).toBe(pub);
+      });
     });
   });
 

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { Command } from "commander";
 import { TelemetryClient } from "@/telemetry/clients/base";
 import { BuildOptions, executeBuild } from "./action";
@@ -7,7 +8,7 @@ export function createBuildCommand(telemetry: TelemetryClient) {
     .description("Build agents for production deployment.")
     .helpOption("--help", "Display help for command.")
     .option("-o, --output <dir>", "Output directory.", ".life")
-    .option("-r, --root <dir>", "Project root directory.", process.cwd())
+    .option("-r, --root <dir>", "Project root directory.", resolve(process.cwd()))
     .option("-w, --watch", "Watch for changes and rebuild automatically.")
     .option(
       "--no-optimize",

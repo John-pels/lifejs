@@ -1,6 +1,7 @@
 import { FlattenMap, originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import ErrorStackParser from "error-stack-parser";
 import z from "zod";
+import { deepClone } from "@/shared/deep-clone";
 import { isLifeError } from "@/shared/error";
 import type { TelemetryLog } from "@/telemetry/types";
 import { telemetryBrowserScopesDefinition } from "../../scopes/browser";
@@ -30,13 +31,14 @@ async function getSourceMap(file: string): Promise<TraceMap | null> {
 
     return sourceMapCache.set(file, map).get(file) ?? null;
   } catch (error) {
-    console.log("ERROR GETTING SOURCE MAP", error);
+    console.error("Failed to get source map for", file, error);
     return sourceMapCache.set(file, null).get(file) ?? null;
   }
 }
 
 /** Returns a pretty, source-mapped stack string for an Error (browser dev). */
-export async function errorToPrettyStack(err: Error): Promise<string> {
+export async function prettifyErrorStack<T extends Error>(err_: T): Promise<T> {
+  const err = deepClone(err_);
   const frames = safeParse(err);
   const lines: string[] = [];
 
@@ -60,7 +62,8 @@ export async function errorToPrettyStack(err: Error): Promise<string> {
 
     lines.push(f.functionName ? `  at ${f.functionName} (${ref})` : `  at ${ref}`);
   }
-  return lines.join("\n");
+  err.stack = lines.join("\n");
+  return err;
 }
 
 function safeParse(err: Error) {
@@ -90,8 +93,7 @@ export async function formatErrorForBrowser(error: Error | unknown) {
   if (isLifeError(error)) {
     code = `LifeError (${error.code})`;
     message = error.message;
-    const prettyStack = await errorToPrettyStack(error);
-    stack = prettyStack;
+    stack = (await prettifyErrorStack(error)).stack ?? "";
     if (error.cause) {
       // If the cause is a LifeError
       if (isLifeError(error.cause)) {
@@ -109,7 +111,7 @@ export async function formatErrorForBrowser(error: Error | unknown) {
   else if (error instanceof z.ZodError) {
     code = "ZodError";
     message = z.prettifyError(error);
-    stack = await errorToPrettyStack(error);
+    stack = (await prettifyErrorStack(error)).stack ?? "";
     processed = true;
   }
 
@@ -125,11 +127,15 @@ export async function formatErrorForBrowser(error: Error | unknown) {
 
     // Try to infer the stack
     if ("stack" in error && typeof error.stack === "string") {
-      const prettyStack = await errorToPrettyStack(error);
-      stack = prettyStack ?? "";
+      stack = (await prettifyErrorStack(error)).stack ?? "";
     }
-    if (error.stack?.trim().includes(error.message.trim()))
-      stack = stack.split("\n").slice(1).join("\n");
+
+    // Remove first line of stack if it includes the error message
+    stack =
+      stack
+        ?.split("\n")
+        ?.filter((line) => !line.includes(error.message.trim()))
+        ?.join("\n") ?? "";
 
     // If no code, message, or stack is present, use the default
     if (!code) code = "Unknown Error";

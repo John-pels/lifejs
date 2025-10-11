@@ -2,18 +2,19 @@ import chalk from "chalk";
 import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
+import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
 import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
+import type { TelemetryLog } from "@/telemetry/types";
 import type { DevOptions } from "../action";
 import { Divider } from "../components/divider";
 import { ScrollBox } from "../components/scroll-box";
 import { DEFAULT_TABS } from "../lib/tabs";
-import type { DevLog } from "./types";
 
 interface DevContentProps {
   options: DevOptions;
   debugModeEnabled: boolean;
   selectedTab: string;
-  logs: Record<string, DevLog[]>;
+  logs: TelemetryLog[];
 }
 
 export const DevContent: FC<DevContentProps> = ({
@@ -22,11 +23,20 @@ export const DevContent: FC<DevContentProps> = ({
   logs,
   options,
 }) => {
-  const currentTabLogs = (logs[selectedTab] ?? []).filter(
-    (log) =>
-      debugModeEnabled ||
-      logLevelPriority(log.level) >= logLevelPriority(options.debug ? "debug" : "info"),
-  );
+  const currentTabLogs = logs.filter((log) => {
+    if (debugModeEnabled) return true;
+    let logTab = "cli";
+    if (log.scope === "server") logTab = "server";
+    else if (log.scope === "compiler") logTab = "compiler";
+    else if (log.scope === "webrtc") logTab = "webrtc";
+    else if (
+      (log.scope === "agent.server" || log.scope === "plugin.server") &&
+      log.attributes?.agentId
+    )
+      logTab = log.attributes.agentId as string;
+    if (logTab !== selectedTab) return false;
+    return logLevelPriority(log.level) >= logLevelPriority(options.debug ? "debug" : "info");
+  });
 
   return (
     <Box
@@ -53,13 +63,13 @@ export const DevContent: FC<DevContentProps> = ({
   );
 };
 
-const Logs = ({ logs, selectedTab }: { logs: DevLog[]; selectedTab: string }) => {
+const Logs = ({ logs, selectedTab }: { logs: TelemetryLog[]; selectedTab: string }) => {
   const hasLogs = logs.length > 0;
   const isAgentTab = !DEFAULT_TABS.includes(selectedTab);
   if (hasLogs) {
     return (logs || []).map((log) => (
       <Text key={log.id} wrap="wrap">
-        {log.line}
+        {formatLogForTerminal(log)}
       </Text>
     ));
   }

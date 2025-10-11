@@ -12,8 +12,11 @@ import type { PluginContext } from "../server/types";
 import type {
   PluginClientAtoms,
   PluginClientConfig,
+  PluginClientContextHandler,
   PluginClientDefinition,
   PluginClientDependencies,
+  PluginClientEventsHandler,
+  PluginClientMethods,
   PluginClientServer,
 } from "./types";
 
@@ -22,13 +25,9 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
   readonly _definition: ClientDefinition;
   readonly config: PluginClientConfig<ClientDefinition["config"], "output">;
   readonly atoms: PluginClientAtoms<ClientDefinition["atoms"]>;
+  readonly server: PluginClientServer<ClientDefinition["$serverDef"]>;
   readonly #agent: AgentClient<AgentClientDefinition>;
   readonly #telemetry: TelemetryClient;
-  server = {
-    methods: {},
-    context: {},
-    events: {},
-  } as PluginClientServer<ClientDefinition["$serverDef"], "internal">;
 
   get #dependencies() {
     const dependencies = {} as PluginClientDependencies<ClientDefinition["dependencies"]>;
@@ -69,12 +68,12 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     this.#agent = agent;
 
     // Validate config
-    const { data, error } = definition.config.schema.safeParse(config);
-    if (error) {
+    const { data, error: errConfig } = definition.config.schema.safeParse(config);
+    if (errConfig) {
       throw lifeError({
         code: "Validation",
         message: `Invalid config provided to plugin client '${definition.name}'.`,
-        cause: error,
+        cause: errConfig,
       });
     }
     this.config = data as PluginClientConfig<ClientDefinition["config"], "output">;
@@ -89,19 +88,17 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       pluginClientConfig: this.config,
     });
 
-    // Build atoms
-    this.atoms = definition.atoms({
-      config: this.config,
-      server: {
-        methods: op.toPublic(this.server.methods) as never,
-        context: op.toPublic(this.server.context) as never,
-        events: op.toPublic(this.server.events) as never,
-      },
-      dependencies: this.#dependencies,
-    }) as PluginClientAtoms<ClientDefinition["atoms"]>;
+    // Build the server interface
+    const server = {
+      methods: {} as PluginClientMethods<ClientDefinition["$serverDef"]["methods"]>,
+      context: {} as PluginClientContextHandler<
+        PluginContext<ClientDefinition["$serverDef"]["context"], "output">
+      >,
+      events: {} as PluginClientEventsHandler<ClientDefinition["$serverDef"]["events"]>,
+    };
 
     // Wire methods with proxy
-    this.server.methods = new Proxy(
+    server.methods = new Proxy(
       {},
       {
         get: (_, method: string) => (input: unknown) =>
@@ -110,10 +107,10 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
             input: input as SerializableValue,
           }),
       },
-    ) as typeof this.server.methods;
+    ) as typeof server.methods;
 
     // Wire events
-    this.server.events.emit = (input: unknown) =>
+    server.events.emit = (input: unknown) =>
       agent.transport.call({
         name: `plugin.${this._definition.name}.events.emit`,
         input: input as SerializableValue,
@@ -130,9 +127,15 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
         await this.#eventsListeners.get(listenerId)?.callback(event);
         return op.success();
       },
+      onError: (error, input) => {
+        this.#telemetry.log.error({
+          message: `Error while receiving event callback for event '${input.event?.type}' in plugin '${this._definition.name}'.`,
+          error,
+        });
+      },
     });
-    this.server.events.on = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.server.events.on>;
+    server.events.on = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof server.events.on>;
 
       // Generate new listener id
       const id = newId("listener");
@@ -141,32 +144,64 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       this.#eventsListeners.set(id, { id, callback });
 
       // Ask plugin's server to stream selected event
-      agent.transport.call({
-        name: `plugin.${this._definition.name}.events.subscribe`,
-        input: { listenerId: id, selector },
-        inputSchema: {
-          input: z.object({ listenerId: z.string(), selector: z.any() }),
-        },
-      });
+      agent.transport
+        .call({
+          name: `plugin.${this._definition.name}.events.subscribe`,
+          input: { listenerId: id, selector },
+          inputSchema: {
+            input: z.object({ listenerId: z.string(), selector: z.any() }),
+          },
+        })
+        .then((result) => {
+          const [err] = result;
+          if (err) {
+            this.#telemetry.log.error({
+              message: `Error while subscribing to events in plugin '${this._definition.name}'.`,
+              error: err,
+            });
+          }
+        })
+        .catch((error) => {
+          this.#telemetry.log.error({
+            message: `Error while subscribing to events in plugin '${this._definition.name}'.`,
+            error,
+          });
+        });
 
       // Return unsubscribe function
       return op.success(() => {
         // Stop subscription server-side
-        agent.transport.call({
-          name: `plugin.${this._definition.name}.events.unsubscribe`,
-          input: { listenerId: id },
-          inputSchema: {
-            input: z.object({ listenerId: z.string() }),
-          },
-        });
+        agent.transport
+          .call({
+            name: `plugin.${this._definition.name}.events.unsubscribe`,
+            input: { listenerId: id },
+            inputSchema: {
+              input: z.object({ listenerId: z.string() }),
+            },
+          })
+          .then((result) => {
+            const [err] = result;
+            if (err) {
+              this.#telemetry.log.error({
+                message: `Error while unsubscribing from events in plugin '${this._definition.name}'.`,
+                error: err,
+              });
+            }
+          })
+          .catch((error) => {
+            this.#telemetry.log.error({
+              message: `Error while unsubscribing from events in plugin '${this._definition.name}'.`,
+              error,
+            });
+          });
 
         // Clean up callback
         this.#eventsListeners.delete(id);
       });
     };
-    this.server.events.once = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.server.events.once>;
-      const unsubscribe = this.server.events.on(selector, async (event) => {
+    server.events.once = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof server.events.once>;
+      const unsubscribe = server.events.on(selector, async (event) => {
         unsubscribe?.[1]?.();
         await callback(event);
       });
@@ -174,8 +209,8 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
     };
 
     // Wire context
-    this.server.context.onChange = (...args: unknown[]) => {
-      const [selector, callback] = args as Parameters<typeof this.server.context.onChange>;
+    server.context.onChange = (...args: unknown[]) => {
+      const [selector, callback] = args as Parameters<typeof server.context.onChange>;
 
       // Generate new listener id
       const listenerId = newId("listener");
@@ -188,83 +223,101 @@ export class PluginClientBase<ClientDefinition extends PluginClientDefinition> {
       });
 
       // Return unsubscribe function
-      return op.success(() => {
-        this.#contextListeners.delete(listenerId);
-      });
+      return op.success(() => this.#contextListeners.delete(listenerId));
     };
-    this.server.context.get = () =>
+    server.context.get = () =>
       op.attempt(
         () =>
           deepClone(this.#contextValue) as op.OperationResult<
             PluginContext<ClientDefinition["$serverDef"]["context"], "output">
           >,
       );
-    this.#agent.transport
-      .call({
-        name: `plugin.${this._definition.name}.context.get`,
-      })
-      .then((result) => {
-        const [err, response] = result;
-        if (err) {
-          this.#telemetry.log.error({
-            message: "Failed to fetch the initial context value for plugin",
-            error: err,
-            attributes: { plugin: this._definition.name },
-          });
-          return;
-        }
-
-        // Validate output
-        const { data: output, error: outputError } = z
-          .object({ value: z.any(), timestamp: z.number() })
-          .safeParse(response);
-        if (outputError) {
-          this.#telemetry.log.error({
-            message: "Failed to validate the initial context value for plugin",
-            error: outputError,
-            attributes: { plugin: this._definition.name },
-          });
-          return;
-        }
-
-        // Initialize context
-        this.#lastContextValueTimestamp = output.timestamp ?? 0;
-        this.#contextValue = output.value ?? {};
-
-        // Send a first notification to listeners
-        this.#notifyContextListeners(
-          {} as PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
-        );
-      });
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.changed`,
       schema: {
         input: z.object({ value: z.any(), timestamp: z.number() }),
       },
-      execute: async ({ value, timestamp }) => {
-        const oldContextValue = deepClone(this.#contextValue);
-        if (timestamp > this.#lastContextValueTimestamp) {
-          this.#lastContextValueTimestamp = timestamp;
-          this.#contextValue = value;
-        }
-        await this.#notifyContextListeners(oldContextValue);
-        return op.success();
+      execute: async ({ value, timestamp }) => await this.#setContextValue(value, timestamp),
+      onError: (error) => {
+        this.#telemetry.log.error({
+          message: `Error while receiving context change value in plugin '${this._definition.name}'.`,
+          error,
+        });
       },
     });
+
+    // Assign the server
+    this.server = op.toPublic(server) as unknown as PluginClientServer<
+      ClientDefinition["$serverDef"]
+    >;
+
+    // Build atoms
+    this.atoms = definition.atoms({
+      config: this.config,
+      server: {
+        methods: this.server.methods as never,
+        context: this.server.context as never,
+        events: this.server.events as never,
+      },
+      dependencies: this.#dependencies,
+    }) as PluginClientAtoms<ClientDefinition["atoms"]>;
   }
 
-  async #notifyContextListeners(
-    oldContextValue: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
+  async #setContextValue(
+    value: PluginContext<ClientDefinition["$serverDef"]["context"], "output">,
+    timestamp: number,
   ) {
+    // Clone the old context value
+    const oldContextValue = deepClone(this.#contextValue);
+
+    // Ensure the new value is newer than the last one
+    if (timestamp > this.#lastContextValueTimestamp) {
+      this.#lastContextValueTimestamp = timestamp;
+      this.#contextValue = value;
+    } else return op.success();
+
+    // Notify listeners if the value they select has changed
     await Promise.all(
       Array.from(this.#contextListeners.values()).map(async (listener) => {
         const newSelectedValue = listener.selector(this.#contextValue) as SerializableValue;
         const oldSelectedValue = listener.selector(oldContextValue) as SerializableValue;
-        // Only call if value actually changed
-        if (!canon.equal(newSelectedValue, oldSelectedValue)) {
-          await listener.callback(deepClone(this.#contextValue), deepClone(oldContextValue));
-        }
+
+        // Check if the value actually changed
+        const [errEqual, equal] = canon.equal(newSelectedValue, oldSelectedValue);
+        if (errEqual) return op.failure({ code: "Unknown", cause: errEqual });
+        else if (equal) return op.success();
+
+        // Call the listener if changed
+        return await op.attempt(
+          async () =>
+            await listener.callback(deepClone(this.#contextValue), deepClone(oldContextValue)),
+        );
       }),
     );
+    return op.success();
+  }
+
+  async refreshContext() {
+    try {
+      return await this.#agent.transport
+        .call({
+          name: `plugin.${this._definition.name}.context.get`,
+        })
+        .then(async (result) => {
+          const [errorCall, response] = result;
+          if (errorCall) return op.failure({ code: "Unknown", cause: errorCall });
+
+          // Validate output
+          const { data: output, error: outputError } = z
+            .object({ value: z.any(), timestamp: z.number() })
+            .safeParse(response);
+          if (outputError) return op.failure({ code: "Unknown", cause: outputError });
+
+          // Initialize context
+          return await this.#setContextValue(output.value, output.timestamp);
+        });
+    } catch (error) {
+      return op.failure({ code: "Unknown", cause: error });
+    }
   }
 }

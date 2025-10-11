@@ -12,7 +12,6 @@ import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { TelemetryClient } from "@/telemetry/clients/base";
-import { createTelemetryClient } from "@/telemetry/clients/node";
 import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
 
@@ -117,17 +116,38 @@ export class AgentProcessClient {
           "agent-process",
           "process.mjs",
         );
+        this.#telemetry.log.debug({
+          message: `resolved cwd: ${path.resolve(process.cwd())}`,
+        });
+        this.#telemetry.log.debug({
+          message: `import.meta.url: ${import.meta.url}`,
+        });
+        this.#telemetry.log.debug({
+          message: `currentDir: ${currentDir}`,
+        });
+        this.#telemetry.log.debug({
+          message: `childPath: ${childPath}`,
+        });
+        this.#telemetry.log.debug({
+          message: `projectDirectory: ${this.#server.options.projectDirectory}`,
+        });
+        this.#telemetry.log.debug({
+          message: `projectDirectory resolved: ${path.resolve(this.#server.options.projectDirectory)}`,
+        });
         this.nodeProcess = fork(childPath, [], {
           serialization: "json",
           silent: true,
-          cwd: this.#server.options.projectDirectory,
+          cwd: path.resolve(this.#server.options.projectDirectory),
           // Disable anonymous telemetry in the child process (managed by the parent)
           env: { ...process.env, LIFE_TELEMETRY_DISABLED: "true" },
         });
 
         // Capture stdout/stderr immediately to avoid losing output
         this.nodeProcess.stdout?.on("data", (data: Buffer) => {
-          const lines = data.toString().split("\n").filter((line) => line.trim());
+          const lines = data
+            .toString()
+            .split("\n")
+            .filter((line) => line.trim());
           this.stdLines.push(...lines);
           for (const line of lines) {
             for (const callback of this.#stdLineCallbacks) {
@@ -136,7 +156,10 @@ export class AgentProcessClient {
           }
         });
         this.nodeProcess.stderr?.on("data", (data: Buffer) => {
-          const lines = data.toString().split("\n").filter((line) => line.trim());
+          const lines = data
+            .toString()
+            .split("\n")
+            .filter((line) => line.trim());
           this.stdLines.push(...lines);
           for (const line of lines) {
             for (const callback of this.#stdLineCallbacks) {

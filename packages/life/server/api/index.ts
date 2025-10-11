@@ -212,8 +212,10 @@ export class LifeApi {
         else if (status >= 200) statusColor = chalk.green;
         const logFn =
           status >= 400 ? this.server.telemetry.log.error : this.server.telemetry.log.info;
+        span.end();
+        const durationMs = ns.toMs(span.getData().duration);
         logFn({
-          message: `Request ${type === "http" ? `${statusColor.bold(status)}` : ""} /${handlerId} in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms.`)}`,
+          message: `Request ${type === "http" ? `${statusColor.bold(status)}` : ""} /${handlerId} in ${chalk.bold(`${durationMs > 0 ? durationMs : "<0"}ms.`)}`,
           error,
         });
 

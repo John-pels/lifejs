@@ -98,8 +98,13 @@ function formatErrorForTerminal(error: Error | unknown): string {
 
     // Try to infer the stack
     if ("stack" in error && typeof error.stack === "string") stack = error.stack;
-    if (error.stack?.trim().includes(error.message.trim()))
-      stack = stack.split("\n").slice(1).join("\n");
+
+    // Remove first line of stack if it includes the error message
+    stack =
+      stack
+        ?.split("\n")
+        ?.filter((line) => !line.includes(error.message.trim()))
+        ?.join("\n") ?? "";
 
     // If no code, message, or stack is present, use the default
     if (!code) code = "Unknown Error";
@@ -113,10 +118,24 @@ function formatErrorForTerminal(error: Error | unknown): string {
     after += `${formatErrorForTerminal(error.cause)}`;
   }
 
+  // Replace all the absolute paths in stack with relative paths (if shorter)
+  stack = stack.replace(/\/[^\s\n\r:;,()[\]{}'"<>]+/g, (match) => {
+    try {
+      if (path.isAbsolute(match)) {
+        const relativePath = path.relative(process.cwd(), match);
+        // Use relative path if it's shorter than the absolute path
+        if (relativePath.length < match.length) return relativePath;
+      }
+      return match;
+    } catch {
+      return match;
+    }
+  });
+
   return `${code}${code ? ": " : ""}${message}${message ? " " : ""}${stack ? `\n${stack}` : ""}${after ? `\n\n${after}` : ""}`;
 }
 
-export function formatLogForTerminal(log: TelemetryLog, currentDir: string = process.cwd()) {
+export function formatLogForTerminal(log: TelemetryLog) {
   // Get prefix and color based on level
   let style: { prefix: string; color?: (m: string) => string };
   if (log.level === "fatal")
@@ -156,20 +175,6 @@ export function formatLogForTerminal(log: TelemetryLog, currentDir: string = pro
   let output = header;
   if (error)
     output += `\n${errorColor.dim("-----")}\n${errorColor(error)}\n${errorColor.dim("-----")}`;
-
-  // Replace all the absolute paths with relative paths in the output (if shorter)
-  output = output.replace(/\/[^\s\n\r:;,()[\]{}'"<>]+/g, (match) => {
-    try {
-      if (path.isAbsolute(match)) {
-        const relativePath = path.relative(currentDir, match);
-        // Use relative path if it's shorter than the absolute path
-        if (relativePath.length < match.length) return relativePath;
-      }
-      return match;
-    } catch {
-      return match;
-    }
-  });
 
   // Otherwise, just return the header
   return output;

@@ -38,7 +38,7 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
   }) {
     this._definition = params.definition;
     this.id = params.id;
-    this.config = params.config; // No need to parse, the config is already parsed by the server
+    this.config = params.config; // Already parsed by the server
     this.#life = params.life;
 
     // Initialize telemetry
@@ -50,7 +50,10 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
     });
 
     // Initialize transport
-    this.transport = new TransportBrowserClient({ config: this.config.transport });
+    this.transport = new TransportBrowserClient({
+      config: this.config.transport,
+      telemetry: this.#telemetry,
+    });
 
     // Initialize atoms
     this.atoms = createAgentClientAtoms(this);
@@ -90,44 +93,47 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
           }
         }
 
-        // Instantiate plugins
-        for (const [name, pluginInfo] of Object.entries(plugins)) {
+        // Instantiate plugins in parallel
+        const initResults = Object.entries(plugins).map(([name, pluginInfo]) => {
           // Retrieve plugin class
           const PluginClass =
             pluginInfo.class as unknown as typeof PluginClientBase<PluginClientDefinition>;
           if (!PluginClass) {
-            this.#telemetry.log.error({
+            return op.failure({
+              code: "Validation",
               message: `Plugin '${name}' class not found. Shouldn't happen.`,
             });
-            continue;
           }
 
           // Create plugin instance
-          const [errPlugin, plugin] = op.attempt(() =>
-            op.toPublic(
+          const [errPlugin, plugin] = op.attempt(
+            () =>
               new PluginClass(
                 pluginInfo.definition,
                 (this._definition.pluginConfigs[name] ?? {}) as Record<string, unknown>,
                 this,
               ),
-            ),
           );
           if (errPlugin) {
-            this.#telemetry.log.error({
+            return op.failure({
+              code: "Unknown",
               message: `Failed to initialize plugin '${name}'.`,
-              error: errPlugin,
+              cause: errPlugin,
             });
-            continue;
           }
-
-          // Make server methods, events, and context public
-          plugin.server.methods = op.toPublic(plugin.server.methods) as never;
-          plugin.server.events = op.toPublic(plugin.server.events) as never;
-          plugin.server.context = op.toPublic(plugin.server.context) as never;
 
           // Assign plugin instance to agent client
           this[name as keyof typeof this] = plugin as never;
+
+          return op.success();
+        });
+
+        // Log all failures
+        for (const result of initResults) {
+          const [error] = result;
+          if (error) this.#telemetry.log.error({ error });
         }
+
         return op.success();
       } catch (error) {
         return op.failure({
@@ -172,6 +178,38 @@ export class AgentClient<const Definition extends AgentClientDefinition> {
           this.#transportRoom.token,
         );
         if (errJoin) return op.failure(errJoin);
+
+        // Fetch initial plugin contexts
+        const fetchContextResults = await Promise.all(
+          Object.keys(this._definition.plugins).map(async (pluginName) => {
+            const [error] = await op.attempt(async () => {
+              const plugin = this?.[pluginName as keyof typeof this] as op.ToPublic<
+                PluginClientBase<PluginClientDefinition>
+              >;
+              await plugin.refreshContext();
+            });
+            if (error) {
+              return op.failure({
+                code: "Unknown",
+                message: `Failed to fetch initial plugin context for '${pluginName}'.`,
+                cause: error,
+              });
+            }
+            return op.success();
+          }),
+        );
+
+        // Log all failures
+        for (const result of fetchContextResults) {
+          const [error] = result;
+          if (error) this.#telemetry.log.error({ error });
+        }
+
+        // Enable microphone and audio
+        const [errEnableMicrophone] = await this.transport.enableMicrophone();
+        if (errEnableMicrophone) return op.failure(errEnableMicrophone);
+        const [errPlayAudio] = await this.transport.playAudio();
+        if (errPlayAudio) return op.failure(errPlayAudio);
 
         this.isStarted = true;
 

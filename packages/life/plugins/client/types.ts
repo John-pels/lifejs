@@ -68,7 +68,7 @@ export type PluginClientAtomsDefinition<
 > = (params: {
   config: PluginClientConfig<ClientDefinition["config"], "output">;
   dependencies: PluginClientDependencies<ClientDefinition["dependencies"]>;
-  server: PluginClientServer<ClientDefinition["$serverDef"], "public">;
+  server: PluginClientServer<ClientDefinition["$serverDef"]>;
 }) => Record<string, WritableAtom | unknown>;
 
 export type PluginClientAtoms<Definition extends PluginClientAtomsDefinition> =
@@ -95,19 +95,12 @@ export type PluginClientMethods<MethodsDefinition extends PluginMethodsDefinitio
 };
 
 // - Server
-export type PluginClientServer<
-  ServerDefinition extends PluginDefinition,
-  Visibility extends "internal" | "public",
-> = {
-  methods: Visibility extends "internal"
-    ? PluginClientMethods<ServerDefinition["methods"]>
-    : op.ToPublic<PluginClientMethods<ServerDefinition["methods"]>>;
-  context: Visibility extends "internal"
-    ? PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>
-    : op.ToPublic<PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>>;
-  events: Visibility extends "internal"
-    ? PluginClientEventsHandler<ServerDefinition["events"]>
-    : op.ToPublic<PluginClientEventsHandler<ServerDefinition["events"]>>;
+export type PluginClientServer<ServerDefinition extends PluginDefinition> = {
+  methods: op.ToPublic<PluginClientMethods<ServerDefinition["methods"]>>;
+  context: op.ToPublic<
+    PluginClientContextHandler<PluginContext<ServerDefinition["context"], "output">>
+  >;
+  events: op.ToPublic<PluginClientEventsHandler<ServerDefinition["events"]>>;
 };
 
 // - Definition

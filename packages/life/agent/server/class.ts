@@ -77,7 +77,8 @@ export class AgentServer {
     // Initialize transport
     this.transport = new TransportNodeClient({
       config: this.config.transport,
-      filterPublic: true,
+      obfuscateErrors: true,
+      telemetry: this.telemetry,
     });
 
     // Initialize storage

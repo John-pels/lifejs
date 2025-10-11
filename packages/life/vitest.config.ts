@@ -1,5 +1,8 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, defineProject } from "vitest/config";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
@@ -20,7 +23,7 @@ export default defineConfig({
         },
         resolve: {
           alias: {
-            "@": path.resolve(__dirname, "./"),
+            "@": path.resolve(currentDir, "./"),
           },
         },
       }),
@@ -39,7 +42,7 @@ export default defineConfig({
         },
         resolve: {
           alias: {
-            "@": path.resolve(__dirname, "./"),
+            "@": path.resolve(currentDir, "./"),
           },
           conditions: ["browser"],
         },

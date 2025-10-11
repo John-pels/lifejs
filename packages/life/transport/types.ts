@@ -1,5 +1,6 @@
 import z from "zod";
 import type { SerializableValue } from "@/shared/canon";
+import type { LifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
 
@@ -14,10 +15,7 @@ export const rpcRequestSchema = z.object({
 export const rpcResponseSchema = z.object({
   type: z.literal("response"),
   id: z.string(),
-  result: op.resultSchema.transform(
-    (result): op.OperationResult<SerializableValue> =>
-      result as op.OperationResult<SerializableValue>,
-  ),
+  result: op.resultSchema.transform((result) => result as op.OperationResult<SerializableValue>),
 });
 
 export const rpcMessageSchema = z.discriminatedUnion("type", [rpcRequestSchema, rpcResponseSchema]);
@@ -36,6 +34,8 @@ export type RPCResponse<Result = op.OperationResult<SerializableValue>> = Omit<
   result: Result;
 };
 
+export type RPCMessage = RPCRequest | RPCResponse;
+
 // RPC procedure
 export type RPCProcedureSchema = { input?: z.ZodObject; output?: z.ZodObject };
 export type RPCProcedure<Schema extends RPCProcedureSchema = RPCProcedureSchema> = {
@@ -46,4 +46,8 @@ export type RPCProcedure<Schema extends RPCProcedureSchema = RPCProcedureSchema>
   ) => MaybePromise<
     op.OperationResult<Schema["output"] extends z.ZodObject ? z.infer<Schema["output"]> : void>
   >;
+  onError?: (
+    error: LifeError,
+    input: Schema["input"] extends z.ZodObject ? z.infer<Schema["input"]> : undefined,
+  ) => void;
 };

@@ -1,34 +1,42 @@
 import type z from "zod";
 import { canon, type SerializableValue } from "@/shared/canon";
+import { type LifeError, obfuscateLifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { MaybePromise } from "@/shared/types";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import type { TransportProviderClientBase } from "./providers/base";
 import {
   type RPCProcedure,
   type RPCProcedureSchema,
   type RPCRequest,
-  type RPCResponse,
   rpcMessageSchema,
 } from "./types";
 
 // Runtime-agnostic logic between transport classes
 export abstract class TransportClientBase {
   readonly #provider: TransportProviderClientBase<z.ZodObject>;
-  readonly #filterPublic: boolean;
+  readonly #obfuscateErrors: boolean;
   readonly #procedures = new Map<string, RPCProcedure>();
   readonly #resolveResults = new Map<
     string,
     (value?: op.OperationResult<SerializableValue>) => MaybePromise<void>
   >();
+  readonly #telemetry: TelemetryClient | null = null;
   #rpcUnsubscribe?: () => void;
 
   constructor({
     provider,
-    filterPublic = false,
-  }: { provider: TransportProviderClientBase<z.ZodObject>; filterPublic?: boolean }) {
+    telemetry,
+    obfuscateErrors = false,
+  }: {
+    provider: TransportProviderClientBase<z.ZodObject>;
+    obfuscateErrors?: boolean;
+    telemetry?: TelemetryClient | null;
+  }) {
     this.#provider = provider;
-    this.#filterPublic = filterPublic;
+    this.#obfuscateErrors = obfuscateErrors;
+    this.#telemetry = telemetry ?? null;
   }
 
   async sendText(topic: string, text: string) {
@@ -46,17 +54,20 @@ export abstract class TransportClientBase {
   receiveText(
     topic: string,
     callback: (text: string, participantId: string) => MaybePromise<void>,
+    onError?: (error: LifeError) => void,
   ) {
     try {
       const [errReceive, unsubscribe] = this.receiveStreamText(
         topic,
         async (iterator: AsyncIterable<string>, participantId: string) => {
-          let result = "";
-          for await (const chunk of iterator) {
-            result += chunk;
-          }
-          await callback(result, participantId);
+          const [err] = await op.attempt(async () => {
+            let result = "";
+            for await (const chunk of iterator) result += chunk;
+            await callback(result, participantId);
+          });
+          if (err) onError?.(err);
         },
+        onError,
       );
       if (errReceive) return op.failure(errReceive);
       return op.success(unsubscribe);
@@ -80,12 +91,30 @@ export abstract class TransportClientBase {
   receiveObject(
     topic: string,
     callback: (obj: unknown, participantId: string) => MaybePromise<void>,
+    onError?: (error: LifeError) => void,
   ) {
     try {
-      const [err, unsubscribe] = this.receiveText(topic, async (text, participantId) => {
-        const deserialized = canon.parse(text);
-        await callback(deserialized, participantId);
-      });
+      const [err, unsubscribe] = this.receiveText(
+        topic,
+        async (text, participantId) => {
+          try {
+            // Parse the text into an object
+            const [errParse, deserialized] = canon.parse(text);
+            if (errParse) return onError?.(errParse);
+
+            // Call the callback
+            const [errCallback] = await op.attempt(
+              async () => await callback(deserialized, participantId),
+            );
+            if (errCallback) return onError?.(errCallback);
+          } catch (error) {
+            onError?.(error as LifeError);
+          }
+        },
+        onError,
+      );
+
+      // Return the unsubscribe function
       if (err) return op.failure(err);
       return op.success(unsubscribe);
     } catch (error) {
@@ -175,49 +204,86 @@ export abstract class TransportClientBase {
 
   // Initialize RPC
   async #onRPCMessage(rawMessage: unknown) {
-    // - Helper to send a response
-    let messageId: string | undefined;
-    const sendResult = async (_result: op.OperationResult<SerializableValue>) => {
-      if (!messageId) return;
-      const result = this.#filterPublic ? op.toPublic(_result) : _result;
-      const response = { type: "response", id: messageId, result } satisfies RPCResponse;
-      await this.sendObject("rpc", response);
-    };
-
     try {
       // Parse and validate the incoming RPC message
-      const { data: message, error: messageError } = rpcMessageSchema.safeParse(rawMessage);
-      if (messageError) return console.error("Invalid RPC message:", messageError);
-      messageId = message.id;
+      const { data: parsedMessage, error: messageError } = rpcMessageSchema.safeParse(rawMessage);
+      if (messageError)
+        return this.#telemetry?.log.error({
+          message: "Invalid RPC message.",
+          error: messageError,
+        });
 
       // Handle responses
-      if (message.type === "response") {
-        const resolveResult = this.#resolveResults.get(message.id);
-        if (resolveResult) await resolveResult(message.result);
+      if (parsedMessage.type === "response") {
+        const resolveResult = this.#resolveResults.get(parsedMessage.id);
+        if (resolveResult) await resolveResult(parsedMessage.result);
         return;
       }
 
       // Handle requests
-      // - Get the local execution function, error if not found
-      const procedure = this.#procedures.get(message.name);
+      // - Helper to send a response
+      let procedure: RPCProcedure | undefined;
+      const requestMessage = parsedMessage as RPCRequest;
+      const sendResult = async (result: op.OperationResult<SerializableValue>) => {
+        let [error, data] = result;
+
+        // On error ‹
+        if (error) {
+          // Call the procedure's onError() callback if any
+          if (procedure?.onError) {
+            const [errOnError] = await op.attempt(() =>
+              procedure?.onError?.(error as LifeError, requestMessage.input as never),
+            );
+            if (errOnError)
+              this.#telemetry?.log.error({
+                message: `Failed to call procedure '${requestMessage.name}' onError() callback.`,
+                error: errOnError,
+              });
+          }
+          // Else log the error if any
+          else
+            this.#telemetry?.log.error({
+              message: "Unhandled error in procedure response.",
+              error,
+            });
+        }
+
+        // Obfuscate the error if required
+        if (this.#obfuscateErrors && error) error = obfuscateLifeError(error);
+
+        // Send the response
+        const [errSend] = await this.sendObject("rpc", {
+          type: "response",
+          id: requestMessage.id,
+          result: error ? op.failure(error) : op.success(data),
+        });
+        if (errSend)
+          return this.#telemetry?.log.error({
+            message: "Failed to send RPC response.",
+            error: errSend,
+          });
+      };
+
+      // - Get the local procedure function, error if not found
+      procedure = this.#procedures.get(parsedMessage.name);
       if (!procedure) {
         return await sendResult(
           op.failure({
             code: "NotFound",
-            message: `Procedure not found: '${message.name}'.`,
+            message: `Procedure not found: '${parsedMessage.name}'.`,
           }),
         );
       }
 
       // - Parse the procedure's input, error if invalid
       const { data: input, error: inputError } = procedure.schema.input
-        ? procedure.schema.input.safeParse(message.input)
+        ? procedure.schema.input.safeParse(parsedMessage.input)
         : { data: undefined, error: null };
       if (inputError) {
         return await sendResult(
           op.failure({
             code: "Validation",
-            message: `Invalid input parameters for procedure '${message.name}'.`,
+            message: `Invalid input parameters for procedure '${parsedMessage.name}'.`,
             cause: inputError,
           }),
         );
@@ -235,22 +301,22 @@ export abstract class TransportClientBase {
         return await sendResult(
           op.failure({
             code: "Validation",
-            message: `Invalid output from procedure '${message.name}'.`,
+            message: `Invalid output from procedure '${parsedMessage.name}'.`,
             cause: outputError,
           }),
         );
       }
 
       // - Send the output result
-      await sendResult(op.success(output as SerializableValue));
+      return await sendResult(op.success(output as SerializableValue));
     } catch (error) {
-      await sendResult(op.failure({ code: "Unknown", cause: error }));
+      this.#telemetry?.log.error({ message: "Unknown error while handling RPC message.", error });
     }
   }
 
   #startRPC() {
     try {
-      const [errReceive, unsubscribe] = this.receiveObject("rpc", this.#onRPCMessage);
+      const [errReceive, unsubscribe] = this.receiveObject("rpc", this.#onRPCMessage.bind(this));
       if (errReceive) return op.failure(errReceive);
       this.#rpcUnsubscribe = unsubscribe;
       return op.success();

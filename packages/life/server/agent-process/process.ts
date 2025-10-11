@@ -8,6 +8,7 @@ import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { ProcessStats } from "@/shared/process-stats";
 import { createTelemetryClient, TelemetryNodeClient } from "@/telemetry/clients/node";
+import { pipeConsoleToTelemetryClient } from "@/telemetry/helpers/patch-console";
 import type { TelemetrySignal } from "@/telemetry/types";
 import type { ChildMethods, ParentMethods } from "./types";
 
@@ -19,6 +20,9 @@ let agentServer: AgentServer | null = null;
 
 // Note: Attributes are going to be rewritten by the parent process anyway
 const telemetry = createTelemetryClient("server", { watch: false });
+
+// Forward console.* methods to the process telemetry client
+pipeConsoleToTelemetryClient(telemetry);
 
 const rpc = createBirpc<ParentMethods, ChildMethods>(
   {
@@ -181,19 +185,23 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
 // Register telemetry consumer to forward all signals to parent
 TelemetryNodeClient.registerGlobalConsumer({
   start: async (queue: AsyncQueue<TelemetrySignal>) => {
-    for await (const signal of queue) {
-      // console.log("syncTelemetry", signal.type);
-      rpc.syncTelemetry(signal);
-    }
+    for await (const signal of queue) rpc.syncTelemetry(signal);
   },
 });
 
 // Handle uncaught errors
-process.on("uncaughtException", (error) => {
+process.on("uncaughtException", async (error) => {
   telemetry.log.error({ error });
+  // Flush telemetry before exiting to ensure error is sent to parent
+  await telemetry.flushConsumers(1000);
   process.exit(1);
 });
-process.on("unhandledRejection", (reason) => {
-  telemetry.log.error({ message: reason instanceof Error ? reason.message : String(reason) });
+process.on("unhandledRejection", async (reason) => {
+  telemetry.log.error({
+    message: reason instanceof Error ? reason.message : String(reason),
+    error: reason instanceof Error ? reason : undefined,
+  });
+  // Flush telemetry before exiting to ensure error is sent to parent
+  await telemetry.flushConsumers(1000);
   process.exit(1);
 });

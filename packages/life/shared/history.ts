@@ -23,16 +23,16 @@ export class History {
     return newId("message");
   }
 
-  getMessage(id: string) {
-    return this.#messages.find((message) => message.id === id);
+  getMessages() {
+    return deepClone(this.#messages);
   }
 
-  getMessages() {
-    return this.#messages;
+  getMessage(id: string) {
+    return this.getMessages().find((message) => message.id === id);
   }
 
   findLastMessageOfRole(role: Message["role"] | Message["role"][]) {
-    return deepClone(this.#messages)
+    return this.getMessages()
       .reverse()
       .find((message) =>
         typeof role === "string" ? message.role === role : role.includes(message.role),

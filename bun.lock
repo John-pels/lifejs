@@ -79,7 +79,7 @@
     },
     "packages/life": {
       "name": "life",
-      "version": "0.27.0",
+      "version": "0.29.0",
       "bin": {
         "life": "./dist/cli/index.mjs",
       },

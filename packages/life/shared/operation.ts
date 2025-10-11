@@ -218,19 +218,32 @@ type FunctionToPublic<Func> = Func extends (...args: infer Args) => OperationRes
     : Func;
 
 /**
+ * Recursively transforms a property value to its public equivalent.
+ * - Functions returning OperationResult/Promise<OperationResult> are converted to throw on error
+ * - Objects (plain objects and class instances) are recursively wrapped
+ * - Everything else (primitives, arrays, dates, etc.) is returned as-is
+ */
+type PropertyToPublic<T> = T extends (...args: infer Args) => OperationResult<infer Data>
+  ? (...args: Args) => VoidIfNever<Data>
+  : T extends (...args: infer Args) => Promise<OperationResult<infer Data>>
+    ? (...args: Args) => Promise<VoidIfNever<Data>>
+    : T extends object
+      ? T extends (...args: never[]) => unknown
+        ? T // Preserve other function types as-is
+        : InstanceToPublic<T>
+      : T;
+
+/**
  * Converts an internal instance type (with methods returning OperationResult)
  * into an public instance (with methods returning the raw data types).
  * The internal methods are kept under the nested `.safe` property.
+ *
+ * This type recursively transforms nested objects and class instances,
+ * allowing deep nesting support (e.g., instance.methods.nested.deepFunc()).
  */
 type InstanceToPublic<Instance extends object> = {
-  safe: {
-    [K in keyof Instance as Instance[K] extends (
-      ...args: infer _Args
-    ) => OperationResult<infer _D1> | Promise<OperationResult<infer _D2>>
-      ? K
-      : never]: Instance[K];
-  };
-} & { [K in keyof Instance]: FunctionToPublic<Instance[K]> };
+  safe: Instance;
+} & { [K in keyof Instance]: PropertyToPublic<Instance[K]> };
 
 /**
  * Converts an internal class type (with methods returning OperationResult)
@@ -256,20 +269,36 @@ const functionToPublic = <
   func: Func,
 ) => {
   const unsafeFunc = (...args: Parameters<Func>) => {
-    const result = func(...args);
+    try {
+      const result = func(...args);
 
-    // Handle async functions
-    if (result instanceof Promise) {
-      return result.then(([errAsync, dataAsync]) => {
-        if (errAsync) throw errAsync;
-        return dataAsync;
-      });
+      // Handle async functions
+      if (result instanceof Promise) {
+        return result
+          .then((awaitedResult) => {
+            if (isResult(awaitedResult)) {
+              const [errAsync, dataAsync] = awaitedResult;
+              if (errAsync) throw errAsync;
+              return dataAsync;
+            }
+            return awaitedResult;
+          })
+          .catch((error) => {
+            throw error;
+          });
+      }
+
+      // Handle sync functions
+      if (isResult(result)) {
+        const [errorSync, dataSync] = result as OperationResult<OperationData>;
+        if (errorSync) throw errorSync;
+        return dataSync;
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw error;
     }
-
-    // Handle sync functions
-    const [errorSync, dataSync] = result as OperationResult<OperationData>;
-    if (errorSync) throw errorSync;
-    return dataSync;
   };
 
   return unsafeFunc as FunctionToPublic<Func>;
@@ -284,18 +313,55 @@ const functionToPublic = <
  * @returns The public instance.
  */
 const instanceToPublic = <Instance extends object>(instance: Instance) => {
-  return new Proxy(instance, {
-    get(target, prop) {
-      if (prop === "safe") return target;
+  // Cache to prevent circular references and redundant wrapping
+  const wrappedCache = new WeakMap<object, object>();
 
-      const value = target[prop as keyof Instance];
-      if (typeof value === "function") {
-        return functionToPublic(value.bind(target));
-      }
+  const createProxy = (target: object): object => {
+    // Return cached version if already wrapped
+    if (wrappedCache.has(target)) return wrappedCache.get(target) as object;
 
-      return value;
-    },
-  }) as InstanceToPublic<Instance>;
+    const proxy = new Proxy(target, {
+      get(innerTarget, prop) {
+        // Preserve access to original unwrapped instance (entire tree)
+        if (prop === "safe") return innerTarget;
+
+        const value = innerTarget[prop as keyof typeof innerTarget] as unknown;
+
+        // Wrap functions at any depth
+        if (typeof value === "function") {
+          return functionToPublic(value.bind(innerTarget));
+        }
+
+        // Recursively wrap objects and class instances
+        if (value !== null && typeof value === "object") {
+          // Skip built-in types that could break if proxied
+          const shouldSkip =
+            value instanceof Date ||
+            value instanceof RegExp ||
+            value instanceof Promise ||
+            Array.isArray(value) ||
+            value instanceof Map ||
+            value instanceof Set ||
+            value instanceof WeakMap ||
+            value instanceof WeakSet ||
+            ArrayBuffer.isView(value); // typed arrays, DataView, etc.
+
+          if (shouldSkip) return value;
+
+          // Recursively wrap plain objects and custom class instances
+          return createProxy(value);
+        }
+
+        // Primitives and other values returned as-is
+        return value;
+      },
+    });
+
+    wrappedCache.set(target, proxy);
+    return proxy;
+  };
+
+  return createProxy(instance) as InstanceToPublic<Instance>;
 };
 
 /**
@@ -363,11 +429,14 @@ export function toPublic<T>(input: T) {
 
 // Export a Zod schema for the OperationResult type
 export const resultSchema = z
-  .tuple([z.null(), z.unknown()])
-  .or(z.tuple([z.instanceof(LifeErrorClass), z.null()]))
-  .transform(
-    (val): OperationResult<OperationData> => val as unknown as OperationResult<OperationData>,
-  );
+  .tuple([z.null().or(z.undefined()), z.unknown()])
+  .or(z.tuple([z.instanceof(LifeErrorClass), z.null().or(z.undefined())]))
+  .transform((val): OperationResult<OperationData> => {
+    // Restore the OPERATION_RESULT symbol that Zod parsing strips
+    const [error, data] = val;
+    if (error) return failure(error);
+    return success(data);
+  });
 
 /**
  * Serializes an OperationResult into a plain object for transport.
@@ -388,11 +457,10 @@ export function serializeResult<D extends OperationData>(
   if (!isResult(result)) {
     throw new Error("The provided value is not an OperationResult");
   }
-  // Extract the tuple without the symbol to avoid recursive serialization
-  const [error, data] = result;
   return {
     _isOperationResult: true,
-    result: [error, data],
+    // Extract the tuple without the symbol to avoid recursive serialization
+    result: [result?.[0], result?.[1]],
   };
 }
 

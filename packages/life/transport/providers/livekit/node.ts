@@ -14,6 +14,7 @@ import {
 } from "@livekit/rtc-node";
 import z from "zod";
 import { createConfig } from "@/shared/config";
+import type { LifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import type { MaybePromise } from "@/shared/types";
 import { type TransportEvent, TransportProviderClientBase } from "../base";
@@ -168,12 +169,16 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
   receiveStreamText(
     topic: string,
     callback: (iterator: AsyncIterable<string>, participantId: string) => MaybePromise<void>,
+    onError?: (error: LifeError) => void,
   ) {
     try {
       const [errEnsure, connector] = this.ensureConnected("receiveText", this);
       if (errEnsure) return op.failure(errEnsure);
-      connector.room.registerTextStreamHandler(topic, (iterator, participantInfo) => {
-        callback(iterator as unknown as AsyncIterable<string>, participantInfo.identity);
+      connector.room.registerTextStreamHandler(topic, async (iterator, participantInfo) => {
+        const [err] = await op.attempt(async () => {
+          await callback(iterator as unknown as AsyncIterable<string>, participantInfo.identity);
+        });
+        if (err) onError?.(err);
       });
       return op.success(() => {
         connector.room.unregisterTextStreamHandler(topic);
@@ -188,7 +193,6 @@ export class LiveKitNodeClient extends TransportProviderClientBase<
     callback: (data: Extract<TransportEvent, { type: EventType }>) => void,
   ) {
     try {
-      if (!this.room) return op.failure({ code: "Conflict", message: "Room not connected." });
       if (!this.listeners[type]) this.listeners[type] = [];
       this.listeners[type].push(callback as (event: TransportEvent) => void);
       return op.success(() => {

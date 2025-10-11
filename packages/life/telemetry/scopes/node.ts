@@ -39,6 +39,10 @@ export const telemetryNodeScopesDefinition = defineScopes({
       watch: z.boolean(),
     }),
   },
+  webrtc: {
+    displayName: "WebRTC",
+    requiredAttributesSchema: z.object(),
+  },
   "agent.server": {
     displayName: (attributes) =>
       `Server > Agent (${attributes?.agentName} - ${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,

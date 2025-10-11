@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { LifeError } from "@/shared/error";
 import type * as op from "@/shared/operation";
 
 export type TransportEvent = {
@@ -32,6 +33,7 @@ export abstract class TransportProviderClientBase<ConfigSchema extends z.ZodObje
   abstract receiveStreamText(
     topic: string,
     callback: (iterator: AsyncIterable<string>, participantId: string) => void | Promise<void>,
+    onError?: (error: LifeError) => void,
   ): op.OperationResult<() => void>;
   abstract enableMicrophone(): Promise<op.OperationResult<void>>;
   abstract playAudio(): Promise<op.OperationResult<void>>;

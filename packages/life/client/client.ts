@@ -23,13 +23,15 @@ TelemetryBrowserClient.registerGlobalConsumer({
 
       // Format and print the log
       try {
-        const content = await formatLogForBrowser(item);
+        const contents = (await formatLogForBrowser(item)).filter(Boolean);
         let consoleFn: (line: string) => void;
-        if (logLevelPriority("error") >= priority) consoleFn = console.error;
-        else if (logLevelPriority("warn") >= priority) consoleFn = console.warn;
+        if (priority >= logLevelPriority("error")) consoleFn = console.error;
+        else if (priority >= logLevelPriority("warn")) consoleFn = console.warn;
         else consoleFn = console.log;
-        for (let i = 0; i < content.length; i++)
-          consoleFn(`Life.js (${item.id.slice(0, 6)}, ${i + 1}/${content.length})\n${content[i]}`);
+        for (let i = 0; i < contents.length; i++)
+          consoleFn(
+            `Life.js (${item.id.slice(0, 6)}, ${i + 1}/${contents.length})\n${contents[i]}`,
+          );
       } catch {
         console.log(item.message);
       }
@@ -211,7 +213,7 @@ export class LifeClient {
         const existingAgent = Array.from(this.#agents.values()).find(
           (a) => a._definition.name === String(name),
         );
-        if (existingAgent) return op.success(existingAgent as GeneratedAgentClient<Name>);
+        if (existingAgent) return op.success(op.toPublic(existingAgent) as unknown as GeneratedAgentClient<Name>);
 
         // Else, create a new agent
         const [err, agent] = await this.#createAgent(name, options);

@@ -3,6 +3,7 @@ import { ensureServer } from "@/shared/ensure-server";
 ensureServer("transport.client.node");
 
 import type { z } from "zod";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import { TransportClientBase } from "../base";
 import type { transportNodeConfig } from "../config/node";
 import { LiveKitNodeClient } from "../providers/livekit/node";
@@ -16,9 +17,14 @@ export const nodeTransportProviders = {
 export class TransportNodeClient extends TransportClientBase {
   constructor({
     config,
-    filterPublic = false,
-  }: { config: z.output<(typeof transportNodeConfig)["schema"]>; filterPublic?: boolean }) {
+    obfuscateErrors = false,
+    telemetry = null,
+  }: {
+    config: z.output<(typeof transportNodeConfig)["schema"]>;
+    obfuscateErrors?: boolean;
+    telemetry?: TelemetryClient | null;
+  }) {
     const ProviderClass = nodeTransportProviders[config.provider];
-    super({ provider: new ProviderClass(config), filterPublic });
+    super({ provider: new ProviderClass(config), obfuscateErrors, telemetry });
   }
 }

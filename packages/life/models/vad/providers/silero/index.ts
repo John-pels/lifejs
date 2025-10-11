@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import { createConfig } from "@/shared/config";
@@ -41,8 +41,19 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
   // Get or create the ONNX inference session
   async #getSession(): Promise<InferenceSession> {
     if (this.#_session) return this.#_session;
-    const fileUrl = new URL("model-16k.onnx", pathToFileURL(path.join(__dirname, "/")).href);
-    const modelPath = fileURLToPath(fileUrl);
+
+    // Retrieve model path
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const modelPath = path.join(
+      currentDir,
+      "..",
+      "models",
+      "vad",
+      "providers",
+      "silero",
+      "model-16k.onnx",
+    );
+
     this.#_session = await InferenceSession.create(modelPath, {
       interOpNumThreads: 1,
       intraOpNumThreads: 1,

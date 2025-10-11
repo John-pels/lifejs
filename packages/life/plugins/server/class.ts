@@ -48,8 +48,8 @@ export class PluginServer<const Definition extends PluginDefinition> {
   readonly _definition: Definition;
   readonly #agent: AgentServer;
   readonly #config: PluginConfig<Definition["config"], "output">;
+  #context: PluginContext<Definition["context"], "output">;
   readonly #eventsListeners = new Map<string, PluginEventsListener<Definition>>();
-  readonly #context: PluginContext<Definition["context"], "output">;
   readonly #contextListeners = new Map<string, PluginContextListener<Definition>>();
   readonly #externalInterceptors: PluginExternalInterceptor[] = [];
   readonly #queue = new AsyncQueue<PluginEvent<PluginEventsDefinition, "output">>();
@@ -82,7 +82,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
     this.#config = parsedConfig as PluginConfig<Definition["config"], "output">;
 
     // Validate context
-    const { error: errorContext, data: parsedContext } = definition.context.parse(context);
+    const { error: errorContext, data: parsedContext } = definition.context.safeParse(context);
     if (errorContext) {
       throw lifeError({
         code: "Validation",
@@ -110,11 +110,18 @@ export class PluginServer<const Definition extends PluginDefinition> {
 
     // Expose methods via RPC
     for (const [name, method] of Object.entries(this._definition.methods ?? {})) {
+      const methodFn = this.#getMethods()[name];
+      if (!methodFn) continue;
       this.#agent.transport.register({
         name: `plugin.${this._definition.name}.methods.${name}`,
         schema: method.schema,
-        // biome-ignore lint/suspicious/noExplicitAny: fine here
-        execute: this.#getMethods()[name] as (input: any) => any,
+        execute: methodFn,
+        onError: (error) => {
+          this.#telemetry.log.error({
+            message: `Error while running method '${name}' in plugin '${this._definition.name}'.`,
+            error,
+          });
+        },
       });
     }
 
@@ -140,6 +147,12 @@ export class PluginServer<const Definition extends PluginDefinition> {
         if (err) return op.failure(err);
         return op.success({ id });
       },
+      onError: (error, input) => {
+        this.#telemetry.log.error({
+          message: `Error while emitting event '${input.type}' in plugin '${this._definition.name}'.`,
+          error,
+        });
+      },
     });
 
     // Handle events subscription via RPC
@@ -160,6 +173,12 @@ export class PluginServer<const Definition extends PluginDefinition> {
         });
         return op.success();
       },
+      onError: (error) => {
+        this.#telemetry.log.error({
+          message: `Error while receiving event subscription in plugin '${this._definition.name}'.`,
+          error,
+        });
+      },
     });
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.events.unsubscribe`,
@@ -173,13 +192,25 @@ export class PluginServer<const Definition extends PluginDefinition> {
         this.#eventsListeners.delete(listenerId);
         return op.success();
       },
+      onError: (error) => {
+        this.#telemetry.log.error({
+          message: `Error while receiving event unsubscription in plugin '${this._definition.name}'.`,
+          error,
+        });
+      },
     });
 
     // Handle context synchronization via RPC
     this.#agent.transport.register({
       name: `plugin.${this._definition.name}.context.get`,
       schema: { output: z.object().loose() },
-      execute: () => op.success(this.#context),
+      execute: () => op.success({ value: this.#context, timestamp: Date.now() }),
+      onError: (error) => {
+        this.#telemetry.log.error({
+          message: `Error while sending context value in plugin '${this._definition.name}'.`,
+          error,
+        });
+      },
     });
   }
 
@@ -259,31 +290,29 @@ export class PluginServer<const Definition extends PluginDefinition> {
   }
 
   // Context setter
-  #setContext<K extends keyof PluginContext<Definition["context"], "output">>(
-    key: K,
+  #setContext(
     valueOrUpdater:
-      | PluginContext<Definition["context"], "output">[K]
+      | PluginContext<Definition["context"], "output">
       | ((
-          prev: PluginContext<Definition["context"], "output">[K],
-        ) => PluginContext<Definition["context"], "output">[K]),
+          prev: PluginContext<Definition["context"], "output">,
+        ) => PluginContext<Definition["context"], "output">),
   ) {
-    // Create a cloned snapshot of the current value and context
+    // Create a cloned snapshot of the current context
     const oldContext = deepClone(this.#context);
-    const currentKeyValue = deepClone(this.#context[key]);
 
-    // Obtain the new value
-    let newKeyValue: PluginContext<Definition["context"], "output">[K];
+    // Obtain the new context value
+    let newContext: PluginContext<Definition["context"], "output">;
     if (typeof valueOrUpdater === "function") {
       const updater = valueOrUpdater as (
-        prev: PluginContext<Definition["context"], "output">[K],
-      ) => PluginContext<Definition["context"], "output">[K];
-      newKeyValue = updater(currentKeyValue);
+        prev: PluginContext<Definition["context"], "output">,
+      ) => PluginContext<Definition["context"], "output">;
+      newContext = updater(deepClone(this.#context));
     } else {
-      newKeyValue = valueOrUpdater;
+      newContext = valueOrUpdater;
     }
 
-    // Set the new value
-    this.#context[key] = deepClone(newKeyValue);
+    // Set the new context
+    this.#context = deepClone(newContext) as PluginContext<Definition["context"], "output">;
 
     // Notify listeners
     this.#notifyContextListeners(oldContext);
@@ -313,21 +342,44 @@ export class PluginServer<const Definition extends PluginDefinition> {
   async #notifyContextListeners(oldContextValue: PluginContext<Definition["context"], "output">) {
     await Promise.all([
       Array.from(this.#contextListeners.values()).map(async (listener) => {
-        const newSelectedValue = listener.selector(this.#context) as SerializableValue;
-        const oldSelectedValue = listener.selector(oldContextValue) as SerializableValue;
-        // Only call if value actually changed
-        if (!canon.equal(newSelectedValue, oldSelectedValue)) {
-          await listener.callback(newSelectedValue, oldSelectedValue);
+        try {
+          const newSelectedValue = listener.selector(this.#context) as SerializableValue;
+          const oldSelectedValue = listener.selector(oldContextValue) as SerializableValue;
+          // Only call if value actually changed
+          if (!canon.equal(newSelectedValue, oldSelectedValue)) {
+            await listener.callback(newSelectedValue, oldSelectedValue);
+          }
+        } catch (error) {
+          this.#telemetry.log.error({
+            message: `Error while notifying context listeners in plugin '${this._definition.name}'.`,
+            error,
+          });
         }
       }),
       // Send new context value via RPC
-      this.#agent.transport.call({
-        name: `plugin.${this._definition.name}.context.changed`,
-        input: { value: this.#context, timestamp: Date.now() },
-        inputSchema: {
-          input: z.object({ value: z.any(), timestamp: z.number() }),
-        },
-      }),
+      this.#agent.transport
+        .call({
+          name: `plugin.${this._definition.name}.context.changed`,
+          input: { value: this.#context, timestamp: Date.now() },
+          inputSchema: {
+            input: z.object({ value: z.any(), timestamp: z.number() }),
+          },
+        })
+        .then((result) => {
+          const [err] = result;
+          if (err) {
+            this.#telemetry.log.error({
+              message: `Error while sending context value in plugin '${this._definition.name}'.`,
+              error: err,
+            });
+          }
+        })
+        .catch((error) => {
+          this.#telemetry.log.error({
+            message: `Error while sending context value in plugin '${this._definition.name}'.`,
+            error,
+          });
+        }),
     ]);
   }
 
@@ -356,7 +408,7 @@ export class PluginServer<const Definition extends PluginDefinition> {
                 {
                   config: this.#config,
                   context: op.toPublic(this.#createWritableContextHandler()),
-                  events: this.#events as PluginEventsHandler<PluginEventsDefinition>,
+                  events: op.toPublic(this.#events as PluginEventsHandler<PluginEventsDefinition>),
                   telemetry: span,
                 },
                 validationResult.data,
@@ -627,13 +679,19 @@ export class PluginServer<const Definition extends PluginDefinition> {
               ) {
                 // If this is a remote callback, stream the event to the remote callback
                 if (callback === "remote") {
-                  await this.#agent.transport.call({
+                  const [err] = await this.#agent.transport.call({
                     name: `plugin.${this._definition.name}.events.callback`,
                     input: { listenerId: id, event },
                     inputSchema: {
                       input: z.object({ listenerId: z.string(), event: z.any() }),
                     },
                   });
+                  if (err) {
+                    this.#telemetry.log.error({
+                      message: `Error while steaming event to remote listener in plugin '${this._definition.name}'.`,
+                      error: err,
+                    });
+                  }
                 }
 
                 // Else, call the local callback

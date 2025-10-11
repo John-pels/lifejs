@@ -222,9 +222,15 @@ export class LifeCompiler {
       absolute: false,
     });
 
+    const CODE_FILE_EXTENSIONS = [".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx"];
+    const codeFiles = distFiles.filter((file) => {
+      const ext = path.extname(file).toLowerCase();
+      return CODE_FILE_EXTENSIONS.includes(ext);
+    });
+
     // Process all files concurrently, replacing placeholders
     await Promise.all(
-      distFiles.map(async (file) => {
+      codeFiles.map(async (file) => {
         const filePath = join(distDir, file);
         const content = await readFile(filePath, "utf-8");
 
