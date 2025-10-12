@@ -116,24 +116,6 @@ export class AgentProcessClient {
           "agent-process",
           "process.mjs",
         );
-        this.#telemetry.log.debug({
-          message: `resolved cwd: ${path.resolve(process.cwd())}`,
-        });
-        this.#telemetry.log.debug({
-          message: `import.meta.url: ${import.meta.url}`,
-        });
-        this.#telemetry.log.debug({
-          message: `currentDir: ${currentDir}`,
-        });
-        this.#telemetry.log.debug({
-          message: `childPath: ${childPath}`,
-        });
-        this.#telemetry.log.debug({
-          message: `projectDirectory: ${this.#server.options.projectDirectory}`,
-        });
-        this.#telemetry.log.debug({
-          message: `projectDirectory resolved: ${path.resolve(this.#server.options.projectDirectory)}`,
-        });
         this.nodeProcess = fork(childPath, [], {
           serialization: "json",
           silent: true,
@@ -143,30 +125,20 @@ export class AgentProcessClient {
         });
 
         // Capture stdout/stderr immediately to avoid losing output
-        this.nodeProcess.stdout?.on("data", (data: Buffer) => {
-          const lines = data
-            .toString()
-            .split("\n")
-            .filter((line) => line.trim());
-          this.stdLines.push(...lines);
-          for (const line of lines) {
-            for (const callback of this.#stdLineCallbacks) {
-              callback(line);
+        for (const channel of ["stdout", "stderr"] as const) {
+          this.nodeProcess[channel]?.on("data", (data: Buffer) => {
+            const lines = data
+              .toString()
+              .split("\n")
+              .filter((line) => line.trim());
+            this.stdLines.push(...lines);
+            for (const line of lines) {
+              for (const callback of this.#stdLineCallbacks) {
+                callback(line);
+              }
             }
-          }
-        });
-        this.nodeProcess.stderr?.on("data", (data: Buffer) => {
-          const lines = data
-            .toString()
-            .split("\n")
-            .filter((line) => line.trim());
-          this.stdLines.push(...lines);
-          for (const line of lines) {
-            for (const callback of this.#stdLineCallbacks) {
-              callback(line);
-            }
-          }
-        });
+          });
+        }
 
         // Set up RPC channel with the child process (after child is ready)
         this.#process = createBirpc<ChildMethods, ParentMethods>(
@@ -182,10 +154,6 @@ export class AgentProcessClient {
             },
             syncTelemetry: (signal) => {
               try {
-                // Override the attributes with the agent process attributes
-                signal.attributes ||= {};
-                signal.attributes.watch = this.#server.options.watch;
-
                 // Forward the signal to the client telemetry client
                 this.#telemetry.sendSignal(signal);
                 return op.success();
@@ -256,6 +224,13 @@ export class AgentProcessClient {
             timeout: -1,
           },
         );
+
+        // Initialize the child process
+        const [errInit] = await this.#process.init({ agentId: this.id });
+        if (errInit) {
+          await this.stop();
+          return op.failure(errInit);
+        }
 
         // Handle child process exit
         this.#handleProcessExitCallback = this.handleProcessExit.bind(this);

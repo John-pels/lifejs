@@ -43,13 +43,20 @@ export const telemetryNodeScopesDefinition = defineScopes({
     displayName: "WebRTC",
     requiredAttributesSchema: z.object(),
   },
+  "agent.process": {
+    displayName: (attributes) =>
+      `Agent Process (${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
+    requiredAttributesSchema: z.object({
+      agentId: z.string(),
+    }),
+  },
   "agent.server": {
     displayName: (attributes) =>
-      `Server > Agent (${attributes?.agentName} - ${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
+      `Agent (${attributes?.agentName} - ${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
     requiredAttributesSchema: baseAgentServerAttributesSchema,
   },
   "plugin.server": {
-    displayName: (attributes) => `Server > Plugin (${attributes?.pluginName})`,
+    displayName: (attributes) => `Plugin (${attributes?.pluginName})`,
     requiredAttributesSchema: baseAgentServerAttributesSchema.extend({
       pluginName: z.string(),
       pluginServerConfig: z.any(),

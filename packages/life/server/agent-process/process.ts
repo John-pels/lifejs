@@ -7,6 +7,7 @@ import { canon } from "@/shared/canon";
 import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { ProcessStats } from "@/shared/process-stats";
+import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient, TelemetryNodeClient } from "@/telemetry/clients/node";
 import { pipeConsoleToTelemetryClient } from "@/telemetry/helpers/patch-console";
 import type { TelemetrySignal } from "@/telemetry/types";
@@ -18,14 +19,19 @@ const processStats = new ProcessStats();
 // Holds the agent server instance created in start()
 let agentServer: AgentServer | null = null;
 
-// Note: Attributes are going to be rewritten by the parent process anyway
-const telemetry = createTelemetryClient("server", { watch: false });
-
-// Forward console.* methods to the process telemetry client
-pipeConsoleToTelemetryClient(telemetry);
+// Telemetry client
+let telemetry: TelemetryClient | null = null;
 
 const rpc = createBirpc<ParentMethods, ChildMethods>(
   {
+    init(params) {
+      // Initialize telemetry client
+      telemetry = createTelemetryClient("agent.process", { agentId: params.agentId });
+      // Forward console.* methods to the process telemetry client
+      pipeConsoleToTelemetryClient(telemetry);
+      // Return success
+      return op.success();
+    },
     //
     async start(params) {
       try {
@@ -75,7 +81,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
                 timestamp: Date.now(),
               });
               if (error)
-                telemetry.log.error({
+                telemetry?.log.error({
                   message: `Failed to sync for plugin '${pluginName}' in agent '${agentServer.definition.name}' process.`,
                   error,
                 });
@@ -94,6 +100,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
         await rpc.ready();
 
         // Return that the agent server was started successfully
+        telemetry?.log.info({ message: "Agent started successfully." });
         return op.success();
       } catch (error) {
         return op.failure({ code: "Unknown", cause: error });
@@ -157,7 +164,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
       return result;
     },
     onFunctionError: (error) => {
-      telemetry.log.error(
+      telemetry?.log.error(
         isLifeError(error)
           ? error
           : lifeError({
@@ -167,7 +174,7 @@ const rpc = createBirpc<ParentMethods, ChildMethods>(
       );
     },
     onGeneralError: (error) => {
-      telemetry.log.error(
+      telemetry?.log.error(
         isLifeError(error)
           ? error
           : lifeError({
@@ -191,17 +198,17 @@ TelemetryNodeClient.registerGlobalConsumer({
 
 // Handle uncaught errors
 process.on("uncaughtException", async (error) => {
-  telemetry.log.error({ error });
+  telemetry?.log.error({ error });
   // Flush telemetry before exiting to ensure error is sent to parent
-  await telemetry.flushConsumers(1000);
+  await telemetry?.flushConsumers(1000);
   process.exit(1);
 });
 process.on("unhandledRejection", async (reason) => {
-  telemetry.log.error({
+  telemetry?.log.error({
     message: reason instanceof Error ? reason.message : String(reason),
     error: reason instanceof Error ? reason : undefined,
   });
   // Flush telemetry before exiting to ensure error is sent to parent
-  await telemetry.flushConsumers(1000);
+  await telemetry?.flushConsumers(1000);
   process.exit(1);
 });

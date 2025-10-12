@@ -27,6 +27,7 @@ export interface ParentMethods {
 
 // Methods the child process exposes to parent
 export interface ChildMethods {
+  init: (params: { agentId: string }) => op.OperationResult<void>;
   // Initialize and start the AgentServer with given configuration
   start: (params: {
     id: string;

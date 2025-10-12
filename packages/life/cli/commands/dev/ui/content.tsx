@@ -30,7 +30,9 @@ export const DevContent: FC<DevContentProps> = ({
     else if (log.scope === "compiler") logTab = "compiler";
     else if (log.scope === "webrtc") logTab = "webrtc";
     else if (
-      (log.scope === "agent.server" || log.scope === "plugin.server") &&
+      (log.scope === "agent.process" ||
+        log.scope === "agent.server" ||
+        log.scope === "plugin.server") &&
       log.attributes?.agentId
     )
       logTab = log.attributes.agentId as string;
