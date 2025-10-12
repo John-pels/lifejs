@@ -16,7 +16,6 @@ export const openAILLMConfig = createConfig({
   toTelemetryAttribute: (config) => {
     // Redact sensitive fields
     config.apiKey = "redacted" as never;
-
     return config;
   },
 });

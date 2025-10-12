@@ -44,10 +44,10 @@ export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.schema> {
       currentDir,
       "..",
       "models",
-      "vad",
+      "eou",
       "providers",
-      "silero",
-      "model-16k.onnx",
+      "turnsense",
+      this.config.quantized ? "model-quantized.onnx" : "model.onnx",
     );
     this.#_session = await InferenceSession.create(modelPath, {
       interOpNumThreads: 1,

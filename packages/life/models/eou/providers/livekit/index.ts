@@ -43,10 +43,10 @@ export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.schema> {
       currentDir,
       "..",
       "models",
-      "vad",
+      "eou",
       "providers",
-      "silero",
-      "model-16k.onnx",
+      "livekit",
+      this.config.quantized ? "model-quantized.onnx" : "model.onnx",
     );
     this.#_session = await InferenceSession.create(modelPath, {
       interOpNumThreads: 1,
