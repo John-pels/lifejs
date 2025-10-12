@@ -3,7 +3,6 @@ import React from "react";
 import { loadEnvVars } from "@/cli/utils/load-env-vars";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import type { TelemetryLog } from "@/telemetry/types";
-import { InitTask } from "./tasks/init";
 import { DevUI } from "./ui";
 
 export interface DevOptions {
@@ -13,10 +12,10 @@ export interface DevOptions {
   config?: string;
   token?: string;
   debug?: boolean;
-  noTui?: boolean;
+  tui?: boolean;
 }
 
-export const executeDev = async (
+export const executeDev = (
   options: DevOptions,
   telemetry: TelemetryClient,
   initialTelemetryLogs: TelemetryLog[],
@@ -26,35 +25,8 @@ export const executeDev = async (
     // Load environment vars
     loadEnvVars(options.root);
 
-    // Just call the initialization task if the --no-tui flag is set
-    if (options.noTui) {
-      const initTask = new InitTask({
-        telemetry,
-        options,
-        // listeners: {
-        //   onProgress: setInitProgress,
-        //   onStatus: setInitStatus,
-        //   onError: (error) => {
-        //     telemetry.log.error({ error });
-        //     setInitError(error);
-        //     exit();
-        //   },
-        //   onVersion: setVersion,
-        //   onServer: (s) => (server.current = s),
-        //   onCompiler: (c) => (compiler.current = c),
-        // },
-      });
-      await initTask.run().then(([err]) => {
-        if (err) {
-          telemetry.log.error({ error: err });
-          // setInitError(err.message);
-          // exit();
-        }
-      });
-    }
-
-    // Else render the terminal UI
-    else {
+    // Render the terminal UI if enabled
+    if (options.tui) {
       render(
         React.createElement(DevUI, { options, telemetry, initialTelemetryLogs, onTelemetryLog }),
         {
@@ -63,6 +35,8 @@ export const executeDev = async (
         },
       );
     }
+    // Else just call the initialization task
+    else telemetry.log.warn({ message: "--no-tui mode is not implemented yet." });
   } catch (error) {
     telemetry.log.error({
       message: "An error occurred while starting the development server.",

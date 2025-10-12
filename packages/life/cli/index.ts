@@ -40,13 +40,14 @@ async function main() {
   });
 
   // Stream formatted telemetry logs to the terminal (except for dev command without --no-tui flag)
+  const originalConsoleLog = console.log;
   const isDevCommand = process.argv.includes("dev") && !process.argv.includes("--no-tui");
   if (!isDevCommand) {
     TelemetryClient.registerGlobalConsumer({
       start: async (queue) => {
         for await (const item of queue) {
           if (item.type !== "log") continue;
-          console.log(formatLogForTerminal(item));
+          originalConsoleLog(formatLogForTerminal(item));
         }
       },
     });
@@ -67,7 +68,7 @@ async function main() {
     if (cleanupDone) return;
     cleanupDone = true;
     await TelemetryClient.flushAllConsumers();
-    console.log(""); // Newline for better readability
+    originalConsoleLog(""); // Newline for better readability
   };
   process.on("SIGINT", () => setImmediate(cleanup));
   process.on("SIGTERM", () => setImmediate(cleanup));

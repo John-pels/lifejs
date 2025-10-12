@@ -210,9 +210,9 @@ export class LifeCompiler {
     const generatedClientPath = join(this.options.outputDirectory, "client", "index.ts");
     const generatedServerPath = join(this.options.outputDirectory, "server", "dist", "index.js");
 
-    // Find node_modules and set up dist directory
-    const nodeModulesPath = await this.findNodeModules(this.options.projectDirectory);
-    const distDir = join(nodeModulesPath, "life/dist");
+    //
+    const [errDistDir, distDir] = await this.findDistDirectory();
+    if (errDistDir) return op.failure(errDistDir);
 
     // Get all files in the dist directory recursively
     const { glob } = await import("glob");
@@ -981,24 +981,45 @@ ${pluginEntries}
     return !relativePath.startsWith("..");
   }
 
-  async findNodeModules(startPath: string) {
-    let currentDir = startPath;
+  /**
+   * Finds the absolute path to node_modules/life/dist/
+   * @param startPath - The path to start searching from
+   * @returns The absolute path to node_modules/life/dist/
+   */
+  async findDistDirectory() {
+    // Start from the current code file path
+    const currentFilePath = import.meta.url.replace("file://", "");
 
-    while (currentDir !== "/") {
-      const nodeModulesPath = join(currentDir, "node_modules");
-      // biome-ignore lint/performance/noAwaitInLoops: no other choice here
-      if (await this.fileExists(nodeModulesPath)) {
-        this.telemetry.log.debug({ message: `node_modules path: ${nodeModulesPath}` });
-        return nodeModulesPath;
+    // Walk up until we find the package root (where package.json with "name": "life" exists)
+    let packageRoot: string | null = null;
+    let searchDir = dirname(currentFilePath);
+    for (let i = 0; i < 10; i++) {
+      const packageJsonPath = join(searchDir, "package.json");
+      // biome-ignore lint/performance/noAwaitInLoops: need to check sequentially
+      if (await this.fileExists(packageJsonPath)) {
+        const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8"));
+        if (packageJson.name === "life") {
+          packageRoot = searchDir;
+          break;
+        }
       }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) break;
-      currentDir = parentDir;
+      searchDir = dirname(searchDir);
     }
+    if (!packageRoot)
+      return op.failure({
+        code: "NotFound",
+        message: "Could not find life package root.",
+      });
 
-    throw new Error(
-      "Could not find node_modules directory. Please ensure dependencies are installed.",
-    );
+    // Build path to the life dist directory
+    const distDir = join(packageRoot, "dist");
+    if (!(await this.fileExists(distDir)))
+      return op.failure({
+        code: "NotFound",
+        message: "Could not find life dist directory.",
+      });
+
+    return op.success(distDir);
   }
 
   // -------------------------------------

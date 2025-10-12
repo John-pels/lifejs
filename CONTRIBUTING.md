@@ -100,8 +100,13 @@ class MyClass {
 ```
 And when instantiating:
 ```ts
-const [err, ins] = op.attempt(() => new MyClass())
+const [errInstance, instance] = op.attempt(() => new MyClass())
 ```
+5. Finally, as a naming convention, when destructuring an `OperationResult` use the format `[err<var>, <var>]`, e.g.,
+```ts
+const [errEqual, equal] = canon.equal(1, 1);
+```
+Or just `err` or `error` if this doesn't conflict with other variables names.
 
 ### Logging
 
