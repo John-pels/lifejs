@@ -79,7 +79,7 @@ export class History {
   }
 
   addToolRequestsToAgentMessage(messageId: string, requests: ToolRequest[]) {
-    const message = this.getMessage(messageId);
+    const message = this.#messages.find((m) => m.id === messageId);
     if (!message) throw new Error(`Message with id ${messageId} does not exist.`);
     if (message.role !== "agent")
       throw new Error(`Message with id ${messageId} is not an agent message.`);
@@ -89,7 +89,7 @@ export class History {
   }
 
   appendContentToUserMessage(messageId: string, content: string) {
-    const existingMessage = this.getMessage(messageId);
+    const existingMessage = this.#messages.find((m) => m.id === messageId);
     if (!existingMessage) throw new Error(`Message with id ${messageId} does not exist.`);
     if (existingMessage.role !== "user")
       throw new Error(`Message with id ${messageId} is not a user message.`);
@@ -99,7 +99,7 @@ export class History {
   }
 
   appendContentToAgentMessage(messageId: string, content: string) {
-    const existingMessage = this.getMessage(messageId);
+    const existingMessage = this.#messages.find((m) => m.id === messageId);
     if (!existingMessage) throw new Error(`Message with id ${messageId} does not exist.`);
     if (existingMessage.role !== "agent")
       throw new Error(`Message with id ${messageId} is not an agent message.`);

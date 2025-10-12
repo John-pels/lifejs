@@ -123,7 +123,8 @@ export class GenerationOrchestrator {
     // Or if there is no running generation, start the generation immediately
     else {
       const resourceRequestId = this.#generationsResourcesRequestsIds[generation.id];
-      generation.start(resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined);
+      const resources = resourceRequestId ? this.#resourcesResponses[resourceRequestId] : undefined;
+      generation.start(resources);
       this.#generationsQueue.push(generation);
     }
   }

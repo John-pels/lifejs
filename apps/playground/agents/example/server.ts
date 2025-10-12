@@ -1,8 +1,14 @@
-import { defaults, defineAgent } from "life/server";
+import { defaults, defineAgent, defineMemory } from "life/server";
 // import z from "zod";
 import { testPlugin } from "./plugins/test/server";
 
-export default defineAgent("example").plugins([...defaults.plugins, testPlugin]);
+const allMessagesMemory = defineMemory("all-messages").output(({ messages }) => messages);
+
+export default defineAgent("example")
+  .plugins([...defaults.plugins, testPlugin])
+  .memories({
+    items: [allMessagesMemory],
+  });
 // .scope({
 //   schema: z.object({
 //     userId: z.string(),

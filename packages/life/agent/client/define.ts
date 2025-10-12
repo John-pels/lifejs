@@ -77,31 +77,6 @@ export class AgentClientBuilder<
     }
     return builder;
   }
-
-  // #pluginMethod(
-  //   plugin: PluginClientDependencyDefinition,
-  //   plugins: PluginClientDependenciesDefinition,
-  // ) {
-  //   return <const C extends z.input<PluginClientDefinition["config"]["schema"]>>(
-  //     config: C,
-  //   ): unknown => {
-  //     const builder = new AgentClientBuilder({
-  //       ...this._definition,
-  //       pluginConfigs: {
-  //         ...((this._definition as Definition).pluginConfigs ?? {}),
-  //         [plugin.name]: plugin.config.schema.parse(config),
-  //       },
-  //     });
-  //     return this.#withPluginsMethods(builder, plugins) as Omit<
-  //       AgentClientBuilderWithPluginsMethods<
-  //         typeof builder,
-  //         Definition["plugins"],
-  //         ExcludedMethods
-  //       >,
-  //       ExcludedMethods
-  //     >;
-  //   };
-  // }
 }
 
 // Helper function to define a agent client

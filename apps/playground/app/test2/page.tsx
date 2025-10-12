@@ -56,7 +56,7 @@ export default function Page() {
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <StatusIndicator active={!!agent?.isStarted} label="Started" />
+          {/* <StatusIndicator active={!!agent?.isStarted} label="Started" /> */}
           <StatusIndicator active={!!status?.listening} label="Listening" />
           <StatusIndicator active={!!status?.thinking} label="Thinking" />
           <StatusIndicator active={!!status?.speaking} label="Speaking" />

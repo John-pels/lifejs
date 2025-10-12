@@ -10,11 +10,11 @@ export const metadata: Metadata = {
     "This is a demo application, used by Life.js developers to run experiments with the latest features.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
+interface LayoutProps {
   children: React.ReactNode;
-}>) {
+}
+
+export default function Layout({ children }: LayoutProps) {
   return (
     <html lang="en">
       <LifeProvider client={life}>
