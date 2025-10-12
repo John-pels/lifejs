@@ -3,11 +3,11 @@ import { Box, Text } from "ink";
 import type { FC } from "react";
 import { theme } from "@/cli/utils/theme";
 import { formatLogForTerminal } from "@/telemetry/helpers/formatting/terminal";
-import { logLevelPriority } from "@/telemetry/helpers/log-level-priority";
 import type { TelemetryLog } from "@/telemetry/types";
 import type { DevOptions } from "../action";
 import { Divider } from "../components/divider";
 import { ScrollBox } from "../components/scroll-box";
+import { filterTabLogs } from "../lib/filter-tab-logs";
 import { DEFAULT_TABS } from "../lib/tabs";
 
 interface DevContentProps {
@@ -23,23 +23,11 @@ export const DevContent: FC<DevContentProps> = ({
   logs,
   options,
 }) => {
-  const currentTabLogs = logs.filter((log) => {
-    if (debugModeEnabled) return true;
-    let logTab = "cli";
-    if (log.scope === "server") logTab = "server";
-    else if (log.scope === "compiler") logTab = "compiler";
-    else if (log.scope === "webrtc") logTab = "webrtc";
-    else if (
-      (log.scope === "agent.process" ||
-        log.scope === "agent.server" ||
-        log.scope === "plugin.server") &&
-      log.attributes?.agentId
-    )
-      logTab = log.attributes.agentId as string;
-    if (logTab !== selectedTab) return false;
-    return logLevelPriority(log.level) >= logLevelPriority(options.debug ? "debug" : "info");
-  });
-
+  const currentTabLogs = filterTabLogs(
+    logs,
+    selectedTab,
+    options.debug || debugModeEnabled ? "debug" : "info",
+  );
   return (
     <Box
       borderColor={debugModeEnabled ? undefined : "gray"}
