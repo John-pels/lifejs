@@ -1,5 +1,25 @@
 # life
 
+## 0.30.0
+
+### Minor Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [0356435](https://github.com/lifejs/lifejs/commit/03564353de91edf932059443a857c121c4df3e4d) — Support implicit plugins configs both on the client and server
+- [@LilaRest](https://github.com/LilaRest) in [1783d6a](https://github.com/lifejs/lifejs/commit/1783d6a57aff37a1006d9555ff6c380119310e89) — A lot of bug fixes and stability improvements in the development workflow
+- [@LilaRest](https://github.com/LilaRest) in [815c1e0](https://github.com/lifejs/lifejs/commit/815c1e057f455859d89290fa7f8bd81b27c741a4) — Improve logging DX with hints and clear tab separation for agent processes
+- [@LilaRest](https://github.com/LilaRest) in [815c1e0](https://github.com/lifejs/lifejs/commit/815c1e057f455859d89290fa7f8bd81b27c741a4) — Improve the playground example agent UI
+
+### Patch Changes
+
+- [@LilaRest](https://github.com/LilaRest) in [dab6426](https://github.com/lifejs/lifejs/commit/dab6426eff9214ed67fd8dccd1c13bc2c3cb5358) — Fix local models paths and support again quantized versions
+- [@LilaRest](https://github.com/LilaRest) in [fe21751](https://github.com/lifejs/lifejs/commit/fe2175158cc1ac8a8c8a57404c409b1d742c08dd) — Fix last agent token bleeding on next message when new user message comes immediately after interruption
+- [@LilaRest](https://github.com/LilaRest) in [79198ba](https://github.com/lifejs/lifejs/commit/79198ba01128769994c4ae3b775aeb69ad257b7a) — Fix debug mode not properly filtering logs in `life dev` UI
+- [@LilaRest](https://github.com/LilaRest) in [0356435](https://github.com/lifejs/lifejs/commit/03564353de91edf932059443a857c121c4df3e4d) — Fix incorrect tab ordering switch in the terminal UI when using arrow keys
+- [@LilaRest](https://github.com/LilaRest) in [69ab410](https://github.com/lifejs/lifejs/commit/69ab410bfb04124c34ffd3d2519fe6899bfdd375) — Add a clean not implemented message for --no-tui mode
+- [@LilaRest](https://github.com/LilaRest) in [50a9feb](https://github.com/lifejs/lifejs/commit/50a9feb17cc0c2a990a08274eb018ca203f65814) — Add agent.process telemetry scope
+- [@LilaRest](https://github.com/LilaRest) in [69ab410](https://github.com/lifejs/lifejs/commit/69ab410bfb04124c34ffd3d2519fe6899bfdd375) — Fix `Agent not found in client build.` error
+- [@LilaRest](https://github.com/LilaRest) in [2a5d65b](https://github.com/lifejs/lifejs/commit/2a5d65b7f4666164abdfddf3772d90c5dc35d064) — Solve agent messages synchronization issue
+
 ## 0.29.0
 
 ### Minor Changes
