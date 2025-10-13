@@ -99,7 +99,7 @@ export class Generation {
         }
         this.end();
         break;
-      } else if (chunk.type === "error") console.error("TTS error", chunk);
+      } else if (chunk.type === "error") console.error("TTS error", JSON.stringify(chunk));
     }
   }
 

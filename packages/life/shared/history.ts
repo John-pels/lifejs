@@ -31,12 +31,14 @@ export class History {
     return this.getMessages().find((message) => message.id === id);
   }
 
-  findLastMessageOfRole(role: Message["role"] | Message["role"][]) {
+  findLastMessageOfRoles<R extends Message["role"]>(
+    roles: readonly R[],
+  ): Extract<Message, { role: R }> | undefined {
     return this.getMessages()
       .reverse()
-      .find((message) =>
-        typeof role === "string" ? message.role === role : role.includes(message.role),
-      );
+      .find((message) => roles.includes(message.role as R)) as
+      | Extract<Message, { role: R }>
+      | undefined;
   }
 
   createMessage(message: CreateMessageInput) {

@@ -21,8 +21,9 @@ export default function Page() {
 
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
+    await agent?.generation.interrupt({ reason: "New user message", author: "user" });
     await agent?.generation.messages.create({ message: { role: "user", content } });
-    // await agent?.generation.continue({});
+    await agent?.generation.continue({});
     setInputValue("");
   };
 

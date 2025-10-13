@@ -10,7 +10,7 @@ export const openAILLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("openai"),
     apiKey: z.string().prefault(process.env.OPENAI_API_KEY as string),
-    model: z.enum(["gpt-4o-mini", "gpt-4o", "gpt-5"]).prefault("gpt-5"),
+    model: z.enum(["gpt-4o-mini", "gpt-4o", "gpt-5", "gpt-5-nano"]).prefault("gpt-4o"),
     temperature: z.number().min(0).max(2).prefault(1),
   }),
   toTelemetryAttribute: (config) => {

@@ -133,10 +133,10 @@ export const generationPlugin = definePlugin("generation")
     },
     "agent.text-chunk": { dataSchema: z.object({ textChunk: z.string() }) },
     "agent.voice-chunk": { dataSchema: z.object({ voiceChunk: z.custom<Int16Array>() }) },
-    "agent.speaking-start": {}, // start of output stream
-    "agent.speaking-end": {}, // end of output stream
     "agent.thinking-start": {}, // start of generation
     "agent.thinking-end": {}, // end of generation
+    "agent.speaking-start": {}, // start of output stream
+    "agent.speaking-end": {}, // end of output stream
   })
   .context(
     z.object({
@@ -318,7 +318,7 @@ export const generationPlugin = definePlugin("generation")
     // Handle user text chunk
     else if (event.type === "user.text-chunk") {
       // If the last subject message is from user, append the text chunk to it
-      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent", "tool-response"]);
+      const lastSubjectMessage = history.findLastMessageOfRoles(["user", "agent", "tool-response"]);
       if (lastSubjectMessage?.role === "user") {
         history.appendContentToUserMessage(lastSubjectMessage.id, event.data.textChunk);
       }
@@ -327,16 +327,16 @@ export const generationPlugin = definePlugin("generation")
     }
     // Handle user interruptions
     else if (event.type === "user.interrupted") {
-      const lastUserMessage = history.findLastMessageOfRole("user");
+      const lastUserMessage = history.findLastMessageOfRoles(["user"]);
       if (!lastUserMessage) throw new Error("No user message found. Should not happen.");
       history.appendContentToUserMessage(
         lastUserMessage.id,
-        "[You interrupted the user, you might want to quickly apologize or mention that]",
+        "[You interrupted the user, you might want to quickly apologize and mention that you're caring about what the user said]",
       );
     }
     // Handle agent tool requests
     else if (event.type === "agent.tool-requests") {
-      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent"]);
+      const lastSubjectMessage = history.findLastMessageOfRoles(["user", "agent"]);
       if (lastSubjectMessage?.role === "agent") {
         history.addToolRequestsToAgentMessage(lastSubjectMessage.id, event.data);
       } else {
@@ -349,7 +349,7 @@ export const generationPlugin = definePlugin("generation")
     }
     // Handle agent interruptions
     else if (event.type === "agent.interrupted") {
-      const lastAgentMessage = history.findLastMessageOfRole("agent");
+      const lastAgentMessage = history.findLastMessageOfRoles(["agent"]);
       if (!lastAgentMessage) throw new Error("No agent message found. Should not happen.");
       if (lastAgentMessage.role !== "agent") return; // for typesafety below
       if (!lastAgentMessage.content.includes("[Interrupted")) {
@@ -362,14 +362,16 @@ export const generationPlugin = definePlugin("generation")
     // Handle agent text chunks
     else if (event.type === "agent.text-chunk") {
       // If the last subject message is from agent, append the text chunk to it
-      const lastSubjectMessage = history.findLastMessageOfRole(["user", "agent", "tool-response"]);
-      if (lastSubjectMessage?.role === "agent") {
-        if (!lastSubjectMessage.content.includes("[Interrupted")) {
-          history.appendContentToAgentMessage(lastSubjectMessage.id, event.data.textChunk);
-        }
+      const lastSubjectMessage = history.findLastMessageOfRoles(["user", "agent", "tool-response"]);
+
+      if (
+        lastSubjectMessage?.role === "agent" &&
+        !lastSubjectMessage.content.includes("[Interrupted")
+      ) {
+        history.appendContentToAgentMessage(lastSubjectMessage.id, event.data.textChunk);
       }
-      // Else, create a new agent message
-      else history.createMessage({ role: "agent", content: event.data.textChunk });
+    } else if (event.type === "agent.thinking-start") {
+      history.createMessage({ role: "agent", content: "" });
     }
 
     // Save the modified messages array

@@ -139,7 +139,7 @@ export class GenerationOrchestrator {
 
         // If the generation was already partially or entirely consumed by the orchestrator
         // consider that the agent was interrupted during its speech
-        if (generation.queue.totalLength() < generation.queue.length()) interrupted = true;
+        if (generation.queue.totalLength() > generation.queue.length()) interrupted = true;
       }
     }
 
