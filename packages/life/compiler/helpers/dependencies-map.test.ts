@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDependenciesMap } from "./dependencies-map";
 
 describe("getDependenciesMap", () => {
   let tempDir: string;
-  let testFiles: Record<string, string> = {};
+  const testFiles: Record<string, string> = {};
 
   beforeAll(async () => {
     // Create a temporary directory for our test files
@@ -193,7 +193,7 @@ export const Button = (props: ButtonProps) => {
 export type { CommonInterface } from "./types/common";
 export type { ButtonProps } from "./components/Button";
 export { utilA } from "./utils/utilA"; // value export
-`
+`,
     };
 
     // Create all test files
@@ -202,6 +202,7 @@ export { utilA } from "./utils/utilA"; // value export
       const dir = path.dirname(fullPath);
 
       // Ensure directory exists
+      // biome-ignore lint/performance/noAwaitInLoops: test env
       await fs.mkdir(dir, { recursive: true });
 
       // Write file
@@ -227,34 +228,36 @@ export { utilA } from "./utils/utilA"; // value export
     const dependencies = result[1] as string[];
 
     // Should include all transitive dependencies
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("helpers/helperB.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("utils/defaultExport.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("helpers/index.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/shared.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/base.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("helpers/helperB.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/defaultExport.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("helpers/index.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/base.ts"))).toBe(true);
 
     // Should not include the entry point itself
-    expect(dependencyNames.some(name => name === "index.ts")).toBe(false);
+    expect(dependencyNames.some((name) => name === "index.ts")).toBe(false);
   });
 
   it("should handle multiple entry points", async () => {
-    const entryPoints = [testFiles["index.ts"], testFiles["withJson.ts"]].filter(Boolean) as string[];
+    const entryPoints = [testFiles["index.ts"], testFiles["withJson.ts"]].filter(
+      Boolean,
+    ) as string[];
     const result = await getDependenciesMap(entryPoints);
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
     // Should include dependencies from both entry points
-    expect(dependencyNames.some(name => name.endsWith("config.json"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("config.json"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
 
     // Should not include entry points themselves
-    expect(dependencyNames.some(name => name === "index.ts")).toBe(false);
-    expect(dependencyNames.some(name => name === "withJson.ts")).toBe(false);
+    expect(dependencyNames.some((name) => name === "index.ts")).toBe(false);
+    expect(dependencyNames.some((name) => name === "withJson.ts")).toBe(false);
   });
 
   it("should handle CommonJS require patterns", async () => {
@@ -263,10 +266,10 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("shared/deep.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/base.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/deep.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/base.ts"))).toBe(true);
   });
 
   it("should handle dynamic imports", async () => {
@@ -275,10 +278,10 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("dynamic.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("lazy/lazyModule.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("dynamic.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("lazy/lazyModule.ts"))).toBe(true);
   });
 
   it("should handle require.resolve calls", async () => {
@@ -287,10 +290,10 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("dynamic.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("dynamic.ts"))).toBe(true);
   });
 
   it("should handle TypeScript and JSX files", async () => {
@@ -308,11 +311,11 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("helpers/helperB.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/shared.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/base.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("helpers/helperB.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/base.ts"))).toBe(true);
   });
 
   it("should handle circular dependencies without infinite loops", async () => {
@@ -321,10 +324,10 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
     // Should include both files in the circular dependency
-    expect(dependencyNames.some(name => name.endsWith("circular/b.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("circular/b.ts"))).toBe(true);
 
     // Should not hang or crash
     expect(dependencies.length).toBeGreaterThanOrEqual(1);
@@ -357,9 +360,9 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
-    expect(dependencyNames.some(name => name.endsWith("config.json"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("config.json"))).toBe(true);
   });
 
   it("should deduplicate dependencies", async () => {
@@ -370,7 +373,7 @@ export { utilA } from "./utils/utilA"; // value export
     const dependencies = result[1] as string[];
 
     // shared/base.ts should appear only once even though it's imported by multiple files
-    const baseDeps = dependencies.filter(dep => dep.endsWith("shared/base.ts"));
+    const baseDeps = dependencies.filter((dep) => dep.endsWith("shared/base.ts"));
     expect(baseDeps).toHaveLength(1);
   });
 
@@ -380,20 +383,19 @@ export { utilA } from "./utils/utilA"; // value export
 
     expect(result[0]).toBeUndefined(); // no error
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
-
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
     // Should include local dependencies
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
 
     // Should NOT include external packages (node:crypto, zod, fs)
     // These would fail to resolve or resolve to node_modules, so they shouldn't appear
-    expect(dependencyNames.some(name => name.includes("node_modules"))).toBe(false);
-    expect(dependencyNames.some(name => name.includes("crypto"))).toBe(false);
-    expect(dependencyNames.some(name => name.includes("zod"))).toBe(false);
+    expect(dependencyNames.some((name) => name.includes("node_modules"))).toBe(false);
+    expect(dependencyNames.some((name) => name.includes("crypto"))).toBe(false);
+    expect(dependencyNames.some((name) => name.includes("zod"))).toBe(false);
 
     // Should include transitive local dependencies from the local import
-    expect(dependencyNames.some(name => name.endsWith("shared/shared.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(true);
   });
 
   it("should exclude a single file and its dependencies", async () => {
@@ -410,12 +412,12 @@ export { utilA } from "./utils/utilA"; // value export
     expect(resultWithExclude[0]).toBeUndefined();
     const depsWithExclude = resultWithExclude[1] as string[];
 
-    const depsWithoutExcludeNames = depsWithoutExclude.map(dep => path.relative(tempDir, dep));
-    const depsWithExcludeNames = depsWithExclude.map(dep => path.relative(tempDir, dep));
+    const depsWithoutExcludeNames = depsWithoutExclude.map((dep) => path.relative(tempDir, dep));
+    const depsWithExcludeNames = depsWithExclude.map((dep) => path.relative(tempDir, dep));
 
     // The excluded file should not be in the result
-    expect(depsWithExcludeNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(false);
-    expect(depsWithoutExcludeNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(depsWithExcludeNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(false);
+    expect(depsWithoutExcludeNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
 
     // Dependencies that utilA imports should also be excluded from the subtree
     // But they might still be included if imported by other files
@@ -426,21 +428,21 @@ export { utilA } from "./utils/utilA"; // value export
     const entryPoint = testFiles["index.ts"] as string;
     const excludeFiles = [
       testFiles["utils/utilA.ts"] as string,
-      testFiles["helpers/helperB.ts"] as string
+      testFiles["helpers/helperB.ts"] as string,
     ];
 
     const resultWithExclude = await getDependenciesMap(entryPoint, excludeFiles);
     expect(resultWithExclude[0]).toBeUndefined();
     const dependencies = resultWithExclude[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
     // Both excluded files should not be in the result
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(false);
-    expect(dependencyNames.some(name => name.endsWith("helpers/helperB.ts"))).toBe(false);
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(false);
+    expect(dependencyNames.some((name) => name.endsWith("helpers/helperB.ts"))).toBe(false);
 
     // But other files should still be included
-    expect(dependencyNames.some(name => name.endsWith("utils/defaultExport.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("helpers/index.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("utils/defaultExport.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("helpers/index.ts"))).toBe(true);
   });
 
   it("should exclude file that breaks dependency chain", async () => {
@@ -451,22 +453,22 @@ export { utilA } from "./utils/utilA"; // value export
     const resultWithoutExclude = await getDependenciesMap(entryPoint);
     expect(resultWithoutExclude[0]).toBeUndefined();
     const depsWithoutExclude = resultWithoutExclude[1] as string[];
-    const depsWithoutExcludeNames = depsWithoutExclude.map(dep => path.relative(tempDir, dep));
+    const depsWithoutExcludeNames = depsWithoutExclude.map((dep) => path.relative(tempDir, dep));
 
     // With exclude, should not include shared/shared.ts
     const resultWithExclude = await getDependenciesMap(entryPoint, excludeFile);
     expect(resultWithExclude[0]).toBeUndefined();
     const depsWithExclude = resultWithExclude[1] as string[];
-    const depsWithExcludeNames = depsWithExclude.map(dep => path.relative(tempDir, dep));
+    const depsWithExcludeNames = depsWithExclude.map((dep) => path.relative(tempDir, dep));
 
     // Verify the excluded file is not included
-    expect(depsWithoutExcludeNames.some(name => name.endsWith("shared/shared.ts"))).toBe(true);
-    expect(depsWithExcludeNames.some(name => name.endsWith("shared/shared.ts"))).toBe(false);
+    expect(depsWithoutExcludeNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(true);
+    expect(depsWithExcludeNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(false);
 
     // shared/base.ts might still be included through utilB -> shared/deep -> shared/base chain
     // But utilB should still be included since it's a side effect import
-    expect(depsWithExcludeNames.some(name => name.endsWith("utils/utilB.ts"))).toBe(true);
-    expect(depsWithExcludeNames.some(name => name.endsWith("shared/deep.ts"))).toBe(true);
+    expect(depsWithExcludeNames.some((name) => name.endsWith("utils/utilB.ts"))).toBe(true);
+    expect(depsWithExcludeNames.some((name) => name.endsWith("shared/deep.ts"))).toBe(true);
 
     // The result should have fewer dependencies
     expect(depsWithExclude.length).toBeLessThan(depsWithoutExclude.length);
@@ -513,8 +515,8 @@ export { utilA } from "./utils/utilA"; // value export
 
     // Should work normally since the non-existent file doesn't affect anything
     expect(dependencies.length).toBeGreaterThan(0);
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
-    expect(dependencyNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
+    expect(dependencyNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
   });
 
   it("should exclude type-only imports when skipTypeOnlyDependencies is true", async () => {
@@ -524,21 +526,20 @@ export { utilA } from "./utils/utilA"; // value export
     const resultWithTypes = await getDependenciesMap(entryPoint, [], false);
     expect(resultWithTypes[0]).toBeUndefined();
     const depsWithTypes = resultWithTypes[1] as string[];
-    const depsWithTypesNames = depsWithTypes.map(dep => path.relative(tempDir, dep));
 
     // With skipping type-only imports
     const resultWithoutTypes = await getDependenciesMap(entryPoint, [], true);
     expect(resultWithoutTypes[0]).toBeUndefined();
     const depsWithoutTypes = resultWithoutTypes[1] as string[];
-    const depsWithoutTypesNames = depsWithoutTypes.map(dep => path.relative(tempDir, dep));
+    const depsWithoutTypesNames = depsWithoutTypes.map((dep) => path.relative(tempDir, dep));
 
     // Should include value imports
-    expect(depsWithoutTypesNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
-    expect(depsWithoutTypesNames.some(name => name.endsWith("utils/utilB.ts"))).toBe(true);
-    expect(depsWithoutTypesNames.some(name => name.endsWith("components/Button.ts"))).toBe(true);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("utils/utilB.ts"))).toBe(true);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("components/Button.ts"))).toBe(true);
 
     // Should NOT include type-only imports when skipTypeOnlyDependencies is true
-    expect(depsWithoutTypesNames.some(name => name.endsWith("types/common.ts"))).toBe(false);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("types/common.ts"))).toBe(false);
 
     // Should have fewer dependencies when excluding type-only imports
     expect(depsWithoutTypes.length).toBeLessThanOrEqual(depsWithTypes.length);
@@ -551,20 +552,19 @@ export { utilA } from "./utils/utilA"; // value export
     const resultWithTypes = await getDependenciesMap(entryPoint, [], false);
     expect(resultWithTypes[0]).toBeUndefined();
     const depsWithTypes = resultWithTypes[1] as string[];
-    const depsWithTypesNames = depsWithTypes.map(dep => path.relative(tempDir, dep));
 
     // With skipping type-only imports
     const resultWithoutTypes = await getDependenciesMap(entryPoint, [], true);
     expect(resultWithoutTypes[0]).toBeUndefined();
     const depsWithoutTypes = resultWithoutTypes[1] as string[];
-    const depsWithoutTypesNames = depsWithoutTypes.map(dep => path.relative(tempDir, dep));
+    const depsWithoutTypesNames = depsWithoutTypes.map((dep) => path.relative(tempDir, dep));
 
     // Should include value exports
-    expect(depsWithoutTypesNames.some(name => name.endsWith("utils/utilA.ts"))).toBe(true);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("utils/utilA.ts"))).toBe(true);
 
     // Should NOT include type-only exports when skipTypeOnlyDependencies is true
-    expect(depsWithoutTypesNames.some(name => name.endsWith("types/common.ts"))).toBe(false);
-    expect(depsWithoutTypesNames.some(name => name.endsWith("components/Button.ts"))).toBe(false);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("types/common.ts"))).toBe(false);
+    expect(depsWithoutTypesNames.some((name) => name.endsWith("components/Button.ts"))).toBe(false);
 
     // Should have fewer dependencies when excluding type-only imports
     expect(depsWithoutTypes.length).toBeLessThan(depsWithTypes.length);
@@ -577,11 +577,11 @@ export { utilA } from "./utils/utilA"; // value export
     const result = await getDependenciesMap(entryPoint, [], true);
     expect(result[0]).toBeUndefined();
     const dependencies = result[1] as string[];
-    const dependencyNames = dependencies.map(dep => path.relative(tempDir, dep));
+    const dependencyNames = dependencies.map((dep) => path.relative(tempDir, dep));
 
     // Should include value imports (sharedFunction is a value import)
-    expect(dependencyNames.some(name => name.endsWith("shared/shared.ts"))).toBe(true);
-    expect(dependencyNames.some(name => name.endsWith("shared/base.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/shared.ts"))).toBe(true);
+    expect(dependencyNames.some((name) => name.endsWith("shared/base.ts"))).toBe(true);
 
     // Should NOT include react (type-only import)
     // React imports would fail to resolve anyway since it's external
