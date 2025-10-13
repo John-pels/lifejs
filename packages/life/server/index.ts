@@ -7,6 +7,7 @@ import chokidar, { type FSWatcher } from "chokidar";
 import { prepareAgentConfig } from "@/agent/server/config";
 import type { AgentScope } from "@/agent/server/types";
 import { importServerBuild } from "@/exports/build/server";
+import { type LifeError, lifeError } from "@/shared/error";
 import { ns } from "@/shared/nanoseconds";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
@@ -105,12 +106,10 @@ export class LifeServer {
 
   #stopStarted = false;
   async stop() {
-    return await this.telemetry.trace("stop()", async (span) => {
+    return await this.telemetry.trace("stop()", async () => {
       try {
         if (this.#stopStarted) return;
         this.#stopStarted = true;
-
-        span.log.info({ message: "Stopping server." });
 
         // Stop the API
         const [errApi] = await this.api.stop();
@@ -253,9 +252,9 @@ export class LifeServer {
 
               // Extract agent name from filename
               const agentName = basename(relPath, ".txt");
-
-              span.log.debug({
-                message: `Detected change in agent '${agentName}', restarting affected processes.`,
+              const formattedAgentName = chalk.bold.italic(agentName);
+              span.log.info({
+                message: `Detected change in agent '${formattedAgentName}', restarting affected processes...`,
                 attributes: { agentName, path: absPath },
               });
 
@@ -268,30 +267,21 @@ export class LifeServer {
               }
 
               if (processesToRestart.length === 0) {
-                span.log.debug({
-                  message: `No running processes found for agent '${agentName}'.`,
+                span.log.info({
+                  message: `No running processes found for agent '${formattedAgentName}'.`,
                   attributes: { agentName },
                 });
                 return;
               }
 
               // Restart affected processes in parallel and track timing
-              await Promise.all(
-                processesToRestart.map(async (process) => {
-                  span.log.debug({
-                    message: `Restarting process '${process.id}' for agent '${agentName}'.`,
-                    attributes: { processId: process.id, agentName },
-                  });
-                  await process.restart();
-                }),
-              );
+              await Promise.all(processesToRestart.map((p) => p.restart()));
 
               // Log operation with timing similar to compiler
               span.end();
               const instanceCount = processesToRestart.length;
-              const formattedName = chalk.bold.italic(agentName);
               this.telemetry.log.info({
-                message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
+                message: `Restarted ${instanceCount} instance${instanceCount > 1 ? "s" : ""} of agent '${formattedAgentName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
                 attributes: { agentName, instanceCount },
               });
             } catch (error) {
@@ -441,6 +431,19 @@ export class LifeServer {
     },
   };
 
+  #createProcessErrorHint(initialError: LifeError, id: string, name: string, message: string) {
+    const formattedName = chalk.bold(
+      `${chalk.italic(name)} (${id.replace("agent_", "").slice(0, 6)})`,
+    );
+    const hint = `${message}. See agent ${formattedName} logs for more details.`;
+    const hintError = lifeError({
+      code: initialError.code,
+      message: hint,
+    });
+    hintError.stack = undefined;
+    return hintError;
+  }
+
   agent = {
     //
     create: async ({ id, name }: { id?: string; name: string }) => {
@@ -532,15 +535,16 @@ export class LifeServer {
             scope,
             transportRoom: { name: roomName, token: agentToken },
           });
-          if (errStart) return op.failure(errStart);
 
-          // Log operation with timing
-          span.end();
-          const formattedName = chalk.bold.italic(process.definition.name);
-          this.telemetry.log.info({
-            message: `Started instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.definition.name },
-          });
+          if (errStart) {
+            const hintError = this.#createProcessErrorHint(
+              errStart,
+              process.id,
+              process.definition.name,
+              "Error while starting agent process",
+            );
+            return op.failure(hintError);
+          }
 
           return op.success({
             sessionToken: process.sessionToken,
@@ -573,18 +577,18 @@ export class LifeServer {
 
           // Stop the process
           const [errStop] = await process.stop();
-          if (errStop) return op.failure(errStop);
+          if (errStop) {
+            const hintError = this.#createProcessErrorHint(
+              errStop,
+              process.id,
+              process.definition.name,
+              "Error while stopping agent process",
+            );
+            return op.failure(hintError);
+          }
 
           // Remove the process from the map
           this.agentProcesses.delete(process.id);
-
-          // Log operation with timing
-          span.end();
-          const formattedName = chalk.bold.italic(process.definition.name);
-          this.telemetry.log.info({
-            message: `Stopped instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.definition.name },
-          });
 
           return op.success();
         } catch (error) {
@@ -614,15 +618,15 @@ export class LifeServer {
 
           // Restart the process
           const [errRestart] = await process.restart();
-          if (errRestart) return op.failure(errRestart);
-
-          // Log operation with timing
-          span.end();
-          const formattedName = chalk.bold.italic(process.definition.name);
-          this.telemetry.log.info({
-            message: `Restarted instance of '${formattedName}' in ${chalk.bold(`${ns.toMs(span.getData().duration)}ms`)}.`,
-            attributes: { id, agentName: process.definition.name },
-          });
+          if (errRestart) {
+            const hintError = this.#createProcessErrorHint(
+              errRestart,
+              process.id,
+              process.definition.name,
+              "Error while restarting agent process",
+            );
+            return op.failure(hintError);
+          }
 
           return op.success();
         } catch (error) {
@@ -650,7 +654,15 @@ export class LifeServer {
 
           // Ping the process
           const [errPing] = await process.ping();
-          if (errPing) return op.failure(errPing);
+          if (errPing) {
+            const hintError = this.#createProcessErrorHint(
+              errPing,
+              process.id,
+              process.definition.name,
+              "Error while pinging agent process",
+            );
+            return op.failure(hintError);
+          }
 
           return op.success("pong");
         } catch (error) {
@@ -678,7 +690,15 @@ export class LifeServer {
 
           // Get the process stats
           const [errStats, stats] = await process.getProcessStats();
-          if (errStats) return op.failure(errStats);
+          if (errStats) {
+            const hintError = this.#createProcessErrorHint(
+              errStats,
+              process.id,
+              process.definition.name,
+              "Error while obtaining agent process stats",
+            );
+            return op.failure(hintError);
+          }
 
           return op.success({
             id,

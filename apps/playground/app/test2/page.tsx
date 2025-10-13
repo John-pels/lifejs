@@ -2,7 +2,7 @@
 
 import type { Message } from "life/client";
 import { useAgent, useAgentMessages, useAgentStatus } from "life/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const StatusIndicator = ({ label, active }: { label: string; active: boolean }) => (
   <div className="flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-2 text-xs">
@@ -18,30 +18,40 @@ export default function Page() {
   const messages = useAgentMessages(agent);
   const status = useAgentStatus(agent);
   const [inputValue, setInputValue] = useState("");
-
-  const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
-    await agent?.generation.interrupt({ reason: "New user message", author: "user" });
-    await agent?.generation.messages.create({ message: { role: "user", content } });
-    await agent?.generation.continue({});
-    setInputValue("");
-  };
+  const isStarted = status?.listening || status?.thinking || status?.speaking;
 
   const formatMessage = (message: Message) => {
     let content: string;
-
     if (message.role === "user" || message.role === "agent" || message.role === "system") {
       content = message.content;
     } else if (message.role === "tool-response") content = JSON.stringify(message);
     else content = "⚠️ Unknown";
-
     return { content, role: message.role };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    sendMessage(inputValue);
+    if (!inputValue.trim()) return;
+    await agent?.generation.interrupt({ reason: "New user message", author: "user" });
+    await agent?.generation.messages.create({ message: { role: "user", content: inputValue } });
+    await agent?.generation.continue({});
+    setInputValue("");
   };
+
+  const handleInterrupt = async () => {
+    await agent?.generation.interrupt({ reason: "User interrupted", author: "user" });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && (status?.thinking || status?.speaking)) {
+        e.preventDefault();
+        handleInterrupt();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [status?.thinking, status?.speaking, handleInterrupt]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[680px] flex-col px-6 py-10 font-sans">
@@ -53,14 +63,13 @@ export default function Page() {
             onClick={() => agent?.start({ userId: "456" })}
             type="button"
           >
-            Connect
+            Start&nbsp;&nbsp;<span className="text-gray-400 text-xs">▶</span>
           </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {/* <StatusIndicator active={!!agent?.isStarted} label="Started" /> */}
-          <StatusIndicator active={!!status?.listening} label="Listening" />
-          <StatusIndicator active={!!status?.thinking} label="Thinking" />
-          <StatusIndicator active={!!status?.speaking} label="Speaking" />
+          <div className="flex flex-wrap gap-2">
+            <StatusIndicator active={!!status?.listening} label="Listening" />
+            <StatusIndicator active={!!status?.thinking} label="Thinking" />
+            <StatusIndicator active={!!status?.speaking} label="Speaking" />
+          </div>
         </div>
       </div>
 
@@ -92,8 +101,9 @@ export default function Page() {
       <form className="flex items-center gap-3" onSubmit={handleSubmit}>
         <input
           className="flex-1 rounded-3xl border border-gray-200 bg-white px-4.5 py-3.5 text-sm outline-none transition-colors focus:border-black"
+          disabled={!isStarted}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Message..."
+          placeholder={isStarted ? "Message..." : "Agent not started."}
           type="text"
           value={inputValue}
         />
@@ -103,9 +113,22 @@ export default function Page() {
               ? "cursor-pointer opacity-100 hover:opacity-70"
               : "cursor-default opacity-30"
           }`}
+          disabled={!(inputValue.trim() && isStarted)}
           type="submit"
         >
           ↑
+        </button>
+        <button
+          className={`flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-transparent transition-opacity duration-200 ${
+            status?.thinking || status?.speaking
+              ? "cursor-pointer opacity-100 hover:opacity-70"
+              : "cursor-default opacity-30"
+          }`}
+          disabled={!(status?.thinking || status?.speaking)}
+          onClick={handleInterrupt}
+          type="button"
+        >
+          <div className="h-3.5 w-3.5 bg-black" />
         </button>
       </form>
     </div>

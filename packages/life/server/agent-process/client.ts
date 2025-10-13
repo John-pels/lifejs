@@ -12,6 +12,7 @@ import { isLifeError, lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { newId } from "@/shared/prefixed-id";
 import type { TelemetryClient } from "@/telemetry/clients/base";
+import { createTelemetryClient } from "@/telemetry/clients/node";
 import type { LifeServer } from "..";
 import type { ChildMethods, ParentMethods } from "./types";
 
@@ -62,9 +63,10 @@ export class AgentProcessClient {
     this.#server = server;
 
     // Initialize telemetry client with scope "server.agentProcess"
-    this.#telemetry = server.telemetry;
+    this.#telemetry = createTelemetryClient("agent.process", { agentId: this.id });
   }
 
+  // Wrapper function, to log errors to telemetry
   async start({
     scope,
     transportRoom,
@@ -72,7 +74,22 @@ export class AgentProcessClient {
     scope: AgentScope;
     transportRoom: { name: string; token: string };
   }) {
-    return await this.#telemetry.trace("AgentProcess.start()", async (span) => {
+    const [error, result] = await this._start({ scope, transportRoom });
+    if (error) {
+      this.#telemetry.log.error({ message: "Failed to start agent process.", error });
+      return op.failure(error);
+    }
+    return op.success(result);
+  }
+
+  async _start({
+    scope,
+    transportRoom,
+  }: {
+    scope: AgentScope;
+    transportRoom: { name: string; token: string };
+  }) {
+    return await this.#telemetry.trace("AgentProcessClient.start()", async (span) => {
       span.setAttributes({ agentId: this.id });
 
       try {
@@ -272,7 +289,16 @@ export class AgentProcessClient {
   }
 
   async stop() {
-    return await this.#telemetry.trace("AgentProcess.stop()", async (span) => {
+    const [error, result] = await this._stop();
+    if (error) {
+      this.#telemetry.log.error({ message: "Failed to stop agent process.", error });
+      return op.failure(error);
+    }
+    return op.success(result);
+  }
+
+  async _stop() {
+    return await this.#telemetry.trace("AgentProcessClient.stop()", async (span) => {
       span.setAttributes({ agentId: this.id });
 
       try {
@@ -340,7 +366,16 @@ export class AgentProcessClient {
   }
 
   async restart() {
-    return await this.#telemetry.trace("AgentProcess.restart()", async (span) => {
+    const [error, result] = await this._restart();
+    if (error) {
+      this.#telemetry.log.error({ message: "Failed to restart agent process.", error });
+      return op.failure(error);
+    }
+    return op.success(result);
+  }
+
+  async _restart() {
+    return await this.#telemetry.trace("AgentProcessClient.restart()", async (span) => {
       span.setAttributes({ agentId: this.id });
 
       try {
@@ -444,6 +479,15 @@ export class AgentProcessClient {
   }
 
   async getProcessStats() {
+    const [error, result] = await this._getProcessStats();
+    if (error) {
+      this.#telemetry.log.error({ message: "Failed to get agent process stats.", error });
+      return op.failure(error);
+    }
+    return op.success(result);
+  }
+
+  async _getProcessStats() {
     if (!this.#process || this.status !== "running")
       return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
     try {
@@ -456,6 +500,15 @@ export class AgentProcessClient {
   }
 
   async ping() {
+    const [error, result] = await this._ping();
+    if (error) {
+      this.#telemetry.log.error({ message: "Failed to ping agent process.", error });
+      return op.failure(error);
+    }
+    return op.success(result);
+  }
+
+  async _ping() {
     try {
       if (!this.#process || this.status !== "running")
         return op.failure({ code: "Validation", message: "Agent is not running.", isPublic: true });
