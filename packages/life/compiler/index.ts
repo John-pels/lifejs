@@ -215,10 +215,9 @@ export class LifeCompiler {
     if (errDistDir) return op.failure(errDistDir);
 
     // Get all files in the dist directory recursively
-    const { glob } = await import("glob");
-    const distFiles = await glob("**/*", {
+    const distFiles = globbySync("**/*", {
       cwd: distDir,
-      nodir: true,
+      onlyFiles: true,
       absolute: false,
     });
 

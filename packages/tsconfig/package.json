@@ -1,7 +1,0 @@
-{
-  "name": "@life/tsconfig",
-  "private": true,
-  "publishConfig": {
-    "access": "restricted"
-  }
-}
