@@ -347,8 +347,8 @@ export class LifeServer {
 
   server = {
     //
-    available: async () => {
-      return await this.telemetry.trace("server.available()", async () => {
+    available: async () =>
+      await this.telemetry.trace("server.available()", async () => {
         try {
           const [errIndex, buildIndex] = await importServerBuild({
             projectDirectory: this.options.projectDirectory,
@@ -366,8 +366,7 @@ export class LifeServer {
         } catch (error) {
           return op.failure({ code: "Unknown", cause: error });
         }
-      });
-    },
+      }),
     //
     ping: () => {
       return this.telemetry.trace("server.ping()", () => {
@@ -391,8 +390,8 @@ export class LifeServer {
       });
     },
     //
-    processes: () => {
-      return this.telemetry.trace("server.processes()", () => {
+    processes: () =>
+      this.telemetry.trace("server.processes()", () => {
         try {
           return op.success(
             Array.from(this.agentProcesses.values()).map((process) => ({
@@ -405,11 +404,10 @@ export class LifeServer {
         } catch (error) {
           return op.failure({ code: "Unknown", cause: error });
         }
-      });
-    },
+      }),
     // info
-    info: () => {
-      return this.telemetry.trace("server.info()", () => {
+    info: () =>
+      this.telemetry.trace("server.info()", () => {
         try {
           const [errStats, stats] = this.#processStats.get();
           if (errStats) return op.failure(errStats);
@@ -427,8 +425,7 @@ export class LifeServer {
             cause: error,
           });
         }
-      });
-    },
+      }),
   };
 
   #createProcessErrorHint(initialError: LifeError, id: string, name: string, message: string) {

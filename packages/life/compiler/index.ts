@@ -803,15 +803,15 @@ export default {
 
           // 5. Generate agent client build content
           const pluginEntries = pluginNames
-            .map((pluginName) => {
-              return `    ${pluginName}: {
+            .map(
+              (pluginName) => `    ${pluginName}: {
         class: agentClient._definition.plugins["${pluginName}"].class<
         typeof agentClient._definition.$serverDef.pluginConfigs["${pluginName}"],
         typeof agentClient._definition.pluginConfigs["${pluginName}"]
       >(),
         definition: agentClient._definition.plugins["${pluginName}"]
-      }`;
-            })
+      }`,
+            )
             .join(",\n");
 
           const buildPath = path.join(this.options.outputDirectory, "client", `${name}.ts`);
@@ -902,12 +902,10 @@ ${pluginEntries}
       });
 
       // Helper function to receive watcher events
-      const onWatcherEventFn = (action: "added" | "removed" | "changed") => {
-        return (p: string) => {
-          const absPath = this.ensureAbsolute(p);
-          const type = this.getPathType(absPath);
-          this.processFileEvent({ action, absPath, type });
-        };
+      const onWatcherEventFn = (action: "added" | "removed" | "changed") => (p: string) => {
+        const absPath = this.ensureAbsolute(p);
+        const type = this.getPathType(absPath);
+        this.processFileEvent({ action, absPath, type });
       };
 
       this.watcher.on("add", onWatcherEventFn("added"));

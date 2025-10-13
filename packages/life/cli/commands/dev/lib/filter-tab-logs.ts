@@ -5,8 +5,8 @@ export const filterTabLogs = (
   logs: TelemetryLog[],
   selectedTab: string,
   logLevel: TelemetryLogLevel,
-) => {
-  return logs.filter((log) => {
+) =>
+  logs.filter((log) => {
     let logTab = "cli";
     if (log.scope === "server") logTab = "server";
     else if (log.scope === "compiler") logTab = "compiler";
@@ -21,4 +21,3 @@ export const filterTabLogs = (
     if (logTab !== selectedTab) return false;
     return logLevelPriority(log.level) >= logLevelPriority(logLevel);
   });
-};

@@ -128,9 +128,8 @@ export type SerializeResult = SuperJSONResult;
  * const payload = JSON.stringify(encoded);
  * ```
  */
-export const serialize = (value: SerializableValue | unknown) => {
-  return op.attempt(() => superjson.serialize(value));
-};
+export const serialize = (value: SerializableValue | unknown) =>
+  op.attempt(() => superjson.serialize(value));
 
 /**
  * canon.deserialize

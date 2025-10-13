@@ -67,11 +67,11 @@ export class LifeApi {
       }),
     );
 
-    this.app.get("/api", (c) => {
-      return c.text("Hello Life.", 200, {
+    this.app.get("/api", (c) =>
+      c.text("Hello Life.", 200, {
         "Content-Type": "application/json",
-      });
-    });
+      }),
+    );
 
     // Setup HTTP requests handler
     this.app.post("/api/http", async (c) => {

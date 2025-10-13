@@ -15,9 +15,7 @@ export const sileroVADConfig = createConfig({
   schema: z.object({
     provider: z.literal("silero"),
   }),
-  toTelemetryAttribute: (config) => {
-    return config;
-  },
+  toTelemetryAttribute: (config) => config,
 });
 
 // Model

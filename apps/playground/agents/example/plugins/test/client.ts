@@ -20,21 +20,19 @@ export const testPluginClient = definePluginClient<typeof testPlugin>("test")
       >() =>
         class Client extends Base {
           getItem(name: ServerConfig["items"][number]) {
-            this._definition.$serverDef.dependencies;
+            // this._definition.$serverDef.dependencies;
             return name;
           }
           getConnector(name: ClientConfig["connectors"][number]) {
             return name;
           }
           test() {
-            this.server.events.on("event1", (event) => {
-              event.type === "event1";
-              // @ts-expect-error
-              event.type === "event2";
+            this.server.events.on("event1", () => {
+              // event.type === "event1";
+              // // @ts-expect-error
+              // event.type === "event2";
             });
           }
         },
   )
-  .atoms(() => {
-    return {};
-  });
+  .atoms(() => ({}));

@@ -49,7 +49,9 @@ function deepmergeConstructor(options) {
     const targetKeys = getKeys(target);
     let i, il, key;
     for (i = 0, il = targetKeys.length; i < il; ++i) {
-      isNotPrototypeKey((key = targetKeys[i])) && (result[key] = clone(target[key]));
+      if (isNotPrototypeKey((key = targetKeys[i]))) {
+        result[key] = clone(target[key]);
+      }
     }
     return result;
   }
@@ -73,7 +75,9 @@ function deepmergeConstructor(options) {
     const result = Object.keys(value);
     const keys = Object.getOwnPropertySymbols(value);
     for (let i = 0, il = keys.length; i < il; ++i) {
-      propertyIsEnumerable.call(value, keys[i]) && result.push(keys[i]);
+      if (propertyIsEnumerable.call(value, keys[i])) {
+        result.push(keys[i]);
+      }
     }
     return result;
   }
@@ -113,9 +117,9 @@ function deepmergeConstructor(options) {
     const sourceKeys = getKeys(source);
     let i, il, key;
     for (i = 0, il = targetKeys.length; i < il; ++i) {
-      isNotPrototypeKey((key = targetKeys[i])) &&
-        sourceKeys.indexOf(key) === -1 &&
-        (result[key] = clone(target[key]));
+      if (isNotPrototypeKey((key = targetKeys[i])) && sourceKeys.indexOf(key) === -1) {
+        result[key] = clone(target[key]);
+      }
     }
 
     for (i = 0, il = sourceKeys.length; i < il; ++i) {

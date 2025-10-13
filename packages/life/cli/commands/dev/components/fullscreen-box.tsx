@@ -1,12 +1,12 @@
-import { Box, type DOMElement, useInput } from "ink";
-import { type ComponentPropsWithoutRef, type ComponentType, forwardRef } from "react";
+import { Box, useInput } from "ink";
+import type { ComponentProps, FC } from "react";
 import { useScreenSize } from "../hooks/use-screen-size";
 
-export type BoxProps = ComponentPropsWithoutRef<typeof Box>;
+export type BoxProps = ComponentProps<typeof Box>;
 
-export const FullScreenBox = forwardRef<DOMElement, BoxProps>((props, ref) => {
+export const FullScreenBox: FC<BoxProps> = (props) => {
   // biome-ignore lint/suspicious/noEmptyBlockStatements: reason
   useInput(() => {}); // prevent input from rendering and shifting the layout
   const { height, width } = useScreenSize();
-  return <Box height={height} ref={ref} width={width} {...props} />;
-}) as ComponentType<BoxProps>;
+  return <Box height={height} ref={props.ref} width={width} {...props} />;
+};

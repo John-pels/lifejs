@@ -7,7 +7,5 @@ export const agentClientConfig = createConfig({
     transport: transportBrowserConfig.schema.prefault({ provider: "livekit" }),
     experimental: z.object().prefault({}),
   }),
-  toTelemetryAttribute: (config) => {
-    return config;
-  },
+  toTelemetryAttribute: (config) => config,
 });

@@ -198,11 +198,13 @@ export class AgentServer {
       try {
         // Stop all plugins
         await Promise.all(
-          Object.entries(this.plugins).map(([pluginId, plugin]) => {
-            return plugin.stop().catch((error) => {
-              span.log.error({ message: `Error stopping plugin ${pluginId}:`, error });
-            });
-          }),
+          Object.entries(this.plugins).map(([pluginId, plugin]) =>
+            plugin
+              .stop()
+              .catch((error) =>
+                span.log.error({ message: `Error stopping plugin ${pluginId}:`, error }),
+              ),
+          ),
         );
 
         // Disconnect transport

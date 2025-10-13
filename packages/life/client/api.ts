@@ -147,8 +147,8 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
     handlerId: K,
     input?: InferInput<Def[K]>,
   ): Promise<op.OperationResult<undefined>> {
-    return this.#telemetry.trace("api.cast()", () => {
-      return op.attempt(async () => {
+    return this.#telemetry.trace("api.cast()", () =>
+      op.attempt(async () => {
         const ws = await this.ensureWebSocket();
         const [errCanon, body] = canon.stringify({
           type: "cast",
@@ -159,8 +159,8 @@ export class LifeServerApiClient<Def extends LifeApiDefinition = typeof definiti
         if (errCanon) return op.failure(errCanon);
         ws.send(body);
         return op.success(undefined);
-      });
-    });
+      }),
+    );
   }
 
   subscribe<K extends keyof StreamHandlers<Def>>(

@@ -208,9 +208,7 @@ export class InitTask {
     let [errLkInstall, lkInstall] = await this.step({
       name: "Checking LiveKit server installation...",
       progressAfter: 20,
-      run: async () => {
-        return op.success(await checkLivekitInstall());
-      },
+      run: async () => op.success(await checkLivekitInstall()),
     });
     if (errLkInstall) return op.failure(errLkInstall);
 

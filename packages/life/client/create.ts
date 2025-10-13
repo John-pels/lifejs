@@ -14,9 +14,8 @@ const getClientCache = (): ClientCache => {
 };
 
 // Helper to generate a cache key
-const getCacheKey = (options: LifeClientOptions): string => {
-  return `${options.serverUrl}::${options.serverToken ?? ""}`;
-};
+const getCacheKey = (options: LifeClientOptions): string =>
+  `${options.serverUrl}::${options.serverToken ?? ""}`;
 
 /**
  * Creates a new Life.js client instance, which is the main entry point

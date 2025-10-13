@@ -80,19 +80,13 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
       },
     },
     "server.ping": {
-      onCall: (_) => {
-        return op.success("pong");
-      },
+      onCall: (_) => op.success("pong"),
     },
     "server.available": {
-      onCall: ({ api }) => {
-        return api.server.server.available();
-      },
+      onCall: ({ api }) => api.server.server.available(),
     },
     "server.info": {
-      onCall: async ({ api }) => {
-        return await api.server.server.info();
-      },
+      onCall: async ({ api }) => await api.server.server.info(),
     },
     "agent.info-stream": {
       onStart: async ({ queue, api }) => {
@@ -140,9 +134,7 @@ export const getHandlers = (serverTelemetry: TelemetryClient) =>
       },
     },
     "server.processes": {
-      onCall: ({ api }) => {
-        return api.server.server.processes();
-      },
+      onCall: ({ api }) => api.server.server.processes(),
     },
 
     "server.processes-stream": {

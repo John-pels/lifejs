@@ -29,7 +29,7 @@ index 21400ae4cd98f2c6c4b2660b2c87a081bc7ecd5d..b95e3853b3582c7ca74210971c02fb2f
      Size of the gap between an element's columns.
      */
 diff --git a/build/styles.js b/build/styles.js
-index 12cdd64f8c88e583a77f9e902d226103e5d70203..bd271fc1bca0adb530be431c20e2853523476ec0 100644
+index 12cdd64f8c88e583a77f9e902d226103e5d70203..404ca877f6659630c50cf2522cd3a148f87c72da 100644
 --- a/build/styles.js
 +++ b/build/styles.js
 @@ -5,6 +5,18 @@ const applyPositionStyles = (node, style) => {
@@ -47,7 +47,7 @@ index 12cdd64f8c88e583a77f9e902d226103e5d70203..bd271fc1bca0adb530be431c20e28535
 +    }
 +    if ('right' in style) {
 +        node.setPosition(Yoga.EDGE_RIGHT, style.right ?? 0);
-+    }  
++    }
  };
  const applyMarginStyles = (node, style) => {
      if ('margin' in style) {

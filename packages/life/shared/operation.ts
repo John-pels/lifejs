@@ -372,14 +372,13 @@ const instanceToPublic = <Instance extends object>(instance: Instance) => {
  * @param InternalClass - The internal class to convert.
  * @returns The public class.
  */
-const classToPublic = <Class extends ClassShape>(InternalClass: Class): ClassToPublic<Class> => {
-  return new Proxy(InternalClass, {
+const classToPublic = <Class extends ClassShape>(InternalClass: Class): ClassToPublic<Class> =>
+  new Proxy(InternalClass, {
     construct(target, args) {
       const instance = new target(...args);
       return instanceToPublic(instance);
     },
   }) as ClassToPublic<Class>;
-};
 
 /**
  * Unified type that converts internal types (functions, instances, or classes)

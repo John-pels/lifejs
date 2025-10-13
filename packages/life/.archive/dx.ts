@@ -10,14 +10,12 @@ const newsStore = defineStore("news")
     schema: z.array(z.object({ title: z.string(), content: z.string() })),
     ttl: 1000 * 60,
   })
-  .retrieve(() => {
-    return [
-      {
-        title: "Hello, world!",
-        content: "This is a test",
-      },
-    ];
-  });
+  .retrieve(() => [
+    {
+      title: "Hello, world!",
+      content: "This is a test",
+    },
+  ]);
 
 // Example of freeform store
 const formStore = defineStore("form").config({

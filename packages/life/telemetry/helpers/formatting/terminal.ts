@@ -68,14 +68,11 @@ function formatErrorForTerminal(error: Error | unknown): string {
 
   // Format ESBuild errors
   else if (isEsbuildError(error)) {
-    const formatEsbuildMessage = (msg: PartialMessage) => {
-      return (
-        esbuild
-          .formatMessagesSync([msg], { kind: "error", color: true })?.[0]
-          ?.replace("\x1B[31m✘ \x1B[41;31m[\x1B[41;97mERROR\x1B[41;31m]\x1B[0m \x1B[1m", "")
-          ?.trim() ?? ""
-      );
-    };
+    const formatEsbuildMessage = (msg: PartialMessage) =>
+      esbuild
+        .formatMessagesSync([msg], { kind: "error", color: true })?.[0]
+        ?.replace("\x1B[31m✘ \x1B[41;31m[\x1B[41;97mERROR\x1B[41;31m]\x1B[0m \x1B[1m", "")
+        ?.trim() ?? "";
     try {
       const esbuildError = error as BuildFailure;
       const formattedMessages = esbuildError.errors.map(formatEsbuildMessage);
