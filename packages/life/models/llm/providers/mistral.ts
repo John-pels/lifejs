@@ -165,7 +165,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
         return op.failure({
           code: "Upstream",
           message: "Failed to create stream",
-          error: errStream,
+          cause: errStream,
         });
       }
 
@@ -178,7 +178,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
       // Return the job immediately
       return op.success(job);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown",cause:error });
     }
   }
 
@@ -301,7 +301,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
         return op.failure({
           code: "Upstream",
           message: apiErr instanceof Error ? apiErr.message : "Failed to generate object",
-          error: apiErr,
+          cause: apiErr,
         });
       }
 
@@ -344,7 +344,7 @@ export class MistralLLM extends LLMBase<typeof mistralLLMConfig.schema> {
 
       return op.success(result.data);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown",cause:error });
     }
   }
 }

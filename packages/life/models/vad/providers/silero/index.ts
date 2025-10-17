@@ -137,7 +137,7 @@ export class SileroVAD extends VADBase<typeof sileroVADConfig.schema> {
       return op.failure({
         code: "Upstream",
         message: "ONNX inference failed",
-        error: inferenceErr,
+        cause: inferenceErr,
       });
     }
 

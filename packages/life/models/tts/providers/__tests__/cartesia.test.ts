@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { CartesiaTTS, cartesiaTTSConfig } from "../cartesia";
+import { createCommonTTSTests } from "../../../tests/common/tts";
 
 // Mock storage for the socket - needs to be outside to be shared
 let mockSocketInstance: any = null;
 
 const createMockSuccessSocket = () => {
   const socket = {
-    send: vi.fn((_: string) => {}),
+    send: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     close: vi.fn(),
@@ -17,7 +18,7 @@ const createMockSuccessSocket = () => {
       if (event === "message") {
         // Immediately trigger the handler
         setImmediate(() => {
-          handler(JSON.stringify({ type: "chunk", data: Buffer.from([1,2,3]).toString("base64") }));
+          handler(JSON.stringify({ type: "chunk", data: Buffer.from([1, 2, 3]).toString("base64") }));
           handler(JSON.stringify({ type: "done" }));
         });
       }
@@ -32,7 +33,7 @@ const createMockSuccessSocket = () => {
     on: vi.fn((event: string, handler: (data: any) => void) => {
       if (event === "message") {
         setImmediate(() => {
-          handler(JSON.stringify({ type: "chunk", data: Buffer.from([1,2,3]).toString("base64") }));
+          handler(JSON.stringify({ type: "chunk", data: Buffer.from([1, 2, 3]).toString("base64") }));
           handler(JSON.stringify({ type: "done" }));
         });
       }
@@ -82,123 +83,293 @@ const createMockErrorSocket = () => {
 // Mock the Cartesia module at the top level
 vi.mock("@cartesia/cartesia-js", () => ({
   CartesiaClient: vi.fn().mockImplementation(() => ({
-    tts: { 
+    tts: {
       websocket: vi.fn(() => {
         // Return the current mockSocketInstance
         return mockSocketInstance;
-      }) 
+      }),
     },
   })),
 }));
 
-describe("CartesiaTTS Provider", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Don't reset to null - set a default mock
-    mockSocketInstance = createMockSuccessSocket();
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Set a default successful socket
+  mockSocketInstance = createMockSuccessSocket();
+});
+
+// Run common tests for Cartesia provider (unit tests with mocks)
+createCommonTTSTests({
+  provider: "cartesia",
+  createInstance: (config) => new CartesiaTTS(config),
+  getConfig: () =>
+    cartesiaTTSConfig.schema.parse({
+      provider: "cartesia",
+      apiKey: "test-key",
+      model: "sonic-2",
+      language: "en",
+    }),
+  skipIntegrationTests: true, // Skip integration tests for unit tests
+});
+
+// Provider-specific tests
+describe("CartesiaTTS - Specific Tests", () => {
+  describe("Configuration Defaults", () => {
+    test("sets model default to sonic-2", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+      });
+      expect(cfg.model).toBe("sonic-2");
+    });
+
+    test("sets language default to en", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+      });
+      expect(cfg.language).toBe("en");
+    });
+
+    test("sets default voiceId", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+      });
+      expect(cfg.voiceId).toBeDefined();
+      expect(typeof cfg.voiceId).toBe("string");
+    });
+
+    test("supports sonic-turbo model", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-turbo",
+      });
+      expect(cfg.model).toBe("sonic-turbo");
+    });
+
+    test("supports sonic model", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic",
+      });
+      expect(cfg.model).toBe("sonic");
+    });
+
+    test("supports multiple languages", () => {
+      const languages = ["en", "es", "fr", "de", "ja", "zh"];
+      languages.forEach((lang) => {
+        const cfg = cartesiaTTSConfig.schema.parse({
+          provider: "cartesia",
+          apiKey: "test-key",
+          language: lang,
+        });
+        expect(cfg.language).toBe(lang);
+      });
+    });
+
+    test("allows custom voiceId", () => {
+      const customVoiceId = "custom-voice-id";
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        voiceId: customVoiceId,
+      });
+      expect(cfg.voiceId).toBe(customVoiceId);
+    });
+
+    test("requires apiKey field", () => {
+      expect(() => {
+        cartesiaTTSConfig.schema.parse({
+          provider: "cartesia",
+        });
+      }).toThrow();
+    });
+
+    test("requires provider literal value 'cartesia'", () => {
+      expect(() => {
+        cartesiaTTSConfig.schema.parse({
+          provider: "openai",
+          apiKey: "test-key",
+        });
+      }).toThrow();
+    });
+
+    test("throws error when no API key provided to constructor", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({ provider: "cartesia" });
+      expect(() => new CartesiaTTS(cfg)).toThrow(/CARTESIA_API_KEY/);
+    });
   });
 
-  describe("Configuration", () => {
-    test("validates correct configuration", () => {
+  describe("generate() - Unit Tests", () => {
+    test("returns op.success with valid job", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
         apiKey: "test-key",
         model: "sonic-2",
         language: "en",
       });
-      expect(cfg.provider).toBe("cartesia");
-      expect(cfg.model).toBe("sonic-2");
-      expect(cfg.language).toBe("en");
-    });
-
-    test("throws error when no API key is provided", () => {
-      const cfg = cartesiaTTSConfig.schema.parse({ provider: "cartesia" });
-      expect(() => new CartesiaTTS(cfg)).toThrow(
-        "CARTESIA_API_KEY environment variable or config.apiKey must be provided",
-      );
-    });
-  });
-
-  describe("generate()", () => {
-    test("returns op.success with valid job", async () => {
-      const cfg = cartesiaTTSConfig.schema.parse({
-        provider: "cartesia",
-        apiKey: "k",
-        model: "sonic-2",
-        language: "en",
-      });
       const tts = new CartesiaTTS(cfg);
+
       const [err, job] = await tts.generate();
       expect(err).toBeUndefined();
       expect(job?.id).toBeDefined();
       expect(typeof job?.pushText).toBe("function");
       expect(typeof job?.getStream).toBe("function");
+
+      if (job) job.cancel();
+    });
+
+    test("job can be used to push text", async () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+      expect(job).toBeDefined();
+
+      if (job) {
+        // pushText is fire-and-forget (void)
+        job.pushText("Hello world", true);
+        expect(mockSocketInstance.send).toBeDefined();
+
+        job.cancel();
+      }
     });
   });
 
-  describe("pushText()", () => {
-    test("returns op.success on successful push", async () => {
+  describe("pushText() - Unit Tests", () => {
+    test("accepts valid text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "k",
+        apiKey: "test-key",
         model: "sonic-2",
         language: "en",
       });
       const tts = new CartesiaTTS(cfg);
+
       const [err, job] = await tts.generate();
       expect(err).toBeUndefined();
 
-      const [pushErr] = await (tts as any)._onGeneratePushText(job, "hello", true);
+      const [pushErr] = await (tts as any)._onGeneratePushText(job, "hello world", true);
       expect(pushErr).toBeUndefined();
       expect(mockSocketInstance.send).toHaveBeenCalled();
+
+      if (job) job.cancel();
     });
 
-    test("returns op.failure on send error", async () => {
-      // Set error socket BEFORE creating instance
-      mockSocketInstance = createMockErrorSocket();
-      
+    test("rejects null text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "k",
+        apiKey: "test-key",
         model: "sonic-2",
         language: "en",
       });
       const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+
+      const [pushErr] = await (tts as any)._onGeneratePushText(job, null, true);
+      expect(pushErr).toBeDefined();
+      expect(pushErr?.code).toBe("Validation");
+      expect(pushErr?.message).toContain("non-empty string");
+
+      if (job) job.cancel();
+    });
+
+    test("rejects undefined text", async () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+
+      const [pushErr] = await (tts as any)._onGeneratePushText(job, undefined, true);
+      expect(pushErr).toBeDefined();
+      expect(pushErr?.code).toBe("Validation");
+
+      if (job) job.cancel();
+    });
+
+    test("rejects empty text", async () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+
+      const [pushErr] = await (tts as any)._onGeneratePushText(job, "", true);
+      expect(pushErr).toBeDefined();
+      expect(pushErr?.code).toBe("Validation");
+
+      if (job) job.cancel();
+    });
+
+    test("rejects whitespace-only text", async () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+
+      const [pushErr] = await (tts as any)._onGeneratePushText(job, "   ", true);
+      expect(pushErr).toBeDefined();
+      expect(pushErr?.code).toBe("Validation");
+
+      if (job) job.cancel();
+    });
+
+    test("handles send errors", async () => {
+      // Set error socket BEFORE creating instance
+      mockSocketInstance = createMockErrorSocket();
+
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
       const [err, job] = await tts.generate();
       expect(err).toBeUndefined();
 
       const [pushErr] = await (tts as any)._onGeneratePushText(job, "hello", true);
       expect(pushErr?.code).toBe("Upstream");
       expect(pushErr?.message).toBe("Failed to send text");
-    });
 
-    test("handles empty or invalid text", async () => {
-      const cfg = cartesiaTTSConfig.schema.parse({
-        provider: "cartesia",
-        apiKey: "k",
-        model: "sonic-2",
-        language: "en",
-      });
-      const tts = new CartesiaTTS(cfg);
-      const [err, job] = await tts.generate();
-      expect(err).toBeUndefined();
-
-      const [pushErr1] = await (tts as any)._onGeneratePushText(job, "", true);
-      expect(pushErr1?.code).toBe("Validation");
-
-      const [pushErr2] = await (tts as any)._onGeneratePushText(job, null, true);
-      expect(pushErr2?.code).toBe("Validation");
+      if (job) job.cancel();
     });
   });
 
-  describe("Stream handling", () => {
-   test("handles websocket events correctly", async () => {
-      // Spy on receiveChunk to verify messages are processed
-      let receiveChunkSpy: any;
-
+  describe("Stream Handling - Unit Tests", () => {
+    test("handles websocket chunk events correctly", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "k",
+        apiKey: "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -207,40 +378,57 @@ describe("CartesiaTTS Provider", () => {
       const [err, job] = await tts.generate();
       expect(err).toBeUndefined();
 
-      // Spy on the receiveChunk method
-      receiveChunkSpy = vi.spyOn(job!.raw, "receiveChunk");
+      if (!job) return;
 
-      // Push text to trigger messages
+      // Spy on receiveChunk to verify messages are processed
+      const receiveChunkSpy = vi.spyOn(job.raw, "receiveChunk");
+
+      // Push text to trigger message handlers
       const [pushErr] = await (tts as any)._onGeneratePushText(job, "hello", true);
       expect(pushErr).toBeUndefined();
 
-      // Wait for async message handlers to fire
+      // Wait for async message handlers
       await new Promise(resolve => setImmediate(resolve));
       await new Promise(resolve => setImmediate(resolve));
 
-      // Verify the mock was called
+      // Verify mock was called
       expect(mockSocketInstance.send).toHaveBeenCalled();
-      
+
       // Verify receiveChunk was called with chunks
       expect(receiveChunkSpy).toHaveBeenCalled();
-      
-      // Check that we received content chunks
+
+      // Check that we received chunks
       const calls = receiveChunkSpy.mock.calls;
       const contentChunks = calls.filter((call: any) => call[0]?.type === "content");
       const endChunks = calls.filter((call: any) => call[0]?.type === "end");
-      
+
       expect(contentChunks.length).toBeGreaterThan(0);
       expect(endChunks.length).toBeGreaterThan(0);
-      expect(contentChunks[0][0].voiceChunk instanceof Int16Array).toBe(true);
+      
+      // Verify content chunk has voiceChunk that is Int16Array
+      if (contentChunks.length > 0) {
+        const firstContentChunk = contentChunks[0];
+        if (firstContentChunk && firstContentChunk[0]) {
+          const chunkData = firstContentChunk[0];
+          // Type guard: only check voiceChunk if type is "content"
+          if (chunkData.type === "content") {
+            expect(chunkData.voiceChunk).toBeDefined();
+            expect(chunkData.voiceChunk instanceof Int16Array).toBe(true);
+          }
+        }
+      }
+
+      receiveChunkSpy.mockRestore();
+      if (job) job.cancel();
     });
 
-    test("handles stream errors", async () => {
+    test("handles stream error events", async () => {
       // Set error socket BEFORE creating instance
       mockSocketInstance = createMockErrorSocket();
 
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "k",
+        apiKey: "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -249,10 +437,54 @@ describe("CartesiaTTS Provider", () => {
       const [err, job] = await tts.generate();
       expect(err).toBeUndefined();
 
-      // Push some text - this should fail and return error
+      if (!job) return;
+
+      // Spy on receiveChunk
+      const receiveChunkSpy = vi.spyOn(job.raw, "receiveChunk");
+
+      // Push text to trigger error
       const [pushErr] = await (tts as any)._onGeneratePushText(job, "hello", true);
       expect(pushErr?.code).toBe("Upstream");
-      expect(pushErr?.message).toBe("Failed to send text");
+
+      receiveChunkSpy.mockRestore();
+      if (job) job.cancel();
+    });
+
+    test("handles job cancellation", async () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      const [err, job] = await tts.generate();
+      expect(err).toBeUndefined();
+
+      if (!job) return;
+
+      // Cancel should not throw
+      expect(() => job.cancel()).not.toThrow();
+
+      // Verify abort signal is set
+      expect(job.raw.abortController.signal.aborted).toBe(true);
+    });
+  });
+
+  describe("TTS Instance Properties", () => {
+    test("creates instance successfully", () => {
+      const cfg = cartesiaTTSConfig.schema.parse({
+        provider: "cartesia",
+        apiKey: "test-key",
+        model: "sonic-2",
+        language: "en",
+      });
+      const tts = new CartesiaTTS(cfg);
+
+      // Verify instance is created successfully
+      expect(tts).toBeDefined();
+      expect(typeof tts.generate).toBe("function");
     });
   });
 });

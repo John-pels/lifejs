@@ -178,7 +178,7 @@ export class LivekitEOU extends EOUBase<typeof livekitEOUConfig.schema> {
       return op.success(Number(eouProbability));
     });
 
-    if (err) return op.failure({code:'Upstream', message: 'Livekit EOU error', error: err});
+    if (err) return op.failure({code:'Upstream', message: 'Livekit EOU error',cause:err});
     return op.success(prob);
   }
 }

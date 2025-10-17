@@ -47,7 +47,7 @@ export abstract class LLMBase<ConfigSchema extends z.ZodObject> {
       };
       return op.success(job);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown" });
     }
   }
 

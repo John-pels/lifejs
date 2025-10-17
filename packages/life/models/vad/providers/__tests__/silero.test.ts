@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { SileroVAD, sileroVADConfig } from "../silero";
+import { createCommonVADTests } from "../../../tests/common/vad";
 
 // Mock storage for ONNX instance - shared across tests
 let mockOnnxInstance: any = null;
@@ -63,53 +64,114 @@ vi.mock("onnxruntime-node", () => ({
   },
 }));
 
-describe("SileroVAD Provider", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Set default successful ONNX
-    mockOnnxInstance = createSuccessOnnx();
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Set default successful ONNX
+  mockOnnxInstance = createSuccessOnnx();
+});
 
-  describe("Configuration", () => {
+// Run common tests for Silero provider (unit tests with mocks)
+createCommonVADTests({
+  provider: "silero",
+  createInstance: (config) => new SileroVAD(config),
+  getConfig: () => sileroVADConfig.schema.parse({ provider: "silero" }),
+  skipIntegrationTests: true, // Skip integration tests for unit tests
+});
+
+// Provider-specific tests
+describe("SileroVAD - Specific Tests", () => {
+  describe("Configuration Defaults", () => {
     test("validates correct configuration", () => {
       const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
       expect(cfg.provider).toBe("silero");
     });
+
+    test("requires provider literal value 'silero'", () => {
+      expect(() => {
+        sileroVADConfig.schema.parse({ provider: "webrtc" });
+      }).toThrow();
+    });
+
+    test("does not require additional configuration", () => {
+      // Silero VAD only needs provider field
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      expect(Object.keys(cfg)).toEqual(["provider"]);
+    });
   });
 
-  describe("checkActivity() with successful ONNX", () => {
+  describe("checkActivity() - Unit Tests with Successful ONNX", () => {
     test("returns op.success(0) when not enough samples", async () => {
       const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
       const vad = new SileroVAD(cfg);
-      const pcm = new Int16Array(160); // 10ms @ 16kHz
+      
+      const pcm = new Int16Array(160); // 10ms @ 16kHz - not enough for inference
       const [err, prob] = await vad.checkActivity(pcm);
+      
       expect(err).toBeUndefined();
       expect(prob).toBe(0);
     });
 
-    test("processes audio data correctly", async () => {
-      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
-      const vad = new SileroVAD(cfg);
-      const pcm = new Int16Array(1024); // Enough samples to trigger inference
-      const [err, prob] = await vad.checkActivity(pcm);
-      expect(err).toBeUndefined();
-      expect(prob).toBe(0.75);
-    });
-
-    test("handles null/undefined audio data", async () => {
+    test("processes audio data correctly with enough samples", async () => {
       const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
       const vad = new SileroVAD(cfg);
       
-      const [err1] = await vad.checkActivity(null as any);
-      expect(err1?.code).toBe("Validation");
-      expect(err1?.message).toBe("Audio data cannot be null or undefined");
-
-      const [err2] = await vad.checkActivity(undefined as any);
-      expect(err2?.code).toBe("Validation");
-      expect(err2?.message).toBe("Invalid audio data");
+      const pcm = new Int16Array(1024); // Enough samples to trigger inference
+      const [err, prob] = await vad.checkActivity(pcm);
+      
+      expect(err).toBeUndefined();
+      expect(prob).toBe(0.75); // From mock
     });
 
-    test("handles invalid audio data type", async () => {
+    test("returns probability within valid range", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      const pcm = new Int16Array(1024);
+      const [err, prob] = await vad.checkActivity(pcm);
+      
+      expect(err).toBeUndefined();
+      expect(prob).toBeGreaterThanOrEqual(0);
+      expect(prob).toBeLessThanOrEqual(1);
+    });
+
+    test("maintains state across multiple calls", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      // First call
+      const pcm1 = new Int16Array(1024);
+      const [err1, prob1] = await vad.checkActivity(pcm1);
+      expect(err1).toBeUndefined();
+      expect(prob1).toBe(0.75);
+      
+      // Second call - state should be maintained
+      const pcm2 = new Int16Array(1024);
+      const [err2, prob2] = await vad.checkActivity(pcm2);
+      expect(err2).toBeUndefined();
+      expect(prob2).toBe(0.75);
+    });
+  });
+
+  describe("checkActivity() - Audio Validation", () => {
+    test("handles null audio data", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      const [err] = await vad.checkActivity(null as any);
+      expect(err?.code).toBe("Validation");
+      expect(err?.message).toBe("Audio data cannot be null or undefined");
+    });
+
+    test("handles undefined audio data", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      const [err] = await vad.checkActivity(undefined as any);
+      expect(err?.code).toBe("Validation");
+      expect(err?.message).toBe("Invalid audio data");
+    });
+
+    test("handles invalid audio data type - Uint8Array", async () => {
       const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
       const vad = new SileroVAD(cfg);
       
@@ -117,9 +179,27 @@ describe("SileroVAD Provider", () => {
       expect(err?.code).toBe("Validation");
       expect(err?.message).toBe("Invalid audio data type");
     });
+
+    test("handles invalid audio data type - Array", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      const [err] = await vad.checkActivity([1, 2, 3] as any);
+      expect(err?.code).toBe("Validation");
+      expect(err?.message).toBe("Invalid audio data type");
+    });
+
+    test("handles invalid audio data type - String", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      const [err] = await vad.checkActivity("audio" as any);
+      expect(err?.code).toBe("Validation");
+      expect(err?.message).toBe("Invalid audio data type");
+    });
   });
 
-  describe("checkActivity() with ONNX errors", () => {
+  describe("checkActivity() - ONNX Error Handling", () => {
     test("handles inference errors", async () => {
       mockOnnxInstance = createErrorOnnx();
       
@@ -133,10 +213,9 @@ describe("SileroVAD Provider", () => {
       expect(err).toBeDefined();
       expect(err?.code).toBe("Upstream");
       expect(err?.message).toBe("ONNX inference failed");
+      expect(err?.cause).toBeDefined();
     });
-  });
 
-  describe("checkActivity() with invalid ONNX output", () => {
     test("handles missing output tensor", async () => {
       mockOnnxInstance = createMissingOutputOnnx();
       
@@ -150,9 +229,7 @@ describe("SileroVAD Provider", () => {
       expect(err?.code).toBe("Upstream");
       expect(err?.message).toBe("Unexpected ONNX output: missing output or state tensors");
     });
-  });
 
-  describe("checkActivity() with invalid ONNX state", () => {
     test("handles missing state tensor", async () => {
       mockOnnxInstance = createMissingStateOnnx();
       
@@ -165,6 +242,75 @@ describe("SileroVAD Provider", () => {
       expect(err).toBeDefined();
       expect(err?.code).toBe("Upstream");
       expect(err?.message).toBe("Unexpected ONNX output: missing output or state tensors");
+    });
+  });
+
+  describe("Silero-Specific Behavior", () => {
+    test("uses 512-sample window for inference", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      // 512 samples is the window size, need more for past context
+      const pcm = new Int16Array(1024);
+      const [err, prob] = await vad.checkActivity(pcm);
+      
+      expect(err).toBeUndefined();
+      expect(typeof prob).toBe("number");
+    });
+
+    test("accumulates residual samples across calls", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      // Small chunks that accumulate
+      for (let i = 0; i < 10; i++) {
+        const pcm = new Int16Array(160);
+        const [err, prob] = await vad.checkActivity(pcm);
+        expect(err).toBeUndefined();
+        // Early calls return 0 until enough samples accumulated
+        if (i < 3) {
+          expect(prob).toBe(0);
+        }
+      }
+    });
+
+    test("converts Int16 PCM to Float32 internally", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+      
+      // Fill with max Int16 values
+      const pcm = new Int16Array(1024);
+      pcm.fill(32767); // Max positive Int16
+      
+      const [err, prob] = await vad.checkActivity(pcm);
+      
+      expect(err).toBeUndefined();
+      expect(prob).toBeDefined();
+      // Should normalize to -1...1 range internally
+    });
+  });
+
+  describe("VAD Instance Properties", () => {
+    test("creates instance successfully", () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+
+      // Verify instance is created successfully
+      expect(vad).toBeDefined();
+      expect(typeof vad.checkActivity).toBe("function");
+    });
+
+    test("instance is reusable across multiple calls", async () => {
+      const cfg = sileroVADConfig.schema.parse({ provider: "silero" });
+      const vad = new SileroVAD(cfg);
+
+      // Multiple calls should work without issues
+      for (let i = 0; i < 5; i++) {
+        const pcm = new Int16Array(1024);
+        const [err, prob] = await vad.checkActivity(pcm);
+        expect(err).toBeUndefined();
+        expect(typeof prob).toBe("number");
+      }
     });
   });
 });

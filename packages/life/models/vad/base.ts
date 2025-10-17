@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type * as op from "@/shared/operation";
 
-export abstract class VADBase<ConfigSchema extends z.ZodObject<any, any, any>> {
+export abstract class VADBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {

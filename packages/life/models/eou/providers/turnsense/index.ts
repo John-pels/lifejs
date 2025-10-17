@@ -183,7 +183,7 @@ export class TurnSenseEOU extends EOUBase<typeof turnSenseEOUConfig.schema> {
       return typeof eouProbability === "number" ? op.success(eouProbability) : op.success(0);
     });
 
-    if (err) return op.failure({code:'Upstream', message: 'TurnSense EOU error', error: err});
+    if (err) return op.failure({code:'Upstream', message: 'TurnSense EOU error',cause:err});
     return op.success(prob);
   }
 }

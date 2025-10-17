@@ -187,7 +187,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
       // Return the job immediately
       return op.success(job);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown",cause:error });
     }
   }
 
@@ -243,6 +243,7 @@ export class OpenAILLM extends LLMBase<typeof openAILLMConfig.schema> {
       return op.failure({
         code: "Upstream",
         message: error instanceof Error ? error.message : String(error),
+        cause: error,
       });
     }
   }

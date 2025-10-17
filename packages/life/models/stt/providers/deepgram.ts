@@ -118,7 +118,7 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
   }
 
   // biome-ignore lint/suspicious/useAwait: Need async to match STTBase abstract method
-  protected async _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array) {
+  protected async _onGeneratePushVoice(job: STTGenerateJob, pcm: Int16Array):Promise<op.OperationResult<void>> {
     // Validate audio data first
     if (!pcm || !(pcm instanceof Int16Array)) {
       return op.failure({
@@ -126,18 +126,15 @@ export class DeepgramSTT extends STTBase<typeof deepgramSTTConfig.schema> {
         message: "Invalid audio data",
       });
     }
-    // Use op.attempt() to wrap risky operation
-    const [sendErr] = op.attempt(() => {
+    try { 
       this.#jobsSockets.get(job.id)?.send(pcm.buffer);
-    });
-
-    if (sendErr) {
+      return op.success();
+    } catch (err) {
       return op.failure({
         code: "Upstream",
         message: "Failed to send audio",
-        error: sendErr,
+        cause: err,
       });
-    }
-    return op.success();
+    }    
   }
 }

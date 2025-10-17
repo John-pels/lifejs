@@ -552,10 +552,6 @@ export { utilA } from "./utils/utilA"; // value export
     const resultWithTypes = await getDependenciesMap(entryPoint, [], false);
     expect(resultWithTypes[0]).toBeUndefined();
     const depsWithTypes = resultWithTypes[1] as string[];
-<<<<<<< HEAD
-=======
-    const depsWithTypesNames = depsWithTypes.map((dep) => path.relative(tempDir, dep));
->>>>>>> f052a3a (refactor: refactor all models using the operation library)
 
     // With skipping type-only imports
     const resultWithoutTypes = await getDependenciesMap(entryPoint, [], true);

@@ -210,7 +210,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
       // Return the job immediately
       return op.success(job);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown" ,cause:error});
     }
   }
 
@@ -246,6 +246,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
         return op.failure({
           code: "Validation",
           message: `Failed to parse response as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+          cause: parseError,
         });
       }
 
@@ -263,7 +264,7 @@ export class XaiLLM extends LLMBase<typeof xaiLLMConfig.schema> {
 
       return op.success(result.data);
     } catch (error) {
-      return op.failure({ code: "Unknown", error });
+      return op.failure({ code: "Unknown",cause:error });
     }
   }
 }
