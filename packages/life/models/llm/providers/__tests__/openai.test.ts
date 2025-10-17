@@ -21,7 +21,7 @@ createCommonLLMTests({
   getConfig: () =>
     openAILLMConfig.schema.parse({
       provider: "openai",
-      apiKey: "test-key",
+      apiKey: process.env.OPENAI_API_KEY  || "test-key",
       model: "gpt-4o-mini",
     }),
   skipIntegrationTests: true, // Skip integration tests for unit tests
@@ -33,7 +33,7 @@ describe("OpenAILLM - Specific Tests", () => {
     test("sets model default to gpt-4o-mini", () => {
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       expect(cfg.model).toBe("gpt-4o-mini");
     });
@@ -41,7 +41,7 @@ describe("OpenAILLM - Specific Tests", () => {
     test("sets temperature default to 0.5", () => {
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       expect(cfg.temperature).toBe(0.5);
     });
@@ -51,7 +51,7 @@ describe("OpenAILLM - Specific Tests", () => {
       testValues.forEach((temp) => {
         const cfg = openAILLMConfig.schema.parse({
           provider: "openai",
-          apiKey: "test-key",
+          apiKey: process.env.OPENAI_API_KEY || "test-key",
           temperature: temp,
         });
         expect(cfg.temperature).toBe(temp);
@@ -63,7 +63,7 @@ describe("OpenAILLM - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = openAILLMConfig.schema.parse({
           provider: "openai",
-          apiKey: "test-key",
+          apiKey: process.env.OPENAI_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -82,7 +82,7 @@ describe("OpenAILLM - Specific Tests", () => {
       expect(() => {
         openAILLMConfig.schema.parse({
           provider: "mistral",
-          apiKey: "test-key",
+          apiKey: process.env.OPENAI_API_KEY || "test-key",
         });
       }).toThrow();
     });
@@ -107,7 +107,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
         model: "gpt-4o-mini",
       });
       const llm = new OpenAILLM(cfg);
@@ -142,7 +142,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       const llm = new OpenAILLM(cfg);
       const schema = z.object({ ok: z.boolean() });
@@ -171,7 +171,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       const llm = new OpenAILLM(cfg);
       const schema = z.object({ ok: z.boolean(), required: z.string() });
@@ -200,7 +200,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       const llm = new OpenAILLM(cfg);
       const schema = z.object({ ok: z.boolean() });
@@ -238,7 +238,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       const llm = new OpenAILLM(cfg);
       const schema = z.object({
@@ -280,7 +280,7 @@ describe("OpenAILLM - Specific Tests", () => {
 
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
       });
       const llm = new OpenAILLM(cfg);
 
@@ -299,7 +299,7 @@ describe("OpenAILLM - Specific Tests", () => {
     test("stores configuration on instance", () => {
       const cfg = openAILLMConfig.schema.parse({
         provider: "openai",
-        apiKey: "test-key",
+        apiKey: process.env.OPENAI_API_KEY || "test-key",
         model: "gpt-4o",
         temperature: 0.7,
       });

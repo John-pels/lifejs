@@ -72,7 +72,7 @@ createCommonSTTTests({
   getConfig: () =>
     deepgramSTTConfig.schema.parse({
       provider: "deepgram",
-      apiKey: "test-key",
+      apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
       model: "nova-2-general",
       language: "en",
     }),
@@ -85,7 +85,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("sets model default to nova-2-general", () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
       });
       expect(cfg.model).toBe("nova-2-general");
     });
@@ -93,7 +93,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("sets language default to en", () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
       });
       expect(cfg.language).toBe("en");
     });
@@ -101,7 +101,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("supports nova-3 model", () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-3",
       });
       expect(cfg.model).toBe("nova-3");
@@ -125,7 +125,7 @@ describe("DeepgramSTT - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = deepgramSTTConfig.schema.parse({
           provider: "deepgram",
-          apiKey: "test-key",
+          apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -154,7 +154,7 @@ describe("DeepgramSTT - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = deepgramSTTConfig.schema.parse({
           provider: "deepgram",
-          apiKey: "test-key",
+          apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -172,7 +172,7 @@ describe("DeepgramSTT - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = deepgramSTTConfig.schema.parse({
           provider: "deepgram",
-          apiKey: "test-key",
+          apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -184,7 +184,7 @@ describe("DeepgramSTT - Specific Tests", () => {
       languages.forEach((lang) => {
         const cfg = deepgramSTTConfig.schema.parse({
           provider: "deepgram",
-          apiKey: "test-key",
+          apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
           language: lang,
         });
         expect(cfg.language).toBe(lang);
@@ -203,7 +203,7 @@ describe("DeepgramSTT - Specific Tests", () => {
       expect(() => {
         deepgramSTTConfig.schema.parse({
           provider: "google",
-          apiKey: "test-key",
+          apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         });
       }).toThrow();
     });
@@ -220,7 +220,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("returns op.success with valid job", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -236,7 +236,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("job can be used to stream transcription", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -258,7 +258,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("passes correct configuration to Deepgram", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-3",
         language: "es",
       });
@@ -274,7 +274,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("sets up keepAlive interval for socket", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -290,7 +290,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("handles abort signal for job cancellation", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -313,7 +313,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("returns op.success on successful push", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -339,7 +339,7 @@ describe("DeepgramSTT - Specific Tests", () => {
 
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -362,7 +362,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("validates audio data - rejects null", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -381,7 +381,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("validates audio data - rejects undefined", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -400,7 +400,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("validates audio data - rejects non-Int16Array", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -419,7 +419,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("validates audio data - rejects object without instanceof check", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -440,7 +440,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("handles websocket Transcript events correctly", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -483,7 +483,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("ignores events with no alternatives", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -514,7 +514,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("handles empty transcript strings", async () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-2-general",
         language: "en",
       });
@@ -547,7 +547,7 @@ describe("DeepgramSTT - Specific Tests", () => {
     test("stores configuration on instance", () => {
       const cfg = deepgramSTTConfig.schema.parse({
         provider: "deepgram",
-        apiKey: "test-key",
+        apiKey: process.env.DEEPGRAM_API_KEY || "test-key",
         model: "nova-3",
         language: "es",
       });

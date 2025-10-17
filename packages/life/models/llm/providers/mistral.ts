@@ -29,11 +29,7 @@ type MistralMessage =
 export const mistralLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("mistral"),
-<<<<<<< HEAD
-    apiKey: z.string().prefault(process.env.MISTRAL_API_KEY as string),
-=======
     apiKey: z.string().default(process.env.MISTRAL_API_KEY ?? ""),
->>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "mistral-large-latest",

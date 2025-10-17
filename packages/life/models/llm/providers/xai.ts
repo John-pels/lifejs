@@ -9,11 +9,7 @@ import { LLMBase, type LLMGenerateMessageJob } from "../base";
 export const xaiLLMConfig = createConfig({
   schema: z.object({
     provider: z.literal("xai"),
-<<<<<<< HEAD
-    apiKey: z.string().prefault(process.env.XAI_API_KEY as string),
-=======
     apiKey: z.string().default(process.env.XAI_API_KEY ?? ""),
->>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "grok-3",

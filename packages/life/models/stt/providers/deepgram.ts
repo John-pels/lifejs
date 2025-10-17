@@ -13,11 +13,7 @@ import { STTBase, type STTGenerateJob } from "../base";
 export const deepgramSTTConfig = createConfig({
   schema: z.object({
     provider: z.literal("deepgram"),
-<<<<<<< HEAD
-    apiKey: z.string().prefault(process.env.DEEPGRAM_API_KEY as string),
-=======
     apiKey: z.string().default(process.env.DEEPGRAM_API_KEY ?? ""),
->>>>>>> f052a3a (refactor: refactor all models using the operation library)
     model: z
       .enum([
         "nova-3",

@@ -21,7 +21,7 @@ createCommonLLMTests({
   getConfig: () =>
     xaiLLMConfig.schema.parse({
       provider: "xai",
-      apiKey: "test-key",
+      apiKey: process.env.XAI_API_KEY || "test-key",
       model: "grok-3-mini",
     }),
   skipIntegrationTests: true, // Skip integration tests for unit tests
@@ -33,7 +33,7 @@ describe("XaiLLM - Specific Tests", () => {
     test("sets model default to grok-3-mini", () => {
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
       });
       expect(cfg.model).toBe("grok-3-mini");
     });
@@ -41,7 +41,7 @@ describe("XaiLLM - Specific Tests", () => {
     test("sets temperature default to 0.5", () => {
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
       });
       expect(cfg.temperature).toBe(0.5);
     });
@@ -51,7 +51,7 @@ describe("XaiLLM - Specific Tests", () => {
       testValues.forEach((temp) => {
         const cfg = xaiLLMConfig.schema.parse({
           provider: "xai",
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
           temperature: temp,
         });
         expect(cfg.temperature).toBe(temp);
@@ -63,7 +63,7 @@ describe("XaiLLM - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = xaiLLMConfig.schema.parse({
           provider: "xai",
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -75,7 +75,7 @@ describe("XaiLLM - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = xaiLLMConfig.schema.parse({
           provider: "xai",
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -87,7 +87,7 @@ describe("XaiLLM - Specific Tests", () => {
       models.forEach((model) => {
         const cfg = xaiLLMConfig.schema.parse({
           provider: "xai",
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
           model,
         });
         expect(cfg.model).toBe(model);
@@ -106,7 +106,7 @@ describe("XaiLLM - Specific Tests", () => {
       expect(() => {
         xaiLLMConfig.schema.parse({
           provider: "openai",
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
         });
       }).toThrow();
     });
@@ -127,13 +127,13 @@ describe("XaiLLM - Specific Tests", () => {
 
       new XaiLLM({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
 
       expect(mockImplementation).toHaveBeenCalledWith(
         expect.objectContaining({
-          apiKey: "test-key",
+          apiKey: process.env.XAI_API_KEY || "test-key",
           baseURL: "https://api.x.ai/v1",
         }),
       );
@@ -159,7 +159,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -188,7 +188,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -218,7 +218,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -248,7 +248,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -287,7 +287,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -324,7 +324,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -369,7 +369,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3-mini",
       });
       const llm = new XaiLLM(cfg);
@@ -390,7 +390,7 @@ describe("XaiLLM - Specific Tests", () => {
     test("stores configuration on instance", () => {
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
         model: "grok-3",
         temperature: 0.7,
       });
@@ -419,7 +419,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
       });
 
       new XaiLLM(cfg);
@@ -455,7 +455,7 @@ describe("XaiLLM - Specific Tests", () => {
 
       const cfg = xaiLLMConfig.schema.parse({
         provider: "xai",
-        apiKey: "test-key",
+        apiKey: process.env.XAI_API_KEY || "test-key",
       });
       const llm = new XaiLLM(cfg);
 

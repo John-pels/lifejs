@@ -105,7 +105,7 @@ createCommonTTSTests({
   getConfig: () =>
     cartesiaTTSConfig.schema.parse({
       provider: "cartesia",
-      apiKey: "test-key",
+      apiKey: process.env.CARTESIA_API_KEY || "test-key",
       model: "sonic-2",
       language: "en",
     }),
@@ -118,7 +118,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("sets model default to sonic-2", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY ||"test-key",
       });
       expect(cfg.model).toBe("sonic-2");
     });
@@ -126,7 +126,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("sets language default to en", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
       });
       expect(cfg.language).toBe("en");
     });
@@ -134,7 +134,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("sets default voiceId", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
       });
       expect(cfg.voiceId).toBeDefined();
       expect(typeof cfg.voiceId).toBe("string");
@@ -143,7 +143,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("supports sonic-turbo model", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-turbo",
       });
       expect(cfg.model).toBe("sonic-turbo");
@@ -152,7 +152,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("supports sonic model", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic",
       });
       expect(cfg.model).toBe("sonic");
@@ -163,7 +163,7 @@ describe("CartesiaTTS - Specific Tests", () => {
       languages.forEach((lang) => {
         const cfg = cartesiaTTSConfig.schema.parse({
           provider: "cartesia",
-          apiKey: "test-key",
+          apiKey: process.env.CARTESIA_API_KEY || "test-key",
           language: lang,
         });
         expect(cfg.language).toBe(lang);
@@ -174,7 +174,7 @@ describe("CartesiaTTS - Specific Tests", () => {
       const customVoiceId = "custom-voice-id";
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         voiceId: customVoiceId,
       });
       expect(cfg.voiceId).toBe(customVoiceId);
@@ -192,7 +192,7 @@ describe("CartesiaTTS - Specific Tests", () => {
       expect(() => {
         cartesiaTTSConfig.schema.parse({
           provider: "openai",
-          apiKey: "test-key",
+          apiKey: process.env.CARTESIA_API_KEY || "test-key",
         });
       }).toThrow();
     });
@@ -207,7 +207,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("returns op.success with valid job", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -225,7 +225,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("job can be used to push text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -249,7 +249,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("accepts valid text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -268,7 +268,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("rejects null text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -288,7 +288,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("rejects undefined text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -307,7 +307,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("rejects empty text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -326,7 +326,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("rejects whitespace-only text", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -348,7 +348,7 @@ describe("CartesiaTTS - Specific Tests", () => {
 
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -369,7 +369,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("handles websocket chunk events correctly", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -428,7 +428,7 @@ describe("CartesiaTTS - Specific Tests", () => {
 
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -453,7 +453,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("handles job cancellation", async () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
@@ -476,7 +476,7 @@ describe("CartesiaTTS - Specific Tests", () => {
     test("creates instance successfully", () => {
       const cfg = cartesiaTTSConfig.schema.parse({
         provider: "cartesia",
-        apiKey: "test-key",
+        apiKey: process.env.CARTESIA_API_KEY || "test-key",
         model: "sonic-2",
         language: "en",
       });
