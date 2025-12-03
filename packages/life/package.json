@@ -1,0 +1,49 @@
+{
+  "name": "life",
+  "version": "0.40.0",
+  "description": "The framework to build agents that speak, write, and touch. Minimal, extensible, and typesafe.",
+  "author": "Lila Rest",
+  "license": "MIT+Services",
+  "homepage": "https://lifejs.org",
+  "bugs": {
+    "url": "https://github.com/lifejs/lifejs/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lifejs/lifejs"
+  },
+  "files": [
+    "dist/",
+    "package.json",
+    "README.md",
+    "LICENSE",
+    "LICENSE.SERVICES"
+  ],
+  "keywords": [
+    "agents",
+    "framework",
+    "typescript",
+    "react",
+    "fullstack"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "types": "tsc --noEmit --emitDeclarationOnly false",
+    "test": "dotenv -e ../../.env -- vitest run",
+    "prepack": "cp ../../README.md README.md && cp ../../LICENSE LICENSE && cp ../../LICENSE.SERVICES LICENSE.SERVICES"
+  },
+  "bin": {
+    "life": "./dist/cli/index.mjs"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {},
+  "dependencies": {},
+  "devDependencies": {}
+}

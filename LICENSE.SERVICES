@@ -1,0 +1,22 @@
+Life.js is MIT-licensed unless you aim to be the “Vercel for Life.js”, which 
+we plan to pioneer to fund Life.js' long-term development. This is a temporary
+measure to protect early efforts; we'll then transition to a plain MIT license.
+
+The above summary is non-binding; refer to the below license.
+
+---
+
+Life Services License (LSL)
+
+Copyright (c) 2025 Alive Systems, Inc.
+
+All uses of Life.js and its derivatives (https://github.com/lifejs/lifejs) are
+covered by the MIT License, except when a provider operates or hosts Life.js
+projects for external third-party users over a network while simultaneously
+supplying any two or more of the following managed components: (1) AI models
+(model code, weights, runtime); (2) Life.js code execution; (3) network data
+transport services; and (4) agent's data storage. In such cases, the provider
+must obtain prior written approval from Alive Systems, Inc. By writing at 
+license@livejs.org. Services supplying only one component, any self- or 
+internal-only hosting, forks, distribution or sale of Life.js code or agents,
+and consulting or support work remain fully covered by the MIT License.

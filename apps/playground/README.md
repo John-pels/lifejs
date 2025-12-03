@@ -1,0 +1,1 @@
+This is a demo application, used by Life.js developers to run experiments with the latest features.

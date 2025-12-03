@@ -1,0 +1,15 @@
+{
+  "name": "@life/releases",
+  "private": true,
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "scripts": {
+    "build-formatter": "tsc"
+  },
+  "devDependencies": {
+    "@changesets/types": "^6.1.0",
+    "@octokit/rest": "^22.0.1",
+    "dotenv": "^17.2.3"
+  }
+}

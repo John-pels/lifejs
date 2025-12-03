@@ -1,0 +1,5 @@
+---
+"life": minor
+---
+
+Fresh start 🌱

@@ -1,0 +1,98 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "emmet.showExpandedAbbreviation": "never",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "files.exclude": {
+    "**/biome.json": false,
+    "**/.gitignore": false,
+    "**/.git": false,
+    "**/node_modules": false,
+    "**/bun.lock": false,
+    "**/tsconfig.json": false,
+    "**/README.md": false,
+    "**/package.json": false,
+    "**/tailwind.config.ts": false,
+    "**/.next": false,
+    "**/next-env.d.ts": false,
+    "**/next.config.ts": false,
+    "**/postcss.config.mjs": false,
+    "**/dist": false,
+    "**/.cursorrules": false,
+    "**/CHANGELOG.md": false,
+    "**/.vscode": false,
+    "**/favicon.ico": false,
+    "**/apple-icon.png": false,
+    "**/not-found.tsx": false,
+    "**/public": false,
+    "**/.turbo": false,
+    "**/tsconfig.tsbuildinfo": false,
+    "**/turbo.json": false,
+    "**/scripts": false,
+    "**/tsconfig*": false,
+    "**/.github": false,
+    "**/.changeset": false,
+    "**/banner.png": false,
+    "**/logo.png": false,
+    "**/tsup.config.ts": false,
+    "**/.cursor": false,
+    "**/patches": false,
+    "**/.source": false,
+    "**/mdx-components.tsx": false,
+    "**/source.config.ts": false,
+    "**/global.css": false,
+    "**/.archive": false,
+    "**/LICENSE*": false,
+    "**/.env*": false,
+    "**/CONTRIBUTING.md": false,
+    "**/packages/releases": false,
+    "**/CLAUDE.md": false,
+    "**/.claude": false,
+    "**/AGENTS.md": false,
+    "**/vitest.config.ts": false
+  },
+  "tailwindCSS.experimental.classRegex": [
+    [
+      "cva\\(([^;]*)[\\);]",
+      "[`'\"`]([^'\"`;]*)[`'\"`]"
+    ],
+    [
+      "clsx\\(((?:[^()]|\\([^()]*\\))*)\\)",
+      "(?:'|\"|`)([^']*)(?:'|\"|`)"
+    ]
+  ],
+  "tailwindCSS.classAttributes": [
+    "class",
+    "className",
+    ".*Class(es)?"
+  ],
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[graphql]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}

@@ -1,0 +1,103 @@
+###############################################################################
+# 1. Dependency / package managers
+###############################################################################
+node_modules/
+.pnp*
+.pnp.js
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+jspm_packages/
+bower_components/
+web_modules/
+.npm
+
+###############################################################################
+# 2. Build & distro artefacts
+###############################################################################
+# General
+dist/
+# Next.js / Vercel
+.next/
+out/
+.vercel/
+next-env.d.ts
+# Nuxt / VuePress / VitePress / Docusaurus
+.nuxt/
+.vuepress/dist/
+.temp/
+.cache/
+.parcel-cache/
+**/.vitepress/dist/
+**/.vitepress/cache/
+.docusaurus/
+# Serverless & tooling
+.serverless/
+.fusebox/
+.dynamodb/
+# fumadocs / markdown
+.contentlayer
+.content-collections
+.source
+
+
+###############################################################################
+# 3. Configuration & env
+###############################################################################
+.env
+.env.* 
+!.env.example
+.env.*.local
+*.pem 
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+.rpt2_cache*/
+.rts2_cache_*/
+
+###############################################################################
+# 4. Logs, reports, runtime data
+###############################################################################
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+report.*.json
+pids/
+*.pid
+*.pid.lock
+*.seed
+
+###############################################################################
+# 5. Test & coverage outputs
+###############################################################################
+coverage/
+*.lcov
+.nyc_output/
+lib-cov/
+# Turbo repo cache
+.turbo/
+
+###############################################################################
+# 6. AI models
+###############################################################################
+*.onnx
+
+###############################################################################
+# 7. Miscellaneous
+###############################################################################
+.DS_Store
+*.tgz
+.lock-wscript
+.node_repl_history
+.vscode-test/
+.tern-port
+.tmp/
+
+
+# Life.js
+**/.life/
