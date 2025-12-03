@@ -17,6 +17,6 @@ supplying any two or more of the following managed components: (1) AI models
 (model code, weights, runtime); (2) Life.js code execution; (3) network data
 transport services; and (4) agent's data storage. In such cases, the provider
 must obtain prior written approval from Alive Systems, Inc. By writing at 
-license@livejs.org. Services supplying only one component, any self- or 
+license@lifejs.org. Services supplying only one component, any self- or 
 internal-only hosting, forks, distribution or sale of Life.js code or agents,
 and consulting or support work remain fully covered by the MIT License.
