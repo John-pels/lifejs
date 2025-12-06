@@ -1,0 +1,105 @@
+---
+title: Project Structure
+description: Learn about the file and folder structure of a Life.js project
+---
+
+import { File, Folder, Files } from '@/components/files';
+
+# Project Structure
+
+This page details the main files and folders composing a Life.js project.
+
+## Agents
+
+The Life.js compiler will look for these `agent.ts` entry points in your project:
+- `**/agent/agent.ts` 
+- or `**/agents/<name>/agent.ts`.
+
+So both of these are valid:
+
+<Files>
+  <Folder name="app" dim>
+    <File name="(your app files)" dim />
+  </Folder>
+  <Folder name="agents" defaultOpen highlight>
+    <Folder name="example" defaultOpen highlight>
+      <File name="agent.ts" highlight />
+      <File name="agent.client.ts" highlight optional />
+    </Folder>
+  </Folder>
+  <File name="package.json" dim />
+</Files>
+
+And:
+
+<Files>
+  <Folder name="app" defaultOpen dim>
+    <File name="(your app files)" dim />
+    <Folder name="dashboard" defaultOpen>
+      <File name="page.tsx" />
+      <Folder name="agent" defaultOpen highlight>
+        <File name="agent.ts" highlight />
+        <File name="agent.client.ts" highlight optional />
+      </Folder>
+    </Folder>
+  </Folder>
+  <File name="package.json" dim />
+</Files>
+
+
+## Items
+
+Life.js agents can be augmented with **items** (memories, actions, plugins...).<br/>Items are composable and standalone, treat them like React components.
+
+While items could be placed anywhere, we suggest the following:
+
+### Items specific to **one** agent
+
+Put these inside that agent folder:
+<Files>
+  <Folder name="agents" defaultOpen highlight>
+    <Folder name="example" defaultOpen highlight>
+        <Folder name="memories" highlight optional><File name="(your memories)" dim /></Folder>
+        <Folder name="actions" highlight optional><File name="(your actions)" dim /></Folder>
+        <Folder name="stores" highlight optional><File name="(your stores)" dim /></Folder>
+        <Folder name="percepts" highlight optional><File name="(your percepts)" dim /></Folder>
+        <Folder name="effects" highlight optional><File name="(your effects)" dim /></Folder>
+        <Folder name="plugins" highlight optional><File name="(your plugins)" dim /></Folder>
+      <File name="agent.ts" highlight />
+    </Folder>
+  </Folder>
+</Files>
+
+### Items shared by **many** agents
+
+Put them in an `items/` folder at the root or in `./src` (if exists):
+<Files>
+  <Folder name="items" defaultOpen highlight>
+    <Folder name="memories" highlight optional><File name="(your memories)" dim /></Folder>
+    <Folder name="actions" highlight optional><File name="(your actions)" dim /></Folder>
+    <File name="(other items folders)" dim />
+  </Folder>
+  <File name="package.json" dim />
+</Files>
+
+
+
+## Configuration
+
+Lastly, as explained in [Global vs Local Configuration](/docs/configuration/global-vs-local), the Life.js compiler will also look for any `life.config.ts` file **anywhere** in your project.
+
+Each agent will inherit the configuration from the `life.config.ts` files in their lineage.
+
+Most of the time, you'll use a single `life.config.ts` file at the root of your project.
+
+<Files>
+  <Folder name="app" dim>
+    <File name="(your app files)" dim />
+  </Folder>
+  <Folder name="agents">
+    <File name="(your agents)" dim />
+
+  </Folder>
+  <File name="package.json" dim />
+  <File name="life.config.ts" highlight />
+</Files>

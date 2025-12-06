@@ -12,10 +12,6 @@
     "rootDir": "./",
     "strictNullChecks": true
   },
-  "include": [
-    "formatter.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["formatter.ts"],
+  "exclude": ["node_modules"]
 }

@@ -1,0 +1,91 @@
+---
+title: Introduction
+description: A brief introduction to Life.js
+---
+
+import { CodeBlockTabs, CodeBlockTabsList, CodeBlockTabsTrigger, CodeBlockTab } from "@/components/codeblock-tabs";
+import { Demo } from "@/components/demo";
+
+# Introduction
+
+**Life.js** is a Typescript framework to create interactive experiences with AI agents.
+
+Think of ChatGPT-style chatbots, embedded assistants like Cursor, or Figma-like collaborative editors — anywhere users and AI interact using voice, text, or touch.
+
+It works discretely alongside your preferred stack (e.g., Next.js).
+
+<br/>
+
+---
+
+<br/>
+
+In Life.js everything starts with defining an agent.
+
+```ts
+// agents/example/server.ts
+import { defineAgent } from "life/define";
+export default defineAgent("example");
+```
+
+<br/>
+After running `life dev`, you can interact with your agent from your frontend.
+
+<CodeBlockTabs defaultValue="react">
+  <CodeBlockTabsList>
+    <CodeBlockTabsTrigger value="react">React / Next.js</CodeBlockTabsTrigger>
+    <CodeBlockTabsTrigger value="vanilla">Vanilla JS</CodeBlockTabsTrigger>
+  </CodeBlockTabsList>
+  <CodeBlockTab value="react">
+    ```tsx
+    import { useAgent } from "life/react";
+
+    export default function App() {
+      const agent = useAgent("example");
+      return (
+        <div onMouseEnter={() => agent?.ask("Tell the user they hovered the text.")}>
+          Hover me!
+        </div>
+      );
+    }
+    ```
+  </CodeBlockTab>
+  <CodeBlockTab value="vanilla">
+    `index.html`
+    ```html
+    <div id="hover-text">
+      Hover me!
+    </div>
+    ```
+    `index.ts`
+    ```ts
+    import { life } from "@/lib/life"
+
+    const agent = life.agent("example");
+    document.querySelector("#hover-text")
+      .addEventListener("mouseenter", () => {
+        agent.ask("Tell the user they hovered the text.");
+      });
+    ```
+  </CodeBlockTab>
+</CodeBlockTabs>
+
+That's it, you've done your first agent!
+
+<Demo />
+
+## Features
+
+- End-to-end typesafety
+Agents can:
+- Perceive the frontend
+- Seamlessly combine voice, text, and touch
+- Interact with the frontend
+- Collaborate in real-time with the user
+
+## Philosophy
+
+The framework has been thought to be as minimal and extensible as possible.
+
+It takes its root from projects like Better Auth, Shadcn, or Bun.
+

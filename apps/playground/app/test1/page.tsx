@@ -38,22 +38,22 @@ export default function Home() {
           className="h-32 w-32 cursor-pointer rounded-xl bg-red-500 shadow-lg transition-transform hover:scale-105"
           onMouseEnter={() => agent?.generation.say({ text: "You're on the red square" })}
           type="button"
-        ></button>
+        />
         <button
           className="h-32 w-32 cursor-pointer rounded-xl bg-blue-500 shadow-lg transition-transform hover:scale-105"
           onMouseEnter={() => agent?.generation.say({ text: "You're on the blue square" })}
           type="button"
-        ></button>
+        />
         <button
           className="h-32 w-32 cursor-pointer rounded-xl bg-green-500 shadow-lg transition-transform hover:scale-105"
           onMouseEnter={() => agent?.generation.say({ text: "You're on the green square" })}
           type="button"
-        ></button>
+        />
         <button
           className="h-32 w-32 cursor-pointer rounded-xl bg-yellow-500 shadow-lg transition-transform hover:scale-105"
           onMouseEnter={() => agent?.generation.say({ text: "You're on the yellow square" })}
           type="button"
-        ></button>
+        />
       </div>
     </main>
   );

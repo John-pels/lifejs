@@ -1,54 +1,57 @@
-import { getPageImage, source } from '@/lib/source';
-import {
-  DocsBody,
-  DocsDescription,
-  DocsPage,
-  DocsTitle,
-} from 'fumadocs-ui/layouts/docs/page';
-import { notFound } from 'next/navigation';
-import { getMDXComponents } from '@/mdx-components';
-import type { Metadata } from 'next';
-import { createRelativeLink } from 'fumadocs-ui/mdx';
+import { getGithubLastEdit } from "fumadocs-core/content/github";
+import { notFound } from "next/navigation";
+import { components } from "@/lib/mdx-components";
+import { source } from "@/lib/source";
+import { TableOfContents } from "../toc";
 
-export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
-  const params = await props.params;
-  const page = source.getPage(params.slug);
+interface Props {
+  params: Promise<{ slug?: string[] }>;
+}
+
+export default async function DocsPage({ params }: Props) {
+  const { slug } = await params;
+  const page = source.getPage(slug);
   if (!page) notFound();
+  const Content = page.data.body;
+  const toc = page.data.toc;
 
-  const MDX = page.data.body;
+  let lastEdit: Date | null = null;
+  if (process.env.NODE_ENV === "development") {
+    lastEdit = new Date();
+  } else {
+    try {
+      lastEdit = await getGithubLastEdit({
+        owner: "pows-dev",
+        repo: "lifejs",
+        path: `apps/website/content/docs/${page.path}`,
+      });
+    } catch {
+      // Silently fail if GitHub API is unavailable
+    }
+  }
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
-      <DocsBody>
-        <MDX
-          components={getMDXComponents({
-            // this allows you to link to other pages with relative file paths
-            a: createRelativeLink(source, page),
-          })}
-        />
-      </DocsBody>
-    </DocsPage>
+    <div className="flex justify-between py-16">
+      <div className="flex w-full justify-center">
+        <article className="max-w-[600px] flex-1">
+          <Content components={components} />
+          {lastEdit !== null && (
+            <p className="mt-12 border-neutral-200 border-t pt-4 text-neutral-500 text-sm">
+              Last updated:{" "}
+              {lastEdit.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+          )}
+        </article>
+      </div>
+      <TableOfContents toc={toc} />
+    </div>
   );
 }
 
-export async function generateStaticParams() {
+export function generateStaticParams() {
   return source.generateParams();
-}
-
-export async function generateMetadata(
-  props: PageProps<'/docs/[[...slug]]'>,
-): Promise<Metadata> {
-  const params = await props.params;
-  const page = source.getPage(params.slug);
-  if (!page) notFound();
-
-  return {
-    title: page.data.title,
-    description: page.data.description,
-    openGraph: {
-      images: getPageImage(page).url,
-    },
-  };
 }

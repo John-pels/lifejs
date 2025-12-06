@@ -14,5 +14,24 @@
       "!**/packages/releases/formatter.js",
       "!**/.life"
     ]
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        "useBlockStatements": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": {
+            "style": "interface"
+          }
+        }
+      },
+      "nursery": {
+        "noLeakedRender": "off"
+      },
+      "complexity": {
+        "noVoid": "off"
+      }
+    }
   }
 }

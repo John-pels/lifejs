@@ -4,7 +4,7 @@ import { useStore } from "@nanostores/react";
 import { type AgentClientParam, type Message, parseAgentClientParam } from "life/client";
 import { useAgent, useAgentMessages, useAgentStatus } from "life/react";
 import { atom } from "nanostores";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Streamdown } from "streamdown";
 import type { testPluginClient } from "@/agents/example/plugins/test/client";
 
@@ -61,9 +61,9 @@ export default function Page() {
     setInputValue("");
   };
 
-  const handleInterrupt = async () => {
+  const handleInterrupt = useCallback(async () => {
     await agent?.generation.interrupt({ reason: "User interrupted", author: "user" });
-  };
+  }, [agent]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

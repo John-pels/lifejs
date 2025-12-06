@@ -1,16 +1,16 @@
-import Link from 'next/link';
+import Link from "next/link";
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <div className="flex flex-col justify-center text-center flex-1">
-      <h1 className="text-2xl font-bold mb-4">Hello World</h1>
-      <p>
-        You can open{' '}
-        <Link href="/docs" className="font-medium underline">
-          /docs
-        </Link>{' '}
-        and see the documentation.
-      </p>
-    </div>
+    <main className="flex h-screen flex-col items-center justify-center gap-4">
+      <h1 className="font-bold text-2xl">Life.js</h1>
+      <p className="text-neutral-600">Build agents that speak, write, and touch.</p>
+      <Link
+        className="rounded bg-neutral-900 px-4 py-2 text-white hover:bg-neutral-700"
+        href="/docs"
+      >
+        Read the Docs
+      </Link>
+    </main>
   );
 }

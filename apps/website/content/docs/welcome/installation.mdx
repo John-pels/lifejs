@@ -1,0 +1,66 @@
+---
+title: Installation
+description: How to install Life.js
+---
+
+# Installation
+
+Whether you're starting from scratch or adding Life.js to an existing project, we recommend running:
+
+```npm
+npx life init
+```
+
+You'll be guided through steps to help you set up your Life.js project.
+
+This includes:
+- Setting up a React project if not already (with Next.js, Vite, etc.)
+- Configuring your AI IDE (Claude Code, Cursor, etc.) to work with Life.js
+- Installing required dependencies
+- Creating an example agent
+
+That's it. You're ready to build agents.
+
+## Manual Installation ((folded by default))
+In case you prefer to install Life.js manually, here are the steps:
+
+1. Setup your React project if not already:
+- With Next.js
+- With Vite
+
+2. Install Life.js:
+```npm
+npm install life
+```
+
+3. Create a `life.config.ts` file in the root of your project:
+```ts
+import { defineConfig } from "life/config";
+
+export default defineConfig();
+```
+
+4. Create a `agents` directory in the root of your project, with an `example` agent in it:
+```bash
+mkdir agents/example
+```
+
+5. Define the example agent:
+```bash
+touch agents/example/server.ts
+```
+```ts
+import { defineAgent } from "life/define";
+export default defineAgent("example");
+```
+
+6. Copy the following instructions for your AI IDE
+- Claude Code
+- Cursor
+- Codex
+- Antigravity
+
+7. Perform a first compilation of your agents:
+```bash
+life build
+```

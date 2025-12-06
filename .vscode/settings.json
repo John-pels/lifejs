@@ -1,5 +1,9 @@
 {
   "typescript.tsdk": "node_modules/typescript/lib",
+  "mdx.validate.validateMdx": "ignore",
+  "files.associations": {
+    "*.mdx": "mdx"
+  },
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
   "editor.formatOnPaste": true,
@@ -72,20 +76,10 @@
     "**/vitest.config.ts": false
   },
   "tailwindCSS.experimental.classRegex": [
-    [
-      "cva\\(([^;]*)[\\);]",
-      "[`'\"`]([^'\"`;]*)[`'\"`]"
-    ],
-    [
-      "clsx\\(((?:[^()]|\\([^()]*\\))*)\\)",
-      "(?:'|\"|`)([^']*)(?:'|\"|`)"
-    ]
+    ["cva\\(([^;]*)[\\);]", "[`'\"`]([^'\"`;]*)[`'\"`]"],
+    ["clsx\\(((?:[^()]|\\([^()]*\\))*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
   ],
-  "tailwindCSS.classAttributes": [
-    "class",
-    "className",
-    ".*Class(es)?"
-  ],
+  "tailwindCSS.classAttributes": ["class", "className", ".*Class(es)?"],
   "[javascriptreact]": {
     "editor.defaultFormatter": "biomejs.biome"
   },

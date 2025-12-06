@@ -43,14 +43,13 @@ async function getAuthors(source: Source): Promise<string[]> {
       if (commits.length < per_page) break;
     }
     return [...authors];
-  } else {
-    const { data } = await octokit.rest.repos.getCommit({
-      owner: repoOrg,
-      repo: repoName,
-      ref: source.hash,
-    });
-    return [data.author?.login ?? data.commit.author?.name ?? "unknown"];
   }
+  const { data } = await octokit.rest.repos.getCommit({
+    owner: repoOrg,
+    repo: repoName,
+    ref: source.hash,
+  });
+  return [data.author?.login ?? data.commit.author?.name ?? "unknown"];
 }
 
 async function mergedPRCount(login: string): Promise<number> {

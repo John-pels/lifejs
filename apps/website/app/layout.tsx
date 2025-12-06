@@ -1,16 +1,53 @@
-import { RootProvider } from 'fumadocs-ui/provider/next';
-import './global.css';
-import { Inter } from 'next/font/google';
+import type { Metadata } from "next";
+import Link from "next/link";
+import "./globals.css";
+import { NextProvider } from "fumadocs-core/framework/next";
+import { SearchBar } from "../components/search";
 
-const inter = Inter({
-  subsets: ['latin'],
-});
+export const metadata: Metadata = {
+  title: { template: "%s | Life.js", default: "🌱" },
+  description:
+    "The framework to build agents that speak, write, and touch. Minimal, extensible, and typesafe.",
+};
 
-export default function Layout({ children }: LayoutProps<'/'>) {
+const navLinks = [
+  { href: "/docs", label: "Docs" },
+  { href: "/examples", label: "Examples" },
+  { href: "/changelog", label: "Changelog" },
+];
+
+interface Props {
+  children: React.ReactNode;
+}
+
+export default function RootLayout({ children }: Props) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
-      <body className="flex flex-col min-h-screen">
-        <RootProvider>{children}</RootProvider>
+    <html lang="en">
+      <body className="antialiased">
+        <NextProvider>
+          <header className="border-neutral-200 border-b px-4 py-3">
+            <nav className="flex items-center gap-6">
+              <Link className="font-semibold" href="/">
+                Life.js
+              </Link>
+              <div className="flex gap-4 text-sm">
+                {navLinks.map((link) => (
+                  <Link
+                    className="text-neutral-600 hover:text-neutral-900"
+                    href={link.href}
+                    key={link.href}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+              <div className="ml-auto">
+                <SearchBar />
+              </div>
+            </nav>
+          </header>
+          {children}
+        </NextProvider>
       </body>
     </html>
   );
