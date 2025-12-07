@@ -44,6 +44,25 @@
     "access": "public"
   },
   "exports": {},
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "@inkjs/ui": "^2.0.0",
+    "@livekit/rtc-node": "^0.13.21",
+    "@paralleldrive/cuid2": "^3.0.4",
+    "@zenobius/ink-mouse": "^1.0.3",
+    "chalk": "^5.6.2",
+    "error-stack-parser": "^2.1.4",
+    "fast-npm-meta": "^0.4.7",
+    "imurmurhash": "^0.1.4",
+    "ink": "^6.5.1",
+    "ink-link": "^5.0.0",
+    "livekit-client": "^2.16.0",
+    "livekit-server-sdk": "^2.14.2",
+    "serialize-error": "^12.0.0",
+    "superjson": "^2.2.6",
+    "ua-parser-js": "^2.0.6"
+  },
+  "devDependencies": {
+    "@types/imurmurhash": "^0.1.4",
+    "vitest": "^4.0.15"
+  }
 }
