@@ -1,3 +1,80 @@
+# Life.js
+
+## Project
+
+### Introduction
+*Life.js is the first open-source framework to build agentic apps, i.e., apps that can adapt to the users, perceive, and even act autonomously alongside them, while being interacted with via voice, text, or touch.*
+
+### Repository Structure
+Life.js codebase is a monorepo powered by Turborepo.
+
+Apps:
+- `playground/` - A playground/sandbox app for testing and development.
+- `website/` - The official website of Life.js hosted at https://lifejs.org.
+
+Packages:
+- `life/` - The main package containing the entire Life.js framework.
+- `releases/` - A package for managing releases of Life.js.
+
+Here is an overview of `life/` package sub-folders:
+- `agent/` — Provides agent definition (`defineAgent()`) and server.
+- `transport/` — Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
+- `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
+- `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))
+- `plugins/` — In Life.js everything is a plugin, even the generation. This contains all native plugins.
+- `client/` — Provide a client to connect and interact with a Life.js agent.
+- `react/` — Exposes React hooks and components built on top of `life/client`.
+- `shared/` — Shared utilities and helpers.
+- `cli/` — The `life` command-line interface used to run development server, build Life.js project, deploy, etc.
+- `storage/` (coming soon) — Offers a unified API for relational and vector database operations.
+- `compiler/` (coming soon) — Compiles a Life.js project into a ready-to-run `.life/` folder.
+
+#### Commands
+Here are the package manager commands to execute **at the root** of the monorepo to interact with the project.
+- `bun run dev` - Start development servers for all apps.
+- `bun run build` - Build all packages and apps
+- `bun run types` - Run TypeScript type checking across the entire repository
+- `bun run lint` - Run linting with ultracite (extends Biome) across the entire repository
+- `bun run format` - Format code with ultracite across the entire repository
+- `bun run test` (and not `bun test`) - Run tests across the entire repository
+
+You mainly want to use those root commands instead of calling specific apps/packages commands.
+
+### Stack
+- **Package Manager**: We use Bun, so use `bun install` and `bun run` instead of NPM equivalents.
+- **Monorepo**: Turborepo.
+- **Linting & Formatting**: ultracite (extends Biome), configured in `biome.json`
+- **TypeScript**: Version 5.x.x across all packages
+- **Testing**: Vitest (ran with `bun run test`) which is automatically picking and running `*.test.ts` files in the project.
+
+### Development Guidelines
+
+#### Thinking
+- Use thinking at every step, whenever possible reason about your changes and ideas ( think ).
+
+#### Code Style
+- TypeScript for all code, avoid @ts-ignore and `any` whenever possible
+- Make sure changes / additions are consistent with the existing code around it
+- Be surgical, minimal and precise in your changes
+- Never drop any existing feature or behavior because it is incompatible with some changes you performed. If adapting that part is heavy and you're unsure, ask the user, else adapt the now incompatible part.
+- Do not workaround or implement a solution partially meeting requirements without asking the user first
+- Use interfaces over types whenever possible
+- Avoid enums, use const maps
+- Prefer functional and declarative patterns
+- Use early returns for readability
+- Named exports for components
+- Descriptive naming with auxiliary verbs (isLoading, hasError)
+- Event handlers prefixed with "handle" or "process"
+
+#### Test your changes
+Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.
+
+#### Answers Tips
+- Keep your answer minimal and dense, still easy to read quickly
+- Be as transparent as possible with the user, always explain shortly your reasoning
+- If unsure, or facing a complex dilemma, stop the conversation and ask the user
+- Consider introducing a TL;DR at the top or bottom of complex explanations
+
 ## Bun
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`

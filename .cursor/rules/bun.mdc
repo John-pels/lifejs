@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+## Bun
+- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
+- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`

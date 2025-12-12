@@ -1,23 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import os from "node:os";
 import z from "zod";
-import { agentServerConfig } from "@/agent/server/config";
 import packageJson from "../../package.json" with { type: "json" };
+import { AnonymousDataConsumer } from "../consumers/anonymous";
 import type { TelemetryResource, TelemetryScopeAttributes, TelemetrySpan } from "../types";
 import { defineScopes, TelemetryClient } from "./base";
-
-const baseAgentServerAttributesSchema = z.object({
-  agentName: z.string(),
-  agentId: z.string(),
-  agentSha: z.string(),
-  agentConfig: agentServerConfig.schema.transform((c) => agentServerConfig.toTelemetry(c)),
-  transportProviderName: z.string(),
-  llmProviderName: z.string(),
-  sttProviderName: z.string(),
-  eouProviderName: z.string(),
-  ttsProviderName: z.string(),
-  vadProviderName: z.string(),
-});
 
 /**
  * The list of valid telemetry scopes in the Node.js part of the Life.js codebase.
@@ -41,29 +28,24 @@ export const telemetryNodeScopesDefinition = defineScopes({
     displayName: "Server",
     requiredAttributesSchema: z.object({
       watch: z.boolean(),
+      agentName: z.string().optional(),
+      agentId: z.string().optional(),
+      agentVersion: z.string().optional(),
+      transportProviderName: z.string().optional(),
+      llmProviderName: z.string().optional(),
+      sttProviderName: z.string().optional(),
+      eouProviderName: z.string().optional(),
+      ttsProviderName: z.string().optional(),
+      vadProviderName: z.string().optional(),
     }),
   },
-  webrtc: {
-    displayName: "WebRTC",
-    requiredAttributesSchema: z.object(),
-  },
-  "agent.process": {
-    displayName: (attributes) =>
-      `Agent Process (${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
+  client: {
+    displayName: "Client",
     requiredAttributesSchema: z.object({
-      agentId: z.string(),
-    }),
-  },
-  "agent.server": {
-    displayName: (attributes) =>
-      `Agent (${attributes?.agentName} - ${attributes?.agentId?.replace("agent_", "").slice(0, 6)})`,
-    requiredAttributesSchema: baseAgentServerAttributesSchema,
-  },
-  "plugin.server": {
-    displayName: (attributes) => `Plugin (${attributes?.pluginName})`,
-    requiredAttributesSchema: baseAgentServerAttributesSchema.extend({
-      pluginName: z.string(),
-      pluginServerConfig: z.any(),
+      clientName: z.string(),
+      clientId: z.string(),
+      clientVersion: z.string(),
+      clientConfig: z.any(),
     }),
   },
 });
@@ -111,6 +93,6 @@ export function createTelemetryClient<Scope extends keyof typeof telemetryNodeSc
 }
 
 // Register the anonymous data consumer if the project has not opted out
-// if (!process.env.LIFE_TELEMETRY_DISABLED) {
-//   TelemetryNodeClient.registerGlobalConsumer(new AnonymousDataConsumer());
-// }
+if (!process.env.LIFE_TELEMETRY_DISABLED) {
+  TelemetryNodeClient.registerGlobalConsumer(new AnonymousDataConsumer());
+}

@@ -1,8 +1,9 @@
 import z from "zod";
 
-type DeeplyEditable<T> = T extends Record<string, unknown>
-  ? { [K in keyof T]: DeeplyEditable<T[K]> } & Record<string, unknown>
-  : T;
+type DeeplyEditable<T> =
+  T extends Record<string, unknown>
+    ? { [K in keyof T]: DeeplyEditable<T[K]> } & Record<string, unknown>
+    : T;
 
 // Zod Object With Telemetry
 export type ZodObjectWithTelemetry<Schema extends z.ZodObject, D extends "input" | "output"> = {

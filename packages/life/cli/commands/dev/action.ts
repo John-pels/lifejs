@@ -29,7 +29,7 @@ export const executeDev = (
           exitOnCtrlC: false,
           patchConsole: false, // We have our own patch in cli/index.ts
           incrementalRendering: true,
-          maxFps: 25
+          maxFps: 25,
         },
       );
     }

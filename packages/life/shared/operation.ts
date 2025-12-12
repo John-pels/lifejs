@@ -242,35 +242,38 @@ type FunctionToPublic<T> = T extends (
   ? Opaque<(...args: Args) => VoidIfNever<Data>>
   : T;
 
-type InstanceToPublic<T> = IsInstance<T> extends true
-  ? Prettify<
-      {
-        [K in keyof T]: ToPublic<T[K]>;
-      } & (IsOpInstance<T> extends true
-        ? Opaque<{
-            safe: {
-              [K in keyof T as IsOpFunction<T[K]> extends true ? K : never]: T[K];
-            };
-          }>
-        : unknown)
-    >
-  : T;
+type InstanceToPublic<T> =
+  IsInstance<T> extends true
+    ? Prettify<
+        {
+          [K in keyof T]: ToPublic<T[K]>;
+        } & (IsOpInstance<T> extends true
+          ? Opaque<{
+              safe: {
+                [K in keyof T as IsOpFunction<T[K]> extends true ? K : never]: T[K];
+              };
+            }>
+          : unknown)
+      >
+    : T;
 
-type ClassToPublic<T> = IsClass<T> extends true
-  ? Opaque<new (...args: Any) => InstanceToPublic<InstanceType<T extends ClassShape ? T : never>>>
-  : T;
+type ClassToPublic<T> =
+  IsClass<T> extends true
+    ? Opaque<new (...args: Any) => InstanceToPublic<InstanceType<T extends ClassShape ? T : never>>>
+    : T;
 
-export type ToPublic<T> = IsAsserted<T> extends true
-  ? UnwrapAssert<T>
-  : T extends z.ZodType // Skip any zod type
-    ? T
-    : IsClass<T> extends true
-      ? ClassToPublic<T>
-      : IsFunction<T> extends true
-        ? FunctionToPublic<T>
-        : IsInstance<T> extends true
-          ? InstanceToPublic<T>
-          : T;
+export type ToPublic<T> =
+  IsAsserted<T> extends true
+    ? UnwrapAssert<T>
+    : T extends z.ZodType // Skip any zod type
+      ? T
+      : IsClass<T> extends true
+        ? ClassToPublic<T>
+        : IsFunction<T> extends true
+          ? FunctionToPublic<T>
+          : IsInstance<T> extends true
+            ? InstanceToPublic<T>
+            : T;
 
 /**
  * Converts an internal function type (returning an OperationResult) into
