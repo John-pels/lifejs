@@ -34,7 +34,8 @@
         "noExcessiveCognitiveComplexity": "warn"
       },
       "performance": {
-        "noNamespaceImport": "off"
+        "noNamespaceImport": "off",
+        "useTopLevelRegex": "warn"
       }
     }
   }

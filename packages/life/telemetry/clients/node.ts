@@ -96,3 +96,6 @@ export function createTelemetryClient<Scope extends keyof typeof telemetryNodeSc
 if (!process.env.LIFE_TELEMETRY_DISABLED) {
   TelemetryNodeClient.registerGlobalConsumer(new AnonymousDataConsumer());
 }
+
+// @ts-expect-error
+export const telemetry = createTelemetryClient("inherit", {});

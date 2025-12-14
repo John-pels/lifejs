@@ -37,7 +37,7 @@ const ignoredMarkdownNodes: Mdast.Nodes["type"][] = [
 const getExpectedBlockColumnStart = (node: Mdast.Nodes, parent: Mdast.Nodes) => {
   if (parent.type === "listItem") return node.position?.start.column ?? 3;
   if (parent.type === "blockquote") return node.position?.start.column ?? 2;
-  else return 1; // other nodes
+  return 1; // other nodes
 };
 
 /*
@@ -106,7 +106,7 @@ const tokenizeMarkdownTree = async (tree: Mdast.Root) => {
       return;
     }
     // - break
-    else if (node.type === "break") tokens.push({ value: "\n", position });
+    if (node.type === "break") tokens.push({ value: "\n", position });
     // - inline code (keep only alphanumeric, whitespaces, and a few allowed symbols)
     else if (node.type === "inlineCode") {
       const allowedInlineCodeSymbols = ["=", "+", "-"];

@@ -18,6 +18,7 @@
     "@biomejs/biome": "2.3.8",
     "@changesets/cli": "^2.29.8",
     "@types/bun": "latest",
+    "life": "workspace:*",
     "turbo": "^2.6.1",
     "ultracite": "6.3.8"
   },

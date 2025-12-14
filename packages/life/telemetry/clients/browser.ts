@@ -2,7 +2,7 @@ import { UAParser } from "ua-parser-js";
 import { isAIBot, isBot } from "ua-parser-js/helpers";
 
 import z from "zod";
-import { agentClientConfig } from "@/agent/client/config";
+import { clientConfigSchema } from "@/agent/config";
 import packageJson from "../../package.json" with { type: "json" };
 import type { TelemetryResource, TelemetryScopeAttributes, TelemetrySpan } from "../types";
 import { defineScopes, TelemetryClient } from "./base";
@@ -10,7 +10,7 @@ import { defineScopes, TelemetryClient } from "./base";
 const baseAgentClientAttributesSchema = z.object({
   agentName: z.string(),
   agentId: z.string(),
-  agentConfig: agentClientConfig.schema.transform((c) => agentClientConfig.toTelemetry(c)),
+  agentConfig: clientConfigSchema,
   transportProviderName: z.string(),
 });
 

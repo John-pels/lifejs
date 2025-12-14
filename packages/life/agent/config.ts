@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { llmConfigSchema } from "@/models/llm/config";
 // import { eouProviderConfig } from "@/models/eou";
-// import { llmProviderConfig } from "@/models/llm";
 // import { sttProviderConfig } from "@/models/stt";
 // import { ttsProviderConfig } from "@/models/tts";
 // import { vadProviderConfig } from "@/models/vad";
@@ -13,12 +13,16 @@ import { transportNodeConfig } from "@/transport/config/node";
 
 export const configSchema = z.object({
   transport: transportNodeConfig.schema.prefault({ provider: "livekit" }),
+  models: z
+    .object({
+      llm: llmConfigSchema.prefault({}),
+    })
+    .prefault({}),
   // models: z
   //   .object({
   //     vad: vadProviderConfig.schema.prefault({ provider: "silero" }),
   //     stt: sttProviderConfig.schema.prefault({ provider: "deepgram" }),
   //     eou: eouProviderConfig.schema.prefault({ provider: "livekit" }),
-  //     llm: llmProviderConfig.schema.prefault({ provider: "openai" }),
   //     tts: ttsProviderConfig.schema.prefault({ provider: "cartesia" }),
   //   })
   //   .prefault({}),

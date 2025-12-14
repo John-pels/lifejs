@@ -29,9 +29,9 @@ export type SystemMessage = z.output<typeof systemMessageSchema>;
 
 // Agent message
 export const agentActionRequestSchema = z.object({
-  actionId: z.string(),
-  actionName: z.string(),
-  actionInput: z.record(z.string(), z.any()),
+  id: z.string(),
+  name: z.string(),
+  input: z.record(z.string(), z.any()),
 });
 export type AgentActionRequest = z.output<typeof agentActionRequestSchema>;
 export const agentMessageSchema = z.object({
