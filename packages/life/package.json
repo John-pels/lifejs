@@ -45,6 +45,7 @@
   },
   "exports": {},
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@inkjs/ui": "^2.0.0",
     "@livekit/rtc-node": "^0.13.21",
     "@paralleldrive/cuid2": "^3.0.4",
@@ -59,6 +60,7 @@
     "livekit-client": "^2.16.0",
     "livekit-server-sdk": "^2.14.2",
     "mdast-flatten-nested-lists": "^1.2.0",
+    "onnxruntime-node": "^1.23.2",
     "serialize-error": "^12.0.0",
     "superjson": "^2.2.6",
     "ua-parser-js": "^2.0.6",

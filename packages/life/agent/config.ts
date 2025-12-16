@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { eouConfigSchema } from "@/models/eou/config";
 import { llmConfigSchema } from "@/models/llm/config";
 // import { eouProviderConfig } from "@/models/eou";
 // import { sttProviderConfig } from "@/models/stt";
@@ -16,16 +17,9 @@ export const configSchema = z.object({
   models: z
     .object({
       llm: llmConfigSchema.prefault({}),
+      eou: eouConfigSchema.prefault({ provider: "livekit" }),
     })
     .prefault({}),
-  // models: z
-  //   .object({
-  //     vad: vadProviderConfig.schema.prefault({ provider: "silero" }),
-  //     stt: sttProviderConfig.schema.prefault({ provider: "deepgram" }),
-  //     eou: eouProviderConfig.schema.prefault({ provider: "livekit" }),
-  //     tts: ttsProviderConfig.schema.prefault({ provider: "cartesia" }),
-  //   })
-  //   .prefault({}),
   telemetry: z
     .object({
       consumers: z.array(z.custom<TelemetryConsumer>()).prefault([]),
