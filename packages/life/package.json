@@ -47,31 +47,31 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
     "@inkjs/ui": "^2.0.0",
-    "@livekit/rtc-node": "^0.13.21",
+    "@livekit/rtc-node": "^0.13.22",
     "@paralleldrive/cuid2": "^3.0.4",
     "@zenobius/ink-mouse": "^1.0.3",
-    "ai": "^5.0.112",
+    "ai": "^5.0.114",
     "chalk": "^5.6.2",
     "error-stack-parser": "^2.1.4",
     "fast-npm-meta": "^0.4.7",
     "imurmurhash": "^0.1.4",
     "ink": "^6.5.1",
     "ink-link": "^5.0.0",
-    "livekit-client": "^2.16.0",
-    "livekit-server-sdk": "^2.14.2",
+    "livekit-client": "^2.16.1",
+    "livekit-server-sdk": "^2.15.0",
     "mdast-flatten-nested-lists": "^1.2.0",
-    "onnxruntime-node": "^1.23.2",
+    "onnxruntime-node": ">=1.24.0-0",
     "serialize-error": "^12.0.0",
     "superjson": "^2.2.6",
-    "ua-parser-js": "^2.0.6",
-    "zod": "^4.1.13"
+    "ua-parser-js": "^2.0.7",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^2.0.56",
-    "@ai-sdk/google": "^2.0.46",
-    "@ai-sdk/openai": "^2.0.86",
+    "@ai-sdk/google": "^2.0.47",
+    "@ai-sdk/openai": "^2.0.87",
     "@types/imurmurhash": "^0.1.4",
-    "@vitest/browser-playwright": "^4.0.15",
-    "vitest": "^4.0.15"
+    "@vitest/browser-playwright": "^4.0.16",
+    "vitest": "^4.0.16"
   }
 }

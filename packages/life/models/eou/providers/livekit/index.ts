@@ -1,10 +1,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as transformers from "@huggingface/transformers";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import type { Message } from "@/agent/messages";
+import * as op from "@/shared/operation";
 import { EOUProviderBase } from "../base";
+import { lifeError } from "@/shared/error";
+
+// Lazy import to avoid native module issues with process forking
+const transformers = import("@huggingface/transformers");
 
 // Config
 export const livekitEOUConfig = z.object({
@@ -33,15 +37,10 @@ export class LivekitEOU extends EOUProviderBase<typeof livekitEOUConfig> {
   // Get or create the ONNX inference session
   async #getSession(): Promise<InferenceSession> {
     if (this.#_session) return this.#_session;
-    // Retrieve model path
+    // Retrieve model path (model files are in the same directory as this file)
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const modelPath = path.join(
       currentDir,
-      "..",
-      "models",
-      "eou",
-      "providers",
-      "livekit",
       this.config.quantized ? "model-quantized.onnx" : "model.onnx",
     );
     this.#_session = await InferenceSession.create(modelPath, {
@@ -142,15 +141,18 @@ export class LivekitEOU extends EOUProviderBase<typeof livekitEOUConfig> {
     return this.#untokenize(keptTokens.reverse());
   }
 
-  async predict(messages: Message[]): Promise<number> {
-    try {
-      if (!messages || messages.length === 0) return 0;
+  async predict(messages: Message[]) {
+    // Handle empty messages
+    if (!messages || messages.length === 0) return op.success(0);
 
+    // Use op.attempt to handle errors and return OperationResult
+    return await op.attempt(async () => {
       const session = await this.#getSession();
 
       // Format and tokenize the conversation
       const livekitMessages = await this.#toLivekitMessages(messages);
       if (livekitMessages.length === 0) return 0;
+
       const tokens = await this.#tokenize(livekitMessages);
       if (tokens.length === 0) return 0;
 
@@ -161,11 +163,14 @@ export class LivekitEOU extends EOUProviderBase<typeof livekitEOUConfig> {
 
       // Extract and return the EOU probability
       const eouProbability = outputs.prob?.data[0];
-      if (!eouProbability) return 0;
+      if (!eouProbability) {
+        throw lifeError({
+          code: "Upstream",
+          message: "Livekit EOU model returned no probability output.",
+        });
+      }
+
       return Number(eouProbability);
-    } catch (error) {
-      console.error("Livekit EOU error:", error);
-      return 0;
-    }
+    });
   }
 }

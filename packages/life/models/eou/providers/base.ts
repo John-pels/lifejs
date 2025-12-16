@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Message } from "@/agent/messages";
+import type { OperationResult } from "@/shared/operation";
 
 export abstract class EOUProviderBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
@@ -8,5 +9,11 @@ export abstract class EOUProviderBase<ConfigSchema extends z.ZodObject> {
     this.config = configSchema.parse({ ...config });
   }
 
-  abstract predict(messages: Message[]): Promise<number> | number;
+  /**
+   * Predicts the probability that the user has finished speaking (End of Utterance).
+   *
+   * @param messages - The conversation history
+   * @returns An `OperationResult` with the probability between 0 and 1
+   */
+  abstract predict(messages: Message[]): Promise<OperationResult<number>>;
 }

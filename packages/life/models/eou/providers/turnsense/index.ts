@@ -1,10 +1,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as transformers from "@huggingface/transformers";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import type { Message } from "@/agent/messages";
+import { lifeError } from "@/shared/error";
+import * as op from "@/shared/operation";
 import { EOUProviderBase } from "../base";
+
+// Lazy import to avoid native module issues with process forking
+const transformers = import("@huggingface/transformers");
 
 const MAX_TOKENS = 256; // Hardcoded in the model
 
@@ -34,15 +38,10 @@ export class TurnSenseEOU extends EOUProviderBase<typeof turnSenseEOUConfig> {
   // Get or create the ONNX inference session
   async #getSession(): Promise<InferenceSession> {
     if (this.#_session) return this.#_session;
-    // Retrieve model path
+    // Retrieve model path (model files are in the same directory as this file)
     const currentDir = path.dirname(fileURLToPath(import.meta.url));
     const modelPath = path.join(
       currentDir,
-      "..",
-      "models",
-      "eou",
-      "providers",
-      "turnsense",
       this.config.quantized ? "model-quantized.onnx" : "model.onnx",
     );
     this.#_session = await InferenceSession.create(modelPath, {
@@ -145,13 +144,18 @@ export class TurnSenseEOU extends EOUProviderBase<typeof turnSenseEOUConfig> {
     return this.#untokenize(keptTokens.reverse());
   }
 
-  async predict(messages: Message[]): Promise<number> {
-    try {
+  async predict(messages: Message[]) {
+    // Handle empty messages
+    if (!messages || messages.length === 0) return op.success(0);
+
+    // Use op.attempt to handle errors and return OperationResult
+    return await op.attempt(async () => {
       const session = await this.#getSession();
 
       // Format and tokenize the conversation
       const turnsenseMessages = await this.#toTurnsenseMessages(messages);
       if (turnsenseMessages.length === 0) return 0;
+
       const { tokens, attentionMask } = await this.#tokenize(turnsenseMessages);
       if (tokens.length === 0) return 0;
 
@@ -163,12 +167,22 @@ export class TurnSenseEOU extends EOUProviderBase<typeof turnSenseEOUConfig> {
 
       // Retrieve and return the EOU probability
       const probabilities = outputs.probabilities;
-      if (!probabilities?.data || probabilities.data.length < 2) return 0;
+      if (!probabilities?.data || probabilities.data.length < 2) {
+        throw lifeError({
+          code: "Upstream",
+          message: "TurnSense EOU model returned no probability output.",
+        });
+      }
+
       const eouProbability = probabilities.data[1];
-      return typeof eouProbability === "number" ? eouProbability : 0;
-    } catch (error) {
-      console.error("TurnSense EOU error:", error);
-      return 0;
-    }
+      if (typeof eouProbability !== "number") {
+        throw lifeError({
+          code: "Upstream",
+          message: "TurnSense EOU model returned invalid probability type.",
+        });
+      }
+
+      return eouProbability;
+    });
   }
 }
