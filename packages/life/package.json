@@ -72,6 +72,20 @@
     "@ai-sdk/openai": "^2.0.87",
     "@types/imurmurhash": "^0.1.4",
     "@vitest/browser-playwright": "^4.0.16",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.16",
+    "@cartesia/cartesia-js": "^2.2.9",
+    "@deepgram/sdk": "4.11.2"
+  },
+  "peerDependencies": {
+    "@cartesia/cartesia-js": "^2.2.5",
+    "@deepgram/sdk": "4.9.1"
+  },
+  "peerDependenciesMeta": {
+    "@cartesia/cartesia-js": {
+      "optional": true
+    },
+    "@deepgram/sdk": {
+      "optional": true
+    }
   }
 }

@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { eouConfigSchema } from "@/models/eou/config";
 import { llmConfigSchema } from "@/models/llm/config";
-// import { eouProviderConfig } from "@/models/eou";
-// import { sttProviderConfig } from "@/models/stt";
-// import { ttsProviderConfig } from "@/models/tts";
-// import { vadProviderConfig } from "@/models/vad";
+import { sttConfigSchema } from "@/models/stt/config";
 import { deepClone } from "@/shared/deep-clone";
 import { deepMerge } from "@/shared/deep-merge";
 import * as op from "@/shared/operation";
@@ -18,6 +15,7 @@ export const configSchema = z.object({
     .object({
       llm: llmConfigSchema.prefault({}),
       eou: eouConfigSchema.prefault({ provider: "livekit" }),
+      stt: sttConfigSchema.prefault({ provider: "deepgram" }),
     })
     .prefault({}),
   telemetry: z

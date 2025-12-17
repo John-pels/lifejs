@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/id";
+import type * as op from "@/shared/operation";
 
-// STTBase.generate()
 export type STTChunk =
   | { type: "content"; textChunk: string }
   | { type: "error"; error: string }
@@ -16,7 +16,7 @@ export interface STTJob {
   _abortController: AbortController;
 }
 
-export abstract class STTBase<ConfigSchema extends z.ZodObject> {
+export abstract class STTProviderBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
@@ -37,7 +37,7 @@ export abstract class STTBase<ConfigSchema extends z.ZodObject> {
     return job;
   }
 
-  abstract generate(): Promise<STTJob>;
+  abstract generate(): Promise<op.OperationResult<STTJob>>;
 
   protected abstract receiveVoice(job: STTJob, pcm: Int16Array): Promise<void>;
 }

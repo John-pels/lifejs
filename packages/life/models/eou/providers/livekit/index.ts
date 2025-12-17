@@ -3,9 +3,9 @@ import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import type { Message } from "@/agent/messages";
+import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { EOUProviderBase } from "../base";
-import { lifeError } from "@/shared/error";
 
 // Lazy import to avoid native module issues with process forking
 const transformers = import("@huggingface/transformers");
