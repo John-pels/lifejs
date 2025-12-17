@@ -18,7 +18,10 @@ export abstract class STTProviderBase<ConfigSchema extends z.ZodObject> {
     const job: STTJob = {
       id,
       stream,
-      inputVoice: (pcm: Int16Array) => this.receiveVoice(job, pcm),
+      inputVoice: (pcm: Int16Array) => {
+        if (_abortController.signal.aborted) return;
+        this.receiveVoice(job, pcm);
+      },
       cancel: () => _abortController.abort(),
       _abortController,
     };

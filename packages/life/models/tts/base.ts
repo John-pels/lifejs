@@ -51,7 +51,6 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
       stream,
       cancel: () => _abortController.abort(),
       inputText: async (text: string, isLast = false) => {
-        // If the job has been aborted, ignore the text
         if (_abortController.signal.aborted) return;
 
         // Append the text chunk to the full text

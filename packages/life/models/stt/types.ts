@@ -1,5 +1,5 @@
 import type { AsyncQueue } from "@/shared/async-queue";
-import type { sttProviders } from "./provider";
+import type { sttProviders } from ".";
 
 export type STTProvider = (typeof sttProviders)[keyof typeof sttProviders];
 

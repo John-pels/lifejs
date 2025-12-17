@@ -1,5 +1,5 @@
 import type { AsyncQueue } from "@/shared/async-queue";
-import type { ttsProviders } from "./provider";
+import type { ttsProviders } from ".";
 
 export type TTSChunk =
   | { type: "content"; voiceChunk: Int16Array; textChunk: string; durationMs: number }

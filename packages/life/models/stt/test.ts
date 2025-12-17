@@ -1,8 +1,8 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { isLifeError } from "@/shared/error";
-import type { STTChunk, STTJob } from "./providers/base";
 import { DeepgramSTT } from "./providers/deepgram";
+import type { STTChunk, STTJob } from "./types";
 
 // Test audio fixture path (16kHz mono PCM)
 const TEST_AUDIO_PATH = path.join(__dirname, "fixtures/test-speech.pcm");

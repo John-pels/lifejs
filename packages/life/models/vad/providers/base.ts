@@ -1,22 +1,10 @@
 import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/id";
+import type * as op from "@/shared/operation";
+import type { VADChunk, VADJob } from "../types";
 
-export interface VADChunk {
-  type: "result";
-  chunk: Int16Array;
-  score: number;
-}
-
-export interface VADJob {
-  id: string;
-  cancel: () => void;
-  stream: AsyncQueue<VADChunk>;
-  inputVoice: (pcm: Int16Array) => void;
-  _abortController: AbortController;
-}
-
-export abstract class VADBase<ConfigSchema extends z.ZodObject> {
+export abstract class VADProviderBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
@@ -31,13 +19,16 @@ export abstract class VADBase<ConfigSchema extends z.ZodObject> {
       id,
       cancel: () => _abortController.abort(),
       stream,
-      inputVoice: (pcm: Int16Array) => this.receiveVoice(job, pcm),
+      inputVoice: (pcm: Int16Array) => {
+        if (_abortController.signal.aborted) return;
+        this.receiveVoice(job, pcm);
+      },
       _abortController,
     };
     return job;
   }
 
-  abstract detect(): Promise<VADJob>;
+  abstract detect(): Promise<op.OperationResult<VADJob>>;
 
   protected abstract receiveVoice(job: VADJob, pcm: Int16Array): Promise<void>;
 }
