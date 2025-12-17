@@ -7,14 +7,14 @@ export class AsyncQueue<T> implements AsyncIterator<T>, AsyncIterable<T> {
   push(v: T) {
     if (this.#closed) return;
     this.#buf.push(v);
-    this.#totalLength += 1;
+    this.#totalLength++;
     this.#wakeUp?.();
   }
 
   pushFirst(v: T) {
     if (this.#closed) return;
     this.#buf.unshift(v);
-    this.#totalLength += 1;
+    this.#totalLength++;
     this.#wakeUp?.();
   }
 

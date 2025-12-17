@@ -48,7 +48,6 @@ interface RenderMarkdownComponents {
   }) => React.ReactNode;
   blockquote: (args: { partial: boolean; children: React.ReactNode }) => React.ReactNode;
   seperator: () => React.ReactNode;
-
   custom: Record<string, (args: { children: React.ReactNode }) => React.ReactNode>;
 }
 
@@ -74,18 +73,44 @@ const renderTreeNodes = (parent: Mdast.Nodes, components: RenderMarkdownComponen
     if (node.type === "text") {
       const words = node.value.split(" ");
       r = words.flatMap((word, i) => [word, words.length - 1 === i ? "" : " "]);
-    } else if (node.type === "heading") r = c.heading?.({ children, level: node.depth });
-    else if (node.type === "paragraph") r = c.paragraph?.({ children });
-    else if (node.type === "strong") r = c.bold?.({ children });
-    else if (node.type === "emphasis") r = c.italic?.({ children });
-    else if (node.type === "link") r = c.link?.({ children, url: node.url });
-    else if (node.type === "delete") r = c.strikethrough?.({ children });
-    else if (node.type === "image") r = c.image?.({ children, url: node.url, alt: node.alt });
-    else if (node.type === "list") r = c.list?.({ children, ordered: node.ordered ?? false });
-    else if (node.type === "listItem") r = c.listItem?.({ children });
-    else if (node.type === "table") r = c.table?.({ children });
-    else if (node.type === "tableRow") r = c.tableRow?.({ children });
-    else if (node.type === "tableCell") r = c.tableCell?.({ children });
+    } else if (node.type === "heading")
+      r = c.heading?.({ children, level: node.depth, partial: node.partial ?? false });
+    else if (node.type === "paragraph")
+      r = c.paragraph?.({ children, partial: node.partial ?? false });
+    else if (node.type === "strong") r = c.bold?.({ children, partial: node.partial ?? false });
+    else if (node.type === "emphasis") r = c.italic?.({ children, partial: node.partial ?? false });
+    else if (node.type === "link")
+      r = c.link?.({ children, url: node.url, partial: node.partial ?? false });
+    else if (node.type === "delete")
+      r = c.strikethrough?.({ children, partial: node.partial ?? false });
+    else if (node.type === "image")
+      r = c.image?.({ children, url: node.url, alt: node.alt, partial: node.partial ?? false });
+    else if (node.type === "list")
+      r = c.list?.({
+        items: children.map((child) => ({ children: child, partial: node.partial ?? false })),
+        ordered: node.ordered ?? false,
+        partial: node.partial ?? false,
+      });
+    else if (node.type === "table") {
+      const rows = node.children
+        .map((row, rowIndex) => {
+          if (row.type !== "tableRow") return null;
+          const cells = row.children
+            .map((cell) => {
+              if (cell.type !== "tableCell") return null;
+              const cellChildren = renderTreeNodes(cell, components);
+              return { children: cellChildren, partial: (cell.partial ?? false) as boolean };
+            })
+            .filter((cell): cell is NonNullable<typeof cell> => cell !== null);
+          return {
+            isHeader: rowIndex === 0,
+            partial: (row.partial ?? false) as boolean,
+            cells,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+      r = c.table?.({ rows, partial: node.partial ?? false });
+    }
     if (r !== null) renderedNodes.push(<Fragment key={node.key}>{r}</Fragment>);
   }
   return renderedNodes;
@@ -143,7 +168,7 @@ function renderMarkdown(params: {
     // Obtain the final nodes render by combining the previous and delta nodes render
     const prevNodesRender = hasPrevNodes ? (prevRender?.nodesRender.slice(0, -1) ?? []) : [];
     const nodesRender = [...prevNodesRender, ...deltaNodesRender];
-    const render = components.parent?.({ children: nodesRender });
+    const render = components.parent?.({ children: nodesRender, partial: false });
 
     // Obtain the full tree by combining the previous and delta tree
     const prevChildren = hasPrevNodes ? (prevRender?.tree.children.slice(0, -1) ?? []) : [];
@@ -190,21 +215,28 @@ const defaultComponents = {
     // biome-ignore lint/performance/noImgElement: wanted here
     <img alt={alt ?? undefined} height={100} src={url} width={100} />
   ),
-  list: ({ children, ordered }) => (
-    <ul className={ordered ? "list-decimal" : "list-disc"}>{children}</ul>
+  list: () => (
+    <p>List not implemented yet.</p>
+    // <ul className={ordered ? "list-decimal" : "list-disc"}>{children}</ul>
   ),
-  listItem: ({ children }) => <li>{children}</li>,
-  table: ({ children }) => <table>{children}</table>,
-  tableRow: ({ children }) => <tr>{children}</tr>,
-  tableCell: ({ children }) => <td>{children}</td>,
-} as RenderMarkdownComponents;
+  table: () => <p>Table not implemented yet.</p>,
+  code: () => <p>Code not implemented yet.</p>,
+  inlineCode: () => <p>Inline code not implemented yet.</p>,
+  math: () => <p>Math not implemented yet.</p>,
+  inlineMath: () => <p>Inline math not implemented yet.</p>,
+  lifeInlineAction: () => <p>Life inline action not implemented yet.</p>,
+  lifeInterrupted: () => <p>Life interrupted not implemented yet.</p>,
+  blockquote: () => <p>Blockquote not implemented yet.</p>,
+  seperator: () => <p>Seperator not implemented yet.</p>,
+  custom: {},
+} satisfies RenderMarkdownComponents;
 
-type MarkdownProps = {
+interface MarkdownProps {
   cacheKey: string;
   children: string;
   components?: Partial<RenderMarkdownComponents>;
   throttleMs?: number;
-};
+}
 
 export const Markdown: FC<MarkdownProps> = ({
   cacheKey,

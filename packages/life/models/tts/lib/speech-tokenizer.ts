@@ -18,11 +18,8 @@ const ignoredMarkdownNodes: Mdast.Nodes["type"][] = [
   "lifeInlineAction",
   "lifeInterrupted",
   "math",
-  "mdxFlowExpression",
   "mdxJsxFlowElement",
   "mdxJsxTextElement",
-  "mdxTextExpression",
-  "mdxjsEsm",
   "yaml",
   "footnoteDefinition",
   "footnoteReference",
@@ -133,7 +130,6 @@ const tokenizeMarkdownTree = async (tree: Mdast.Root) => {
     if ("children" in node) {
       // Obtain the children tokens
       const childrenTokens: SpeechToken[] = [];
-      // biome-ignore lint/performance/noAwaitInLoops: sequential execution is required
       for (const child of node.children) await tokenizeMarkdownNode(child, node, childrenTokens);
 
       // For lists items, make sure each item is terminated by a delimiter symbol, else append a comma
@@ -215,7 +211,9 @@ export const explodeTokenByWhitespaces = (token: SpeechToken) => {
  * the generated voice audio chunks.
  */
 class SpeechTokenizer {
-  async tokenize(text: string) {
+  async tokenize(text_: string) {
+    let text = text_;
+
     if (!text.length) return op.success([]);
 
     // 1. Suffix the text with a temporary sequence to ensure the last node is a block node

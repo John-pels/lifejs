@@ -1,6 +1,6 @@
 import z from "zod";
 import type { LifeErrorUnion } from "@/shared/error";
-import { createMessageInputSchema } from "./messages";
+import { createMessageInputSchema, messageSchema } from "./messages";
 import type { EventsDefinition } from "./types";
 
 // Schemas

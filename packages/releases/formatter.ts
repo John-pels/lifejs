@@ -29,7 +29,6 @@ async function getAuthors(source: Source): Promise<string[]> {
     const authors = new Set<string>();
     const per_page = 100;
     for (let page = 1; ; page++) {
-      // biome-ignore lint/performance/noAwaitInLoops: fine here
       const { data: commits } = await octokit.rest.pulls.listCommits({
         owner: repoOrg,
         repo: repoName,

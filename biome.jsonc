@@ -25,9 +25,7 @@
           }
         }
       },
-      "nursery": {
-        "noLeakedRender": "off"
-      },
+      "nursery": "off",
       "complexity": {
         "noVoid": "off",
         "noExcessiveCognitiveComplexity": "warn"

@@ -58,7 +58,6 @@ export function createTestHelpers(client: TelemetryClient): TestHelpers {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(`Timeout waiting for ${count} signals. Got ${allSignals.length}`);
       }
-      // biome-ignore lint/performance/noAwaitInLoops: sequential execution required here
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   };

@@ -2,19 +2,7 @@ import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { newId } from "@/shared/id";
 import type * as op from "@/shared/operation";
-
-export type STTChunk =
-  | { type: "content"; textChunk: string }
-  | { type: "error"; error: string }
-  | { type: "end" };
-
-export interface STTJob {
-  id: string;
-  stream: AsyncQueue<STTChunk>;
-  cancel: () => void;
-  inputVoice: (chunk: Int16Array) => void;
-  _abortController: AbortController;
-}
+import type { STTChunk, STTJob } from "../types";
 
 export abstract class STTProviderBase<ConfigSchema extends z.ZodObject> {
   protected config: z.infer<ConfigSchema>;

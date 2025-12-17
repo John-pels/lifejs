@@ -141,7 +141,6 @@ export abstract class TelemetryClient {
         }
         if (allDone) return;
         // Check again after 50ms
-        // biome-ignore lint/performance/noAwaitInLoops: sequential required here
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     } catch (error) {

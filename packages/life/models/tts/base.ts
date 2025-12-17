@@ -2,34 +2,17 @@ import type { z } from "zod";
 import { AsyncQueue } from "@/shared/async-queue";
 import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
 import { newId } from "@/shared/id";
+import type * as op from "@/shared/operation";
 import { WeightedAverage } from "@/shared/weighted-average";
 import { speechDurationTokenizer } from "./lib/speech-duration-tokenizer";
 import { speechTokenizer } from "./lib/speech-tokenizer";
+import type { TTSChunk, TTSChunkInput, TTSJob } from "./types";
 
-export type TTSChunk =
-  | { type: "content"; voiceChunk: Int16Array; textChunk: string; durationMs: number }
-  | { type: "end" }
-  | { type: "error"; error: string };
-
-export type TTSChunkInput =
-  | { type: "content"; voiceChunk: Int16Array }
-  | { type: "end" }
-  | { type: "error"; error: string };
-
-export interface TTSJob {
-  id: string;
-  stream: AsyncQueue<TTSChunk>;
-  cancel: () => void;
-  inputText: (text: string, isLast?: boolean) => Promise<void>;
-  _abortController: AbortController;
-  _receiveVoiceChunk: (chunk: TTSChunkInput) => Promise<void>;
-}
-
-/**
- * Base class for all TTS providers.
- */
-export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
+export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
   config: z.infer<ConfigSchema>;
+
+  /** Resolves when warmup is complete */
+  readonly warmedUp: Promise<void>;
 
   /** ms per token */
   readonly #pace = new WeightedAverage(200); // 200ms per token is a good default
@@ -41,19 +24,20 @@ export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });
 
-    // Start an initial short generation to set the pace
-    this.generate().then(async (job1) => {
-      await job1.inputText("Hello, I'm an agent.");
+    this.warmedUp = (async () => {
+      // Start an initial short generation to set the pace
+      const [error1, job1] = await this.generate();
+      if (error1) return;
+      await job1.inputText("Hello, I'm an agent.", true);
       for await (const chunk of job1.stream) if (chunk.type === "end") break;
 
       // Then start a longer initial generation to obtain a more precise pace
-      this.generate().then(async (job2) => {
-        await job2.inputText(
-          "Isn't Life beautiful? The Typescript framework. This is a **demo sentence**.",
-        );
-        for await (const chunk of job2.stream) if (chunk.type === "end") break;
-      });
-    });
+      const [error2, job2] = await this.generate();
+      if (error2) return;
+      const text = "Isn't Life beautiful? The Typescript framework? This is a **demo sentence**.";
+      await job2.inputText(text, true);
+      for await (const chunk of job2.stream) if (chunk.type === "end") break;
+    })();
   }
 
   protected createGenerateJob(): TTSJob {
@@ -171,7 +155,7 @@ export abstract class TTSBase<ConfigSchema extends z.ZodObject> {
     return job;
   }
 
-  abstract generate(): Promise<TTSJob>;
+  abstract generate(): Promise<op.OperationResult<TTSJob>>;
 
   protected abstract receiveText(job: TTSJob, text: string, isLast: boolean): Promise<void>;
 }

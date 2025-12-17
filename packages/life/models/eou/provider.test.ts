@@ -19,7 +19,7 @@ import { TurnSenseEOU } from "./providers/turnsense";
 // Helper to create test messages with required fields
 let msgCounter = 0;
 function nextId() {
-  msgCounter += 1;
+  msgCounter++;
   return `test-${msgCounter}`;
 }
 

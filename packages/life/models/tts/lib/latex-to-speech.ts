@@ -22,10 +22,10 @@ export function tex2mml(latex: string, display = true): string {
   return toMathML(node);
 }
 
-export type LatexToSpeechOptions = {
+export interface LatexToSpeechOptions {
   lang?: "en";
   enableSSML?: boolean;
-};
+}
 
 let sreInit: Promise<void> | null = null;
 

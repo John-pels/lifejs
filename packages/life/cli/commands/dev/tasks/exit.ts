@@ -109,7 +109,7 @@ export class ExitTask {
           }
 
           // Update progress based on completed steps
-          completedSteps += 1;
+          completedSteps++;
           const progress = Math.round((completedSteps / totalSteps) * 100);
           this.setProgress(progress);
         } catch (error) {
@@ -122,7 +122,7 @@ export class ExitTask {
           step.onError?.(operationError);
 
           // Update progress even on error
-          completedSteps += 1;
+          completedSteps++;
           const progress = Math.round((completedSteps / totalSteps) * 100);
           this.setProgress(progress);
         }
