@@ -1,10 +1,9 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import type { Message } from "@/agent/messages";
 import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
+import { RemoteFile } from "@/shared/remote-file";
 import { EOUProviderBase } from "../base";
 
 // Lazy import to avoid native module issues with process forking
@@ -38,12 +37,13 @@ export class TurnSenseEOU extends EOUProviderBase<typeof turnSenseEOUConfig> {
   // Get or create the ONNX inference session
   async #getSession(): Promise<InferenceSession> {
     if (this.#_session) return this.#_session;
-    // Retrieve model path (model files are in the same directory as this file)
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const modelPath = path.join(
-      currentDir,
-      this.config.quantized ? "model-quantized.onnx" : "model.onnx",
-    );
+    // Download model if needed
+    const remotePath = this.config.quantized
+      ? "eou-turnsense-quantized.onnx"
+      : "eou-turnsense.onnx";
+    const model = new RemoteFile({ name: "TurnSense EOU", remotePath });
+    const [error, modelPath] = await model.getLocalPath();
+    if (error) throw error;
     this.#_session = await InferenceSession.create(modelPath, {
       interOpNumThreads: 1,
       intraOpNumThreads: 1,

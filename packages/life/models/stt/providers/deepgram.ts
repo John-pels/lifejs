@@ -7,7 +7,8 @@ import {
 } from "@deepgram/sdk";
 import { z } from "zod";
 import * as op from "@/shared/operation";
-import { type STTJob, STTProviderBase } from "./base";
+import type { STTJob } from "../types";
+import { STTProviderBase } from "./base";
 
 // Config
 export const deepgramSTTConfig = z.object({

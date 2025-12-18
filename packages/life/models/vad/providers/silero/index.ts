@@ -1,8 +1,7 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import * as op from "@/shared/operation";
+import { RemoteFile } from "@/shared/remote-file";
 import type { VADJob } from "../../types";
 import { VADProviderBase } from "../base";
 
@@ -32,9 +31,10 @@ export class SileroVAD extends VADProviderBase<typeof sileroVADConfig> {
       // Create a new generation job
       const job = this.createGenerateJob();
 
-      // Create the ONNX inference session
-      const currentDir = path.dirname(fileURLToPath(import.meta.url));
-      const modelPath = path.join(currentDir, "model.onnx");
+      // Download model if needed and create ONNX inference session
+      const model = new RemoteFile({ name: "Silero VAD", remotePath: "vad-silero-6.2.onnx" });
+      const [error, modelPath] = await model.getLocalPath();
+      if (error) throw error;
       const session = await InferenceSession.create(modelPath);
       this.#jobsSessions.set(job.id, session);
 

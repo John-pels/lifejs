@@ -45,6 +45,7 @@
   },
   "exports": {},
   "dependencies": {
+    "@huggingface/hub": "^2.7.1",
     "@huggingface/transformers": "^3.8.1",
     "@inkjs/ui": "^2.0.0",
     "@livekit/rtc-node": "^0.13.22",

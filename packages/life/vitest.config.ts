@@ -15,7 +15,7 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["**/*.test.ts"],
+          include: ["**/*.test.ts", "**/test.ts"],
           exclude: [...excludedTests, "**/*.browser.test.ts"],
           pool: "forks",
         },

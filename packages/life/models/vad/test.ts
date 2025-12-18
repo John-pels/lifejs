@@ -1,8 +1,15 @@
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { isLifeError } from "@/shared/error";
+import { RemoteFile } from "@/shared/remote-file";
 import { SileroVAD } from "./providers/silero";
 import type { VADChunk, VADJob } from "./types";
+
+// Pre-download model before tests run
+beforeAll(async () => {
+  const model = new RemoteFile({ name: "Silero VAD", remotePath: "vad-silero-6.2.onnx" });
+  await model.getLocalPath();
+}, 120_000);
 
 /**
  * VAD (Voice Activity Detection) Provider Tests

@@ -1,8 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { Message } from "@/agent/messages";
 import { isLifeError } from "@/shared/error";
+import { RemoteFile } from "@/shared/remote-file";
 import { LivekitEOU } from "./providers/livekit";
 import { TurnSenseEOU } from "./providers/turnsense";
+
+// Pre-download models before tests run
+beforeAll(async () => {
+  await Promise.all([
+    new RemoteFile({ name: "LiveKit EOU", remotePath: "eou-livekit-quantized.onnx" }).getLocalPath(),
+    new RemoteFile({ name: "TurnSense EOU", remotePath: "eou-turnsense-quantized.onnx" }).getLocalPath(),
+  ]);
+}, 120_000);
 
 /**
  * EOU (End of Utterance) Provider Tests

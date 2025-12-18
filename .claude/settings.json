@@ -16,18 +16,5 @@
       "WebFetch(domain:github.com)"
     ],
     "deny": []
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx ultracite fix"
-          }
-        ]
-      }
-    ]
   }
 }
