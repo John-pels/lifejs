@@ -2,7 +2,7 @@ import type z from "zod";
 import type * as op from "@/shared/operation";
 import type { Any, MaybePromise, Without } from "@/shared/types";
 import type { TelemetrySpanHandle } from "@/telemetry/types";
-import type { clientConfigSchema, configSchema } from "./config";
+import type { clientConfigSchema, configSchema } from "./config/schema/server";
 import type { contextDefinition } from "./context";
 import type { eventSchema, eventSourceSchema, eventsDefinition } from "./events";
 import type { handlersDefinition } from "./handlers";

@@ -2,7 +2,7 @@ import { UAParser } from "ua-parser-js";
 import { isAIBot, isBot } from "ua-parser-js/helpers";
 
 import z from "zod";
-import { clientConfigSchema } from "@/agent/config";
+import { clientConfigSchema } from "@/agent/config/schema/client";
 import packageJson from "../../package.json" with { type: "json" };
 import type { TelemetryResource, TelemetryScopeAttributes, TelemetrySpan } from "../types";
 import { defineScopes, TelemetryClient } from "./base";

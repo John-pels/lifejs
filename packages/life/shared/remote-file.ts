@@ -187,15 +187,17 @@ export class RemoteFile {
 
     const percent = Math.floor((current / total) * 100);
     const now = Date.now();
+    const isComplete = percent >= 100;
     const isNewPercent = percent > state.lastLoggedPercent;
     const isTimeElapsed = now - state.lastLogTime >= LOG_INTERVAL_MS;
-    const shouldLog = isNewPercent || isTimeElapsed;
+    const shouldLog = isComplete || (isNewPercent && isTimeElapsed);
 
     if (!shouldLog) return;
 
     state.lastLoggedPercent = percent;
     state.lastLogTime = now;
-    console.log(`${action} '${this.options.name}' [${percent}%]`);
+    const emoji = isComplete ? "✅" : "⏳";
+    console.log(`${emoji} ${action} '${this.options.name}' [${percent}%]`);
   }
 
   async #getTempFileSize(cachedPath: string): Promise<number> {

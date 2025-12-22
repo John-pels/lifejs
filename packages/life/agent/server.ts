@@ -10,7 +10,7 @@ import type { Any, Todo } from "@/shared/types";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { createTelemetryClient } from "@/telemetry/clients/node";
 import { TransportNodeClient } from "@/transport/client/node";
-import { configSchema } from "./config";
+import { configSchema } from "./config/schema/server";
 import { contextDefinition } from "./context";
 import { eventInputSchema, eventsDefinition } from "./events";
 import { handlersDefinition } from "./handlers";

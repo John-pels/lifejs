@@ -1,6 +1,6 @@
 import z from "zod";
 import type { Override, Without } from "@/shared/types";
-import type { configSchema } from "./config";
+import type { configSchema } from "./config/schema/server";
 import type {
   ActionDefinition,
   ActionExecute,

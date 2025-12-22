@@ -60,11 +60,12 @@
     "ink-link": "^5.0.0",
     "livekit-client": "^2.16.1",
     "livekit-server-sdk": "^2.15.0",
+    "mathjax-full": "^3.2.2",
     "mdast-flatten-nested-lists": "^1.2.0",
     "onnxruntime-node": ">=1.24.0-0",
     "serialize-error": "^12.0.0",
     "superjson": "^2.2.6",
-    "ua-parser-js": "^2.0.7",
+    "ua-parser-js": "2.0.6",
     "zod": "^4.2.1"
   },
   "devDependencies": {
