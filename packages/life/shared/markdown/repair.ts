@@ -21,13 +21,13 @@ import { markdownFromTree, markdownToTree } from "./tree";
  * ✅ heading
  * ❌ html
  * ✅ image
- * ❌ imageReference
+ * ✅ imageReference
  * ✅ inlineCode
  * ✅ inlineMath
  * ✅ lifeInlineAction
  * ✅ lifeInterrupted
  * ✅ link
- * ❌ linkReference
+ * ✅ linkReference
  * ✅ list
  * ✅ listItem
  * ✅ math
@@ -63,6 +63,8 @@ const PATTERNS = {
   strikethroughSingle: /(?<!~)(?<!\\)~(?!~)/g,
 };
 
+const PARTIAL_MARKER = "\uE000";
+
 /**
  * Wraps markdownFromTree() to handle backslashes and trailing whitespace.
  * @param node The node to convert to markdown.
@@ -95,8 +97,10 @@ const safeMarkdownFromTree = (node: Mdast.Nodes) => {
  */
 const repairMarkdownTable = (value: string): [false | number, string] => {
   // Find start of the table block (if any)
-  const tableStartsAt = value.indexOf("|");
-  if (tableStartsAt === -1) return [false, ""];
+  // Tables must start with | at the beginning of a line (or start of string)
+  const tableMatch = value.match(/(^|\n)\|/);
+  if (!tableMatch) return [false, ""];
+  const tableStartsAt = (tableMatch.index ?? 0) + (tableMatch[1] === "\n" ? 1 : 0);
 
   // Parse and analyze the table
   const lines = value.slice(tableStartsAt).split("\n");
@@ -208,6 +212,7 @@ const repairContent = (content_: string) => {
   // - table
   const [tableIndex, tableClosingSequence] = repairMarkdownTable(content);
   if (tableIndex !== false) context.table = { opensAt: tableIndex, closing: tableClosingSequence };
+
   // Repair open sequences (process in reverse order)
   const sortedContext = Object.entries(context).sort((a, b) => b[1].opensAt - a[1].opensAt);
   for (const [type, item] of sortedContext) {
@@ -221,8 +226,8 @@ const repairContent = (content_: string) => {
       !["linkOrImage", "table"].includes(type) &&
       item.opensAt === content.length - item.closing.length;
     if (isEmpty) content = content.slice(0, item.opensAt);
-    // Else insert the closing syntax
-    else content += item.closing;
+    // Else insert the partial marker then the closing syntax
+    else content += PARTIAL_MARKER + item.closing;
   }
 
   return op.success(content);
@@ -243,7 +248,7 @@ const getRepairableNodes = (tree: Mdast.Root) => {
     if (!("children" in node)) return;
     for (const child of node.children) {
       if (isRepairable(child)) nodes.push({ node: child, parent: node });
-      walk(child);
+      else walk(child);
     }
   };
   walk(tree);
@@ -262,7 +267,9 @@ type SubNode = Extract<
       | "strong"
       | "delete"
       | "link"
+      | "linkReference"
       | "image"
+      | "imageReference"
       | "inlineCode"
       | "inlineMath"
       | "lifeInlineAction"
@@ -275,9 +282,18 @@ const cycleMdast = (nodeOrTree: Mdast.Nodes | Mdast.Root) => {
   if (errSafeFromMarkdown) return op.failure(errSafeFromMarkdown);
   const [errSafeToMarkdown, normalizedTree] = markdownToTree(content);
   if (errSafeToMarkdown) return op.failure(errSafeToMarkdown);
-  if (nodeOrTree.type === "root") return normalizedTree;
-  return normalizedTree.children.at(0);
+  if (nodeOrTree.type === "root") return op.success(normalizedTree);
+  return op.success(normalizedTree.children.at(0));
 };
+
+const safeNodes = [
+  "inlineMath",
+  "inlineCode",
+  "image",
+  "imageReference",
+  "lifeInlineAction",
+  "lifeInterrupted",
+];
 
 /**
  * Repairs an mdast Markdown tree potentially containing partial sequences.
@@ -290,55 +306,50 @@ export const repairTree = (tree: Mdast.Root) => {
 
   // Repair each repairable node
   for (const { node: repairableNode, parent } of repairableNodes) {
-    // Normalize the node by performing a mdast parse/stringify cycle
-    const normalizedNode = cycleMdast(repairableNode) as RepairableNode;
-
     // Convert the repairable node to a repaired markdown string
     const placeholders: Map<string, string> = new Map();
     const walkRepair = (node: Mdast.Nodes): op.OperationResult<string> => {
-      // 1. Ensure all children are text nodes
+      // 1. Convert all children to repaired text nodes
       const children: SubNode[] = "children" in node ? (node.children as SubNode[]) : [];
       for (const child of children) {
-        if (child.type !== "text") {
-          // Replace the non-text child by a placeholder
-          const placeholderId = newId();
-          const repairedChild = { type: "text", value: `{${placeholderId}}` };
-          children.splice(children.indexOf(child as never), 1, repairedChild as never);
-          // Ignore nodes that cannot contain Markdown, fill the placeholder with their content as is
-          if (
-            ["inlineMath", "inlineCode", "image", "lifeInlineAction", "lifeInterrupted"].includes(
-              child.type,
-            )
-          ) {
-            const rootNode: Mdast.Root = { type: "root", children: [child] };
-            const [errToMarkdown_, markdown_] = safeMarkdownFromTree(rootNode);
-            if (errToMarkdown_) return op.failure(errToMarkdown_);
-            placeholders.set(placeholderId, markdown_);
-          }
-          // Repair other node type
-          else {
-            // Convert the child to a paragraph node
-            const initialType = child.type;
-            child.type = "paragraph" as never;
-            // Repair the child
-            const [errWalkChild, repairedChildText] = walkRepair(child);
-            if (errWalkChild) return op.failure(errWalkChild);
-            // Build back the original node type
-            child.type = initialType as never;
-            if ("children" in child) child.children = [{ type: "text", value: repairedChildText }];
-            // Obtain the delimiters
-            let delimiters = { prefix: "", suffix: "" };
-            if (child.type === "strong") delimiters = { prefix: "**", suffix: "**" };
-            else if (child.type === "emphasis") delimiters = { prefix: "_", suffix: "_" };
-            else if (child.type === "delete") delimiters = { prefix: "~~", suffix: "~~" };
-            else if (child.type === "inlineMath") delimiters = { prefix: "$$", suffix: "$$" };
-            else if (child.type === "image")
-              delimiters = { prefix: "![", suffix: `](${child.url})` };
-            else if (child.type === "link") delimiters = { prefix: "[", suffix: `](${child.url})` };
-            // Build the placeholder
-            const value = delimiters.prefix + repairedChildText + delimiters.suffix;
-            placeholders.set(placeholderId, value);
-          }
+        // Keep text nodes as is
+        if (child.type === "text") continue;
+        // Replace the non-text child by a placeholder
+        const placeholderId = newId();
+        const repairedChild = { type: "text", value: `{${placeholderId}}` };
+        children.splice(children.indexOf(child as never), 1, repairedChild as never);
+        // Special case for break nodes - preserve the hard break syntax
+        if (child.type === "break") placeholders.set(placeholderId, "  \n");
+        // Ignore nodes that cannot contain Markdown, fill the placeholder with their content as is
+        else if (safeNodes.includes(child.type)) {
+          const rootNode: Mdast.Root = { type: "root", children: [child] };
+          const [errToMarkdown_, markdown_] = safeMarkdownFromTree(rootNode);
+          if (errToMarkdown_) return op.failure(errToMarkdown_);
+          placeholders.set(placeholderId, markdown_);
+        }
+        // Repair other node type
+        else {
+          // Convert the child to a paragraph node
+          const type = child.type;
+          child.type = "paragraph" as never;
+          // Convert the child to a repaired text node
+          const [errWalkChild, repairedChildText] = walkRepair(child);
+          if (errWalkChild) return op.failure(errWalkChild);
+          // Build back the original node type
+          if ("children" in child) child.children = [{ type: "text", value: repairedChildText }];
+          // Obtain the delimiters
+          let delimiters = { prefix: "", suffix: "" };
+          if (type === "strong") delimiters = { prefix: "**", suffix: "**" };
+          else if (type === "emphasis") delimiters = { prefix: "_", suffix: "_" };
+          else if (type === "delete") delimiters = { prefix: "~~", suffix: "~~" };
+          else if (type === "inlineMath") delimiters = { prefix: "$$", suffix: "$$" };
+          else if (type === "image") delimiters = { prefix: "![", suffix: `](${child.url})` };
+          else if (type === "link") delimiters = { prefix: "[", suffix: `](${child.url})` };
+          else if (type === "linkReference")
+            delimiters = { prefix: "[", suffix: `][${child.identifier}]` };
+          // Build the placeholder
+          const value = delimiters.prefix + repairedChildText + delimiters.suffix;
+          placeholders.set(placeholderId, value);
         }
       }
       if ("children" in node) node.children = children;
@@ -355,7 +366,7 @@ export const repairTree = (tree: Mdast.Root) => {
       if (errRepair) return op.failure(errRepair);
       return op.success(repaired);
     };
-    const [errWalk, repairedMarkdown] = walkRepair(normalizedNode);
+    const [errWalk, repairedMarkdown] = walkRepair(repairableNode);
     if (errWalk) return op.failure(errWalk);
 
     // Replace placeholders in the repaired markdown string
@@ -366,7 +377,8 @@ export const repairTree = (tree: Mdast.Root) => {
       for (const [placeholderId, placeholderValue] of placeholders.entries()) {
         const placeholderRegex = new RegExp(`{${placeholderId}}`, "g");
         const previousLength = replacedMarkdown.length;
-        replacedMarkdown = replacedMarkdown.replace(placeholderRegex, placeholderValue);
+        // Use a replacer function to avoid special $ interpretation in replacement strings
+        replacedMarkdown = replacedMarkdown.replace(placeholderRegex, () => placeholderValue);
         if (previousLength !== replacedMarkdown.length) hasChanged = true;
       }
     }
@@ -391,6 +403,15 @@ export const repairTree = (tree: Mdast.Root) => {
       parent &&
       "children" in parent &&
       parent.children.splice(parent.children.indexOf(node as never), 1);
+
+    // In case of unclosed math block on new line, e.g. "$$x = y", mdast will
+    // parse the value ("x = y") as the meta, and the value will be empty.
+    // Here we fix this by transferring the meta to the value.
+    if (node.type === "math" && node.value === "" && node.meta) {
+      node.value = node.meta;
+      node.meta = null;
+    }
+
     if ("value" in node && node.value.length === 0) removeNode();
     if ("children" in node) {
       if (node.children.length) for (const child of node.children) walkEmpty(child, node);
@@ -399,11 +420,23 @@ export const repairTree = (tree: Mdast.Root) => {
   };
   for (let i = 0; i < 10; i++) walkEmpty(tree, null);
 
-  // Perform another mdast cycle to ensure all positions are correct
-  const finalTree = cycleMdast(tree);
+  // Set `partial` flag on lineage of nodes containing partial markers
+  const walkPartial = (node: Mdast.Nodes) => {
+    const isPartial = JSON.stringify(node).includes(PARTIAL_MARKER);
+    if (isPartial) node.partial = true;
+    if ("children" in node) for (const child of node.children) walkPartial(child);
+  };
+  walkPartial(tree);
+
+  // Strip all partial markers from the tree
+  const strippedTree = JSON.parse(JSON.stringify(tree).replaceAll(PARTIAL_MARKER, ""));
+
+  // Perform an mdast cycle to ensure all positions are correct
+  const [errFinalTree, finalTree] = cycleMdast(strippedTree as Mdast.Root);
+  if (errFinalTree) return op.failure(errFinalTree);
 
   // Return success
-  return op.success(finalTree as Mdast.Root);
+  return op.success(finalTree);
 };
 
 /**

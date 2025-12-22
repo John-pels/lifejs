@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { speechDurationTokenizer } from "./speech-duration-tokenizer";
+import { durationTokenizer } from "./duration-tokenizer";
 
 describe("SpeechDurationTokenizer", () => {
   describe("basic text", () => {
     it("should tokenize plain text", async () => {
-      const [err, tokens] = await speechDurationTokenizer.tokenize("Hello world");
+      const [err, tokens] = await durationTokenizer.tokenize("Hello world");
       expect(err).toBeUndefined();
       expect(tokens).toBeDefined();
       expect(tokens?.length).toBeGreaterThan(0);
@@ -18,7 +18,7 @@ describe("SpeechDurationTokenizer", () => {
     });
 
     it("should handle empty string", async () => {
-      const [err, tokens] = await speechDurationTokenizer.tokenize("");
+      const [err, tokens] = await durationTokenizer.tokenize("");
       expect(err).toBeUndefined();
       expect(tokens).toEqual([]);
     });
@@ -27,7 +27,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("whitespace removal", () => {
     it("should remove whitespace tokens and reflect position on previous token", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       // All tokens should be non-whitespace (whitespace is removed)
       const hasWhitespace = tokens?.some((t) => t.value.trim().length === 0);
@@ -36,7 +36,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle multiple spaces", async () => {
       const text = "Hello    world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       // Whitespace should be removed
       const hasWhitespace = tokens?.some((t) => t.value.trim().length === 0);
@@ -47,7 +47,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("punctuation splitting", () => {
     it("should split tokens by punctuation marks", async () => {
       const text = "Hello, world!";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -60,7 +60,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle multiple punctuation marks", async () => {
       const text = "Hello... world?";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -73,7 +73,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle punctuation at word boundaries", async () => {
       const text = "Hello-world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -87,7 +87,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("punctuation expansion", () => {
     it("should expand dollar sign to 'dollar'", async () => {
       const text = "Price is $100";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -101,7 +101,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand percent sign to 'percent'", async () => {
       const text = "50% discount";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -116,7 +116,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand at sign to 'at'", async () => {
       const text = "Email me @example.com";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -128,7 +128,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand ampersand to 'and'", async () => {
       const text = "Tom & Jerry";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -140,7 +140,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand plus sign to 'plus'", async () => {
       const text = "2 + 2 = 4";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -152,7 +152,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand equals sign to 'equals'", async () => {
       const text = "x = y";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -164,7 +164,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand degree symbol to 'degree'", async () => {
       const text = "90° angle";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -178,7 +178,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle multiple expanded punctuation", async () => {
       const text = "$100 + 50%";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -195,7 +195,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("number expansion", () => {
     it("should expand single digit numbers", async () => {
       const text = "I have 5 apples";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -208,7 +208,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand two-digit numbers", async () => {
       const text = "There are 42 answers";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -223,7 +223,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand three-digit numbers", async () => {
       const text = "The year is 2024";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -238,7 +238,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand large numbers", async () => {
       const text = "The number is 123456";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -251,7 +251,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle numbers with punctuation", async () => {
       const text = "Price: $100";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -267,7 +267,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle multiple numbers in text", async () => {
       const text = "I have 3 cats and 2 dogs";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -282,7 +282,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand floating point numbers", async () => {
       const text = "The price is 3.14 dollars";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -298,7 +298,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand decimal numbers", async () => {
       const text = "Temperature is 98.6 degrees";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -313,7 +313,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should expand small decimal numbers", async () => {
       const text = "The value is 0.5";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -330,7 +330,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("punctuation stripping", () => {
     it("should keep pause punctuation", async () => {
       const text = "Hello, world!";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -343,7 +343,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should strip unknown punctuation", async () => {
       const text = "Hello #world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -355,7 +355,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should keep known punctuation marks", async () => {
       const text = "Hello, world. How are you?";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -370,7 +370,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("hyphenation", () => {
     it("should hyphenate long words", async () => {
       const text = "beautiful";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -384,7 +384,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should not hyphenate short words", async () => {
       const text = "word";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -396,7 +396,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should hyphenate words longer than 4 characters", async () => {
       const text = "wonderful";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -408,7 +408,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle hyphenated words correctly", async () => {
       const text = "well-known";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -422,7 +422,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("position tracking", () => {
     it("should track positions correctly", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length > 0) {
         const firstToken = tokens[0];
@@ -438,7 +438,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should reflect whitespace end positions on previous tokens", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length > 0) {
         // Find tokens that correspond to "Hello" and "world"
@@ -453,7 +453,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should maintain position continuity", async () => {
       const text = "Hello, world!";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length > 1) {
         // Positions should be non-decreasing
@@ -471,7 +471,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("markdown handling", () => {
     it("should strip markdown formatting", async () => {
       const text = "This is **bold** text";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -484,7 +484,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle markdown links", async () => {
       const text = "Visit [Google](https://google.com)";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -499,7 +499,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle markdown headings", async () => {
       const text = "# Heading Level 1";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -513,7 +513,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle markdown lists", async () => {
       const text = "- First item\n- Second item";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -529,7 +529,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("complex scenarios", () => {
     it("should handle text with numbers, punctuation, and formatting", async () => {
       const text = "Price: $100 (50% off)";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -550,7 +550,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle mathematical expressions", async () => {
       const text = "2 + 2 = 4";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -569,7 +569,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle currency and percentages together", async () => {
       const text = "Save $50 or 25%";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -588,7 +588,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle long sentences with various elements", async () => {
       const text = "The price is $1,234.56, which is 10% more than before!";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -615,7 +615,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("URL handling", () => {
     it("should transform HTTP URLs to domain", async () => {
       const text = "Visit http://example.com for more info";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -630,7 +630,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should transform HTTPS URLs to domain", async () => {
       const text = "Visit https://test.google.com/path";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -646,7 +646,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should transform file:// URLs to filename", async () => {
       const text = "See file:///path/to/file.txt";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -661,7 +661,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should transform file:// URLs with complex filenames", async () => {
       const text = "Open file:///path/to/my-document.pdf";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -678,7 +678,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("edge cases", () => {
     it("should handle text with only punctuation", async () => {
       const text = "!!!";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -690,7 +690,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with only numbers", async () => {
       const text = "123";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -707,7 +707,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with only expanded punctuation", async () => {
       const text = "$";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -721,7 +721,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle very long words", async () => {
       const text = "supercalifragilisticexpialidocious";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -735,7 +735,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle mixed case words", async () => {
       const text = "Hello WORLD";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -749,7 +749,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle unicode characters", async () => {
       const text = "Hello 世界";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -761,7 +761,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with emojis", async () => {
       const text = "Hello 😀 world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       // Should not crash, emojis may be filtered or preserved depending on implementation
       expect(tokens).toBeDefined();
@@ -771,7 +771,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("integration with speech tokenizer", () => {
     it("should process markdown-stripped text correctly", async () => {
       const text = "This is **bold** and *italic* text with [a link](url).";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -789,7 +789,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle code blocks correctly", async () => {
       const text = "Here is code:\n\n```\nconst x = 1;\n```\n\nMore text.";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -804,7 +804,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle tables correctly", async () => {
       const text = "| Header | Header |\n|--------|--------|\n| Cell   | Cell   |";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const values = tokens?.map((t) => t.value);
       expect(values).toBeDefined();
@@ -820,7 +820,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("token value validation", () => {
     it("should not produce empty tokens", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens) {
         // All tokens should have non-empty values
@@ -831,7 +831,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should produce tokens with valid positions", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens) {
         for (const token of tokens) {
@@ -844,7 +844,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should maintain token order", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length > 1) {
         // Tokens should be in order
@@ -862,7 +862,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("critical edge cases", () => {
     it("should handle time format with colon", async () => {
       const text = "2:30 PM";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       expect(tokens).toBeDefined();
       const values = tokens?.map((t) => t.value);
@@ -878,7 +878,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle ellipsis with emoji", async () => {
       const text = "You know... 🤗";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       expect(tokens).toBeDefined();
       const values = tokens?.map((t) => t.value);
@@ -894,7 +894,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle negative and positive numbers with degree symbol", async () => {
       const text = "-10°C or +25°";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       expect(tokens).toBeDefined();
       const values = tokens?.map((t) => t.value);
@@ -917,7 +917,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle consecutive pause punctuations", async () => {
       const text = "Consecutive pause punctuations :-";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       expect(tokens).toBeDefined();
       const values = tokens?.map((t) => t.value);
@@ -937,7 +937,7 @@ describe("SpeechDurationTokenizer", () => {
   describe("take() method", () => {
     it("should take first N tokens from text", async () => {
       const text = "Hello world";
-      const [err, result] = await speechDurationTokenizer.take(text, 3);
+      const [err, result] = await durationTokenizer.take(text, 3);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       // Should return a substring of the original text
@@ -947,7 +947,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return empty string when taking 0 tokens", async () => {
       const text = "Hello world";
-      const [err, result] = await speechDurationTokenizer.take(text, 0);
+      const [err, result] = await durationTokenizer.take(text, 0);
       expect(err).toBeUndefined();
       // tokensCount <= 0 returns empty string
       expect(result).toBe("");
@@ -955,9 +955,9 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return full text when taking more tokens than available", async () => {
       const text = "Hello world";
-      const [_err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [_err, tokens] = await durationTokenizer.tokenize(text);
       const tokenCount = tokens?.length || 0;
-      const [errTake, result] = await speechDurationTokenizer.take(text, tokenCount + 10);
+      const [errTake, result] = await durationTokenizer.take(text, tokenCount + 10);
       expect(errTake).toBeUndefined();
       // When tokensCount >= tokens.length, returns full text
       expect(result).toBe(text);
@@ -965,26 +965,26 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return full text when taking exactly all tokens", async () => {
       const text = "Hello world";
-      const [_err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [_err, tokens] = await durationTokenizer.tokenize(text);
       const tokenCount = tokens?.length || 0;
-      const [errTake, result] = await speechDurationTokenizer.take(text, tokenCount);
+      const [errTake, result] = await durationTokenizer.take(text, tokenCount);
       expect(errTake).toBeUndefined();
       expect(result).toBe(text);
     });
 
     it("should handle empty string", async () => {
       const text = "";
-      const [err, result] = await speechDurationTokenizer.take(text, 1);
+      const [err, result] = await durationTokenizer.take(text, 1);
       expect(err).toBeUndefined();
       expect(result).toBe("");
     });
 
     it("should correctly slice text based on token positions", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length >= 2) {
-        const [errTake, result] = await speechDurationTokenizer.take(text, 2);
+        const [errTake, result] = await durationTokenizer.take(text, 2);
         expect(errTake).toBeUndefined();
         expect(result).toBeDefined();
         // The result should end at the position where the 2nd token ends
@@ -997,7 +997,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with punctuation", async () => {
       const text = "Hello, world!";
-      const [err, result] = await speechDurationTokenizer.take(text, 5);
+      const [err, result] = await durationTokenizer.take(text, 5);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       expect(text.startsWith(result || "")).toBe(true);
@@ -1006,7 +1006,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with numbers", async () => {
       const text = "I have 5 apples";
-      const [err, result] = await speechDurationTokenizer.take(text, 4);
+      const [err, result] = await durationTokenizer.take(text, 4);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       expect(text.startsWith(result || "")).toBe(true);
@@ -1014,7 +1014,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle single token", async () => {
       const text = "Hello";
-      const [err, result] = await speechDurationTokenizer.take(text, 1);
+      const [err, result] = await durationTokenizer.take(text, 1);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       // Should return at least part of the text
@@ -1024,7 +1024,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with expanded punctuation", async () => {
       const text = "Price is $100";
-      const [err, result] = await speechDurationTokenizer.take(text, 3);
+      const [err, result] = await durationTokenizer.take(text, 3);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       expect(text.startsWith(result || "")).toBe(true);
@@ -1032,12 +1032,12 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle long text with multiple tokens", async () => {
       const text = "The quick brown fox jumps over the lazy dog";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const tokenCount = tokens?.length || 0;
       // Only test if we have at least 10 tokens
       if (tokenCount >= 10) {
-        const [errTake, result] = await speechDurationTokenizer.take(text, 10);
+        const [errTake, result] = await durationTokenizer.take(text, 10);
         expect(errTake).toBeUndefined();
         expect(result).toBeDefined();
         expect(text.startsWith(result || "")).toBe(true);
@@ -1050,8 +1050,8 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should maintain position accuracy across multiple calls", async () => {
       const text = "Hello world, how are you?";
-      const [err1, result1] = await speechDurationTokenizer.take(text, 3);
-      const [err2, result2] = await speechDurationTokenizer.take(text, 5);
+      const [err1, result1] = await durationTokenizer.take(text, 3);
+      const [err2, result2] = await durationTokenizer.take(text, 5);
       expect(err1).toBeUndefined();
       expect(err2).toBeUndefined();
       expect(result1).toBeDefined();
@@ -1065,7 +1065,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should handle text with markdown", async () => {
       const text = "This is **bold** text";
-      const [err, result] = await speechDurationTokenizer.take(text, 4);
+      const [err, result] = await durationTokenizer.take(text, 4);
       expect(err).toBeUndefined();
       expect(result).toBeDefined();
       expect(text.startsWith(result || "")).toBe(true);
@@ -1073,12 +1073,12 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return correct slice when token ends at exact position", async () => {
       const text = "Hello world";
-      const [err, tokens] = await speechDurationTokenizer.tokenize(text);
+      const [err, tokens] = await durationTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       if (tokens && tokens.length > 0) {
         const firstTokenEnd = tokens[0]?.position.endsAt;
         if (firstTokenEnd !== undefined) {
-          const [errTake, result] = await speechDurationTokenizer.take(text, 1);
+          const [errTake, result] = await durationTokenizer.take(text, 1);
           expect(errTake).toBeUndefined();
           expect(result).toBe(text.slice(0, firstTokenEnd));
         }
@@ -1087,7 +1087,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return full text when taking more tokens than available (very large count)", async () => {
       const text = "Hello";
-      const [err, result] = await speechDurationTokenizer.take(text, 1000);
+      const [err, result] = await durationTokenizer.take(text, 1000);
       expect(err).toBeUndefined();
       // When tokensCount >= tokens.length, returns full text
       expect(result).toBe(text);
@@ -1095,7 +1095,7 @@ describe("SpeechDurationTokenizer", () => {
 
     it("should return empty string when taking negative token count", async () => {
       const text = "Hello world";
-      const [err, result] = await speechDurationTokenizer.take(text, -1);
+      const [err, result] = await durationTokenizer.take(text, -1);
       expect(err).toBeUndefined();
       // tokensCount <= 0 returns empty string
       expect(result).toBe("");

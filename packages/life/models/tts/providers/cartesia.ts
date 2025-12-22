@@ -10,7 +10,9 @@ import type { TTSJob } from "../types";
 export const cartesiaTTSConfig = z.object({
   provider: z.literal("cartesia"),
   apiKey: z.string().prefault(process.env.CARTESIA_API_KEY as string),
-  model: z.enum(["sonic-2", "sonic-turbo", "sonic", "sonic-3"]).prefault("sonic-3"),
+  model: z
+    .enum(["sonic-2", "sonic-turbo", "sonic", "sonic-3", "sonic-3-latest"])
+    .prefault("sonic-3-latest"),
   language: z
     .enum([
       "en",

@@ -1,4 +1,4 @@
-import { SileroVAD } from "./providers/silero";
+import { SileroVAD } from "./providers/base";
 
 export const vadProviders = {
   silero: SileroVAD,

@@ -2,8 +2,8 @@ import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
 import * as op from "@/shared/operation";
 import { RemoteFile } from "@/shared/remote-file";
-import type { VADJob } from "../../types";
-import { VADProviderBase } from "../base";
+import type { VADJob } from "../types";
+import { VADProviderBase } from "./base";
 
 // The Silero VAD model has been trainedcon 64 chunks of context plus 512 chunks of fresh audio data (= 576 chunks).
 const WINDOW_SIZE = 64 + 512;

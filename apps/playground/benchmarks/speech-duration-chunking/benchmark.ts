@@ -13,7 +13,7 @@ import { syllableTokenizer } from "./tokenizers/syllable-tokenizer";
 import { wordsTokenizer } from "./tokenizers/words-tokenizer";
 import { SpokenTextTokenizer } from "./tokenizers/old";
 import { speechDurationTokenizer } from "./../../../../packages/life/models/tts/lib/speech-duration-tokenizer";
-import { speechTokenizer } from "./../../../../packages/life/models/tts/lib/speech-tokenizer";
+import { speechTokenizer } from "../../../../packages/life/models/tts/lib/duration-tokenizer";
 
 // Configuration
 const SAMPLE_RATE = 16000;

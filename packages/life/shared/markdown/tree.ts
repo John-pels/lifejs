@@ -81,7 +81,10 @@ export const markdownFromTree = (tree: Mdast.Root) =>
         gfmStrikethroughToMarkdown(),
         gfmTableToMarkdown(),
         gfmTaskListItemToMarkdown(),
-        mathToMarkdown(),
+        mathToMarkdown({ singleDollarTextMath: false }),
       ],
+      bullet: "-",
+      bulletOther: "*",
+      emphasis: "_",
     }),
   );

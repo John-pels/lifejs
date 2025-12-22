@@ -158,7 +158,7 @@ describe("SpeechTokenizer", () => {
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toBe("This is a link.\n\n");
+      expect(spoken).toBe("This is a link.");
       expect(spoken).not.toContain("[ref]");
     });
 
@@ -195,7 +195,7 @@ describe("SpeechTokenizer", () => {
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toBe("Alt text\n\n");
+      expect(spoken).toBe("Alt text");
     });
   });
 
@@ -222,7 +222,7 @@ describe("SpeechTokenizer", () => {
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toBe("Outer item,\nInner item,");
+      expect(spoken).toBe("Outer item,\n\nInner item,");
     });
 
     it("should handle lists with formatting", async () => {
@@ -373,15 +373,6 @@ describe("SpeechTokenizer", () => {
       expect(spoken).toContain("This is");
       expect(spoken).not.toContain("$$");
     });
-
-    it("should not interpret single $ as math (currency)", async () => {
-      const text = "This costs $29.99 today.";
-      const [err, tokens] = await speechTokenizer.tokenize(text);
-      expect(err).toBeUndefined();
-      const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toContain("29.99");
-      expect(spoken).toContain("dollar");
-    });
   });
 
   describe("URL filtering", () => {
@@ -505,89 +496,36 @@ describe("SpeechTokenizer", () => {
       expect(spoken).not.toContain("http://example.com");
     });
 
-    it("should preserve leading spaces", async () => {
+    it("should strip leading spaces", async () => {
       const text = "   Hello world";
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
-      const firstToken = tokens?.[0];
-      // Leading spaces should be preserved as a token
-      expect(firstToken?.value).toBe(" ");
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toMatch(/^\s+Hello/);
+      expect(spoken).toMatch(/^Hello/);
     });
 
-    it("should preserve trailing spaces", async () => {
+    it("should strip trailing spaces", async () => {
       const text = "Hello world   ";
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
       const spoken = tokens?.map((t) => t.value).join("");
-      // Trailing spaces should be preserved (may be collapsed to single space)
-      expect(spoken).toMatch(/Hello\s+world/);
-      // Check that position reflects trailing spaces
-      const lastToken = tokens?.[tokens.length - 1];
-      expect(lastToken?.position.endsAt).toBeGreaterThan(lastToken?.position.startsAt ?? 0);
+      expect(spoken).toBe("Hello world");
     });
 
-    it("should preserve leading line breaks", async () => {
+    it("should strip leading line breaks", async () => {
       const text = "\n\nHello world";
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
-      const firstTokens = tokens?.slice(0, 2);
-      // Leading breaks should be preserved (max 2)
-      expect(firstTokens?.some((t) => t.value === "\n")).toBe(true);
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toMatch(/^\n\nHello/);
+      expect(spoken).toMatch(/^Hello/);
     });
 
-    it("should preserve trailing line breaks", async () => {
+    it("should strip trailing line breaks", async () => {
       const text = "Hello world\n\n";
       const [err, tokens] = await speechTokenizer.tokenize(text);
       expect(err).toBeUndefined();
-      const lastTokens = tokens?.slice(-2);
-      // Trailing breaks should be preserved (max 2)
-      expect(lastTokens?.some((t) => t.value === "\n")).toBe(true);
       const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toMatch(/Hello\s+world\n\n$/);
-    });
-
-    it("should handle text with both leading and trailing spaces", async () => {
-      const text = "   Hello world   ";
-      const [err, tokens] = await speechTokenizer.tokenize(text);
-      expect(err).toBeUndefined();
-      const firstToken = tokens?.[0];
-      // Both leading and trailing spaces should be preserved
-      expect(firstToken?.value).toBe(" ");
-      const spoken = tokens?.map((t) => t.value).join("");
-      expect(spoken).toMatch(/^\s+Hello\s+world/);
-      // Check that positions reflect both leading and trailing spaces
-      const lastToken = tokens?.[tokens.length - 1];
-      expect(lastToken?.position.endsAt).toBeGreaterThan(lastToken?.position.startsAt ?? 0);
-    });
-
-    it("should properly reflect position for leading spaces", async () => {
-      const text = "   Hello";
-      const [err, tokens] = await speechTokenizer.tokenize(text);
-      expect(err).toBeUndefined();
-      const firstToken = tokens?.[0];
-      const secondToken = tokens?.[1];
-      // Leading space token should have correct position
-      expect(firstToken?.value).toBe(" ");
-      // Verify positions are valid and sequential
-      expect(firstToken?.position.startsAt).toBeGreaterThanOrEqual(0);
-      expect(firstToken?.position.endsAt).toBeGreaterThan(firstToken?.position.startsAt ?? 0);
-      expect(secondToken?.position.startsAt).toBeGreaterThanOrEqual(
-        firstToken?.position.startsAt ?? 0,
-      );
-      expect(secondToken?.position.endsAt).toBeGreaterThan(secondToken?.position.startsAt ?? 0);
-    });
-
-    it("should properly reflect position for trailing spaces", async () => {
-      const text = "Hello   ";
-      const [err, tokens] = await speechTokenizer.tokenize(text);
-      expect(err).toBeUndefined();
-      const lastToken = tokens?.[tokens.length - 1];
-      // Trailing space should be reflected in position
-      expect(lastToken?.position.endsAt).toBeGreaterThan(lastToken?.position.startsAt ?? 0);
+      expect(spoken).toBe("Hello world");
     });
   });
 

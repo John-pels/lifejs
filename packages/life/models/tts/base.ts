@@ -4,7 +4,7 @@ import { audioChunkToMs } from "@/shared/audio-chunk-to-ms";
 import { newId } from "@/shared/id";
 import type * as op from "@/shared/operation";
 import { WeightedAverage } from "@/shared/weighted-average";
-import { speechDurationTokenizer } from "./lib/speech-duration-tokenizer";
+import { durationTokenizer } from "./lib/duration-tokenizer";
 import { speechTokenizer } from "./lib/speech-tokenizer";
 import type { TTSChunk, TTSChunkInput, TTSJob } from "./types";
 
@@ -19,7 +19,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
   readonly #jobsFullText: Record<string, string> = {};
   readonly #jobsFullAudio: Record<string, Int16Array> = {};
   readonly #jobsLastTaken: Record<string, string> = {};
-  readonly #jobsInputTokensCount: Record<string, number> = {};
+  readonly #jobsPreparedLength: Record<string, number> = {};
 
   constructor(configSchema: ConfigSchema, config: Partial<z.infer<ConfigSchema>>) {
     this.config = configSchema.parse({ ...config });
@@ -57,17 +57,17 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
         if (!this.#jobsFullText[id]) this.#jobsFullText[id] = "";
         this.#jobsFullText[id] += text;
 
-        // Tokenize the full text
-        const [errTokens, speechTokens] = await speechTokenizer.tokenize(this.#jobsFullText[id]);
-        if (errTokens) throw new Error(errTokens.message);
+        // Preprocess the full text for TTS
+        const [errPrepare, prepared] = await speechTokenizer.prepare(this.#jobsFullText[id]);
+        if (errPrepare) throw errPrepare;
 
-        // Retrieve the tokens delta
-        const deltaTokens = speechTokens.slice(this.#jobsInputTokensCount[id] ?? 0);
-        this.#jobsInputTokensCount[id] = speechTokens.length;
+        // Retrieve the delta (new content since last call)
+        const lastLength = this.#jobsPreparedLength[id] ?? 0;
+        const deltaText = prepared.slice(lastLength);
+        this.#jobsPreparedLength[id] = prepared.length;
 
         // Call the subclass callback
-        const inputText = deltaTokens.map((t) => t.value).join("");
-        await this.receiveText(job, inputText, isLast);
+        await this.receiveText(job, deltaText, isLast);
       },
       _abortController,
       _receiveVoiceChunk: async (inputChunk: TTSChunkInput) => {
@@ -85,7 +85,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
 
           // Convert taken tokens back to text
           const fullText = this.#jobsFullText[id] ?? "";
-          const [errTaken, newTaken] = await speechDurationTokenizer.take(fullText, tokensCount);
+          const [errTaken, newTaken] = await durationTokenizer.take(fullText, tokensCount);
           if (errTaken) throw errTaken;
 
           // Find whether the newTaken text is a continuation of the lastTaken text
@@ -123,7 +123,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
           const fullAudio = this.#jobsFullAudio[id] as Int16Array;
 
           // Compute full text tokens, and audio duration
-          const [errTokensCount, durationTokens] = await speechDurationTokenizer.tokenize(fullText);
+          const [errTokensCount, durationTokens] = await durationTokenizer.tokenize(fullText);
           if (errTokensCount) throw errTokensCount;
           const duration = audioChunkToMs(fullAudio);
           const msPerToken = duration / durationTokens.length;
@@ -135,7 +135,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
           this.#jobsFullText[id] = "";
           this.#jobsLastTaken[id] = "";
           this.#jobsFullAudio[id] = new Int16Array(0);
-          this.#jobsInputTokensCount[id] = 0;
+          this.#jobsPreparedLength[id] = 0;
         }
 
         // Handle error chunks
@@ -144,7 +144,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
           this.#jobsFullText[id] = "";
           this.#jobsLastTaken[id] = "";
           this.#jobsFullAudio[id] = new Int16Array(0);
-          this.#jobsInputTokensCount[id] = 0;
+          this.#jobsPreparedLength[id] = 0;
         }
 
         // Push the chunk to the queue

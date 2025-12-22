@@ -4,7 +4,7 @@ import type { Message } from "@/agent/messages";
 import { lifeError } from "@/shared/error";
 import * as op from "@/shared/operation";
 import { RemoteFile } from "@/shared/remote-file";
-import { EOUProviderBase } from "../base";
+import { EOUProviderBase } from "./base";
 
 // Lazy import to avoid native module issues with process forking
 const transformers = import("@huggingface/transformers");
