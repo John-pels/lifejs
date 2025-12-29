@@ -197,7 +197,7 @@ describe("VADProvider", () => {
 
         for (const chunk of chunks) {
           expect(chunk.type).toBe("result");
-          expect(chunk.chunk).toBeInstanceOf(Int16Array);
+          expect(chunk.voice).toBeInstanceOf(Int16Array);
           expect(typeof chunk.score).toBe("number");
         }
 

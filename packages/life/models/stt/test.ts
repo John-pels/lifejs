@@ -225,7 +225,7 @@ describe("STTProvider", () => {
           expect(["content", "error", "end"]).toContain(chunk.type);
 
           if (chunk.type === "content") {
-            expect(typeof chunk.textChunk).toBe("string");
+            expect(typeof chunk.text).toBe("string");
           } else if (chunk.type === "error") {
             expect(typeof chunk.error).toBe("string");
           }
@@ -263,7 +263,7 @@ describe("STTProvider", () => {
         // Extract text from content chunks
         const text = chunks
           .filter((c): c is Extract<STTChunk, { type: "content" }> => c.type === "content")
-          .map((c) => c.textChunk)
+          .map((c) => c.text)
           .join("");
 
         // Should have received some transcribed text

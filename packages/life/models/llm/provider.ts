@@ -74,8 +74,18 @@ export class LLMProvider {
   generateMessage(params: { messages: Message[]; tools: LLMTool[] }) {
     return op.attempt(() => {
       const job = this.#createGenerateMessageJob();
-      const messages = this.#toAISDKMessages(params.messages);
-      const tools = this.#toAISDKTools(params.tools);
+      const messages = params.messages.map(this.#toAISDKMessage);
+      const tools = Object.fromEntries(
+        params.tools.map((tool) => [
+          tool.name,
+          {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            outputSchema: tool.outputSchema,
+          } satisfies Tool,
+        ]),
+      );
 
       this.#runWithFallback((config) => {
         const { warnings, fullStream } = streamText({
@@ -120,7 +130,7 @@ export class LLMProvider {
     schema: T;
   }): Promise<op.OperationResult<z.infer<T>>> {
     return await op.attempt(async () => {
-      const messages = this.#toAISDKMessages(params.messages);
+      const messages = params.messages.map(this.#toAISDKMessage);
       const result = this.#runWithFallback(async (config) => {
         const { object, warnings } = await generateObject({
           ...config,
@@ -193,9 +203,7 @@ export class LLMProvider {
 
   #toAISDKMessage(message: Message): ModelMessage {
     if (message.role === "system") return { role: "system", content: message.content };
-
     if (message.role === "user") return { role: "user", content: message.content };
-
     if (message.role === "agent")
       return {
         role: "assistant",
@@ -212,7 +220,6 @@ export class LLMProvider {
           ),
         ],
       };
-
     if (message.role === "action")
       return {
         role: "tool",
@@ -228,26 +235,7 @@ export class LLMProvider {
           },
         ],
       };
-
     throw new Error(`Unknown message role: ${(message as Message).role}`);
-  }
-
-  #toAISDKMessages(messages: Message[]): ModelMessage[] {
-    return messages.map(this.#toAISDKMessage);
-  }
-
-  #toAISDKTool(tool: LLMTool): Tool {
-    return {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.schema.input,
-      outputSchema: tool.schema.output,
-      execute: tool.execute,
-    };
-  }
-
-  #toAISDKTools(tools: LLMTool[]): ToolSet {
-    return Object.fromEntries(tools.map((tool) => [tool.name, this.#toAISDKTool(tool)]));
   }
 
   /** Retries callback up to 3 times per config, then falls back to next config. Works with sync or async callbacks. */

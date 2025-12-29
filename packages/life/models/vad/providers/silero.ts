@@ -65,7 +65,7 @@ export class SileroVAD extends VADProviderBase<typeof sileroVADConfig> {
       const chunk = pcm.subarray(i, Math.min(i + WINDOW_SIZE, pcm.length));
       const score = await this.#runInference(job, chunk);
       if (score === null) return;
-      job.stream.push({ type: "result", chunk, score });
+      job.stream.push({ type: "result", voice: chunk, score });
     }
   }
 

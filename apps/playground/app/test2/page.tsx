@@ -47,7 +47,7 @@ export default function Page() {
     let content: string;
     if (message.role === "user" || message.role === "agent") {
       content = message.content;
-    } else if (message.role === "tool") content = JSON.stringify(message);
+    } else if (message.role === "action") content = JSON.stringify(message);
     else return null;
     return { content, role: message.role };
   };

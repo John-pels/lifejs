@@ -92,7 +92,7 @@ export class DeepgramSTT extends STTProviderBase<typeof deepgramSTTConfig> {
       // Push voice chunks as they arrive
       socket.on(LiveTranscriptionEvents.Transcript, (msg: LiveTranscriptionEvent) => {
         const text = msg.channel.alternatives[0]?.transcript;
-        if (text) job.stream.push({ type: "content", textChunk: text });
+        if (text) job.stream.push({ type: "content", text });
       });
 
       // Handle job cancellation

@@ -76,7 +76,7 @@ export class CartesiaTTS extends TTSProviderBase<typeof cartesiaTTSConfig> {
     if (msg.type === "chunk") {
       const buf = Buffer.from(msg.data, "base64");
       const pcmBytes = new Int16Array(buf.buffer, buf.byteOffset, buf.length / 2);
-      job._receiveVoiceChunk({ type: "content", voiceChunk: pcmBytes });
+      job._receiveVoiceChunk({ type: "content", voice: pcmBytes });
     }
     // Handle "end" chunks
     else if (msg.type === "done") job._receiveVoiceChunk({ type: "end" });

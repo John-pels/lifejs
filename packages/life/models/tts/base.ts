@@ -76,7 +76,7 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
         if (chunk.type === "content") {
           // Append the voice chunk to the full audio
           if (!this.#jobsFullAudio[id]) this.#jobsFullAudio[id] = new Int16Array(0);
-          const fullAudio = [...(this.#jobsFullAudio[id] ?? []), ...chunk.voiceChunk];
+          const fullAudio = [...(this.#jobsFullAudio[id] ?? []), ...chunk.voice];
           this.#jobsFullAudio[id] = new Int16Array(fullAudio);
 
           // Estimate the number of tokens to take
@@ -94,11 +94,11 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
           const isContinuation = newTaken.length >= lastTaken.length;
 
           // Compute the text chunk to emit
-          chunk.textChunk = isContinuation ? newTaken.slice(lastTaken.length) : "";
+          chunk.text = isContinuation ? newTaken.slice(lastTaken.length) : "";
           if (isContinuation) this.#jobsLastTaken[id] = newTaken;
 
           // Estimate the voice chunk duration
-          const voiceDurationMs = audioChunkToMs(chunk.voiceChunk);
+          const voiceDurationMs = audioChunkToMs(chunk.voice);
           chunk.durationMs = voiceDurationMs;
         }
 
@@ -112,8 +112,8 @@ export abstract class TTSProviderBase<ConfigSchema extends z.ZodObject> {
           if (remainingText.trimEnd().length) {
             stream.push({
               type: "content",
-              voiceChunk: new Int16Array(0),
-              textChunk: remainingText,
+              voice: new Int16Array(0),
+              text: remainingText,
               durationMs: 0,
             });
           }

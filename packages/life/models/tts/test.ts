@@ -198,8 +198,8 @@ describe("TTSProvider", () => {
           expect(["content", "error", "end"]).toContain(chunk.type);
 
           if (chunk.type === "content") {
-            expect(chunk.voiceChunk).toBeInstanceOf(Int16Array);
-            expect(typeof chunk.textChunk).toBe("string");
+            expect(chunk.voice).toBeInstanceOf(Int16Array);
+            expect(typeof chunk.text).toBe("string");
             expect(typeof chunk.durationMs).toBe("number");
           } else if (chunk.type === "error") {
             expect(typeof chunk.error).toBe("string");
@@ -238,7 +238,7 @@ describe("TTSProvider", () => {
 
         // If we got content chunks, verify PCM data
         if (contentChunks.length > 0) {
-          const totalSamples = contentChunks.reduce((sum, c) => sum + c.voiceChunk.length, 0);
+          const totalSamples = contentChunks.reduce((sum, c) => sum + c.voice.length, 0);
           expect(totalSamples).toBeGreaterThan(0);
         }
 
@@ -271,7 +271,7 @@ describe("TTSProvider", () => {
         );
 
         // Text chunks should progressively cover the input
-        const allText = contentChunks.map((c) => c.textChunk).join("");
+        const allText = contentChunks.map((c) => c.text).join("");
         // At least some text should be returned (may not be exact due to tokenization)
         expect(allText.length).toBeGreaterThanOrEqual(0);
 

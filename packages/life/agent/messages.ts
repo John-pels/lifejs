@@ -8,7 +8,6 @@ export const baseMessageSchema = {
   id: z.string(),
   createdAt: z.number(),
   lastUpdated: z.number(),
-  hideFrom: z.enum(["user", "agent", "all"]).optional(),
 };
 
 // User message
@@ -38,6 +37,7 @@ export const agentMessageSchema = z.object({
   ...baseMessageSchema,
   role: z.literal("agent"),
   content: z.string().prefault(""),
+  reasoning: z.string().optional(),
   actions: z.array(agentActionRequestSchema).prefault([]),
 });
 export type AgentMessage = z.output<typeof agentMessageSchema>;
@@ -77,27 +77,12 @@ export type CreateMessageInput = z.input<typeof createMessageInputSchema>;
 // Update message input
 const updateOmitFields = { createdAt: true, lastUpdated: true, id: true } as const;
 export const updateMessageInputSchema = z.discriminatedUnion("role", [
-  userMessageSchema
-    .omit(updateOmitFields)
-    .partial()
-    .extend({ role: z.literal("user") }),
-  systemMessageSchema
-    .omit(updateOmitFields)
-    .partial()
-    .extend({ role: z.literal("system") }),
-  agentMessageSchema
-    .omit(updateOmitFields)
-    .partial()
-    .extend({ role: z.literal("agent") }),
-  actionMessageSchema
-    .omit(updateOmitFields)
-    .partial()
-    .extend({ role: z.literal("action") }),
+  userMessageSchema.omit(updateOmitFields).partial(),
+  systemMessageSchema.omit(updateOmitFields).partial(),
+  agentMessageSchema.omit(updateOmitFields).partial(),
+  actionMessageSchema.omit(updateOmitFields).partial(),
 ]);
-export type UpdateMessageInput<T extends Message["role"]> = Extract<
-  z.input<typeof updateMessageInputSchema>,
-  { role: T }
->;
+export type UpdateMessageInput = z.input<typeof updateMessageInputSchema>;
 
 /**
  * A helper class aimed at facilitating safe and efficient
@@ -115,7 +100,7 @@ export class MessageList {
     return op.attempt(() => deepClone(this.#messages));
   }
 
-  get(id: string) {
+  getById(id: string) {
     const [err, messages] = this.getAll();
     if (err) return op.failure(err);
     return op.success(messages.find((message) => message.id === id));
@@ -131,38 +116,21 @@ export class MessageList {
   }
 
   create(message: CreateMessageInput) {
-    // Validate the message input
-    const { data: validatedMessage, error: validatedMessageError } =
-      createMessageInputSchema.safeParse(message);
-    if (validatedMessageError)
-      return op.failure({
-        code: "Validation",
-        message: "Invalid message shape.",
-        cause: validatedMessageError,
-      });
+    // Obtain the message output
+    const [errToMessageOutput, messageOutput] = prepareMessageInput(message);
+    if (errToMessageOutput) return op.failure(errToMessageOutput);
 
-    // Else, create and insert the message
-    const newMessage: Message = {
-      ...validatedMessage,
-      id: newId("message"),
-      createdAt: Date.now(),
-      lastUpdated: Date.now(),
-    };
-    this.#messages.push(newMessage);
+    // Insert the message
+    this.#messages.push(messageOutput);
 
     // Return the message id
-    return op.success(newMessage.id);
+    return op.success(messageOutput.id);
   }
 
-  update<Role extends Message["role"]>(
-    id: string,
-    role: Role,
-    message: Omit<UpdateMessageInput<Role>, "role">,
-  ) {
+  update(id: string, message: UpdateMessageInput) {
     // Validate the message input (include role for discriminated union)
     const { data: validatedMessage, error: validationError } = updateMessageInputSchema.safeParse({
       ...message,
-      role,
     });
     if (validationError)
       return op.failure({
@@ -172,7 +140,7 @@ export class MessageList {
       });
 
     // If the message does not exist, return a failure
-    const [err, existingMessage] = this.get(id);
+    const [err, existingMessage] = this.getById(id);
     if (err) return op.failure(err);
     if (!existingMessage)
       return op.failure({
@@ -181,11 +149,13 @@ export class MessageList {
       });
 
     // Ensure the role is matching the message role
-    if (existingMessage.role !== role)
+    if (existingMessage.role !== message.role)
       return op.failure({
         code: "Validation",
         message: "Invalid message role provided.",
-        cause: new Error(`Message with id '${id}' is not a ${role} message.`),
+        cause: new Error(
+          `Cannot update message with id '${id}' from '${existingMessage.role}' role to '${message.role}' role.`,
+        ),
       });
 
     // Build the new message object
@@ -201,4 +171,30 @@ export class MessageList {
     // Return the message id
     return op.success(id);
   }
+
+  remove(id: string) {
+    this.#messages = this.#messages.filter((m) => m.id !== id);
+    return op.success(id);
+  }
+}
+
+// A helper function aimed at preparing a message input for creation.
+export function prepareMessageInput(message: CreateMessageInput) {
+  // Validate the message input
+  const { data: validatedMessage, error: validatedMessageError } =
+    createMessageInputSchema.safeParse(message);
+  if (validatedMessageError)
+    return op.failure({
+      code: "Validation",
+      message: "Invalid message shape.",
+      cause: validatedMessageError,
+    });
+
+  // Return the message output
+  return op.success({
+    ...validatedMessage,
+    id: newId("message"),
+    createdAt: Date.now(),
+    lastUpdated: Date.now(),
+  } as Message);
 }

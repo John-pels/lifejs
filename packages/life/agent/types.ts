@@ -1,12 +1,31 @@
 import type z from "zod";
+import type { EOUProviderBase } from "@/models/eou/providers/base";
+import type { LLMProvider } from "@/models/llm/provider";
+import type { STTProviderBase } from "@/models/stt/providers/base";
+import type { TTSProviderBase } from "@/models/tts/base";
+import type { VADProviderBase } from "@/models/vad/providers/base";
 import type * as op from "@/shared/operation";
 import type { Any, MaybePromise, Without } from "@/shared/types";
 import type { TelemetrySpanHandle } from "@/telemetry/types";
-import type { clientConfigSchema, configSchema } from "./config/schema/server";
-import type { contextDefinition } from "./context";
-import type { eventSchema, eventSourceSchema, eventsDefinition } from "./events";
-import type { handlersDefinition } from "./handlers";
+import type { clientConfigSchema } from "./config/schema/client";
+import type { configSchema } from "./config/schema/server";
 import type { CreateMessageInput, Message } from "./messages";
+import type { AgentServer } from "./server/agent";
+import type { contextDefinition, statusSchema } from "./server/runtime/context";
+import type { eventSchema, eventSourceSchema, eventsDefinition } from "./server/runtime/events";
+import type { handlersDefinition } from "./server/runtime/handlers";
+
+// Status
+export type Status = z.infer<typeof statusSchema>;
+
+// Models
+export interface Models {
+  llm: InstanceType<typeof LLMProvider>;
+  eou: InstanceType<typeof EOUProviderBase>;
+  stt: InstanceType<typeof STTProviderBase>;
+  tts: InstanceType<typeof TTSProviderBase>;
+  vad: InstanceType<typeof VADProviderBase>;
+}
 
 // Config
 export type Config<
@@ -68,7 +87,11 @@ export type Event<
       : Without<z.output<typeof eventSchema>, "name" | "data">) & {
       name: EventDef["name"];
     } & (EventDef extends { dataSchema: z.ZodObject | z.ZodDiscriminatedUnion<z.ZodObject[]> }
-        ? { data: z.output<EventDef["dataSchema"]> }
+        ? {
+            data: T extends "input"
+              ? z.input<EventDef["dataSchema"]>
+              : z.output<EventDef["dataSchema"]>;
+          }
         : T extends "input"
           ? unknown
           : { data: never })
@@ -149,7 +172,7 @@ export type HandlerStateDefinition =
   | Record<string, unknown>
   | ((params: { config: z.output<typeof configSchema> }) => Record<string, unknown>);
 
-export type AgentHandlerState<StateDef extends HandlerStateDefinition> = StateDef extends (
+export type HandlerState<StateDef extends HandlerStateDefinition> = StateDef extends (
   p: infer _,
 ) => Record<string, unknown>
   ? ReturnType<StateDef>
@@ -158,27 +181,26 @@ export type AgentHandlerState<StateDef extends HandlerStateDefinition> = StateDe
 export type HandlerFunction<
   StateDef extends HandlerStateDefinition,
   Type extends "block" | "stream",
+  Output,
 > = (params: {
   event: Event<"output">;
-  state: AgentHandlerState<StateDef>;
-  models: unknown;
-  transport: unknown;
-  storage: unknown;
-  config: unknown;
+  state: HandlerState<StateDef>;
   events: EventsAccessor;
   context: ContextAccessor<Type extends "block" ? "write" : "read">;
+  agent: AgentServer;
   telemetry: TelemetrySpanHandle;
-}) => MaybePromise<unknown>;
+}) => MaybePromise<op.OperationResult<Output>>;
 
 export type HandlerDefinition<
   Name extends string = string,
   StateDef extends HandlerStateDefinition = HandlerStateDefinition,
+  Output = unknown,
 > = {
   name: Name;
   state?: StateDef;
 } & (
-  | { mode: "block"; onEvent: HandlerFunction<StateDef, "block"> }
-  | { mode: "stream"; onEvent: HandlerFunction<StateDef, "stream"> }
+  | { mode: "block"; onEvent: HandlerFunction<StateDef, "block", Output> }
+  | { mode: "stream"; onEvent: HandlerFunction<StateDef, "stream", Output> }
 );
 
 export type Handler = (typeof handlersDefinition)[number];
@@ -194,7 +216,6 @@ export interface ScopeDefinition<Schema extends z.ZodObject = z.ZodObject> {
 // Memories
 export interface MemoryOptions {
   behavior?: "blocking" | "non-blocking";
-  refreshOnMessage?: boolean;
   position?: { section: "top" | "bottom"; align: "start" | "end" };
   disabled?: boolean;
 }
@@ -219,23 +240,24 @@ export interface MemoriesOptions {
   noDefaults?: boolean | string[];
 }
 
-interface MemoryAccessor {
-  setOptions: (options: MemoryOptions) => void;
-  get(): Promise<Message[] | null>;
-  refresh(): Promise<void>;
-}
-
 // Actions
 export interface ActionOptions {
   disabled?: boolean;
+  timeoutMs?: number;
+  retries?: number;
+  canRun?: {
+    inline?: boolean;
+    background?: boolean;
+    parallel?: boolean;
+  };
 }
 
 export type ActionExecute<ActionDef extends ActionDefinition = ActionDefinition> = (
   params: {
-    input: z.infer<ActionDef["input"]>;
+    input: z.infer<ActionDef["inputSchema"]>;
   } & DependenciesAccessors<ActionDef["dependencies"]>,
 ) => Promise<{
-  output?: z.infer<ActionDef["output"]>;
+  output?: z.infer<ActionDef["outputSchema"]>;
   error?: string;
   hint?: string;
 }>;
@@ -243,23 +265,23 @@ export type ActionExecute<ActionDef extends ActionDefinition = ActionDefinition>
 export type ActionLabel<ActionDef extends ActionDefinition = ActionDefinition> =
   | string
   | ((
-      params: { input: z.infer<ActionDef["input"]> } & DependenciesAccessors<
+      params: { input: z.infer<ActionDef["inputSchema"]> } & DependenciesAccessors<
         ActionDef["dependencies"]
       >,
     ) => string);
 
 export type ActionExecuteAccessor<ActionDef extends ActionDefinition> = (
-  input: z.infer<ActionDef["input"]>,
-) => Promise<{ output?: z.infer<ActionDef["output"]>; error?: string; hint?: string }>;
+  input: z.infer<ActionDef["inputSchema"]>,
+) => Promise<{ output?: z.infer<ActionDef["outputSchema"]>; error?: string; hint?: string }>;
 
 export interface ActionDefinition {
   name: string;
   dependencies: Dependencies;
   description: string;
-  input: z.ZodObject;
-  output: z.ZodObject;
+  inputSchema: z.ZodObject;
+  outputSchema: z.ZodObject;
   execute: ActionExecute;
-  label?: ActionLabel;
+  label: ActionLabel;
   options: ActionOptions;
 }
 
@@ -361,4 +383,55 @@ export interface AgentDefinition {
   stores: StoreDefinitions;
   storesOptions?: StoresOptions;
   config: z.input<typeof configSchema>;
+}
+
+// Agent Client
+export interface AgentClient {
+  config: z.output<typeof clientConfigSchema>;
+  runtime: {
+    events: EventsAccessor;
+    context: ContextAccessor<"read">;
+  };
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  continue(): void;
+  /**
+   * @param hint - Optional hint to help the agent decide.
+   *
+   * @example
+   * ```ts
+   * agent.decide("The user just completed the form, check if you have some follow-up questions for them.");
+   * ```
+   */
+  decide(hint?: string): Promise<void>;
+  interrupt(): Promise<void>;
+  say(): Promise<void>;
+  status(): Promise<Status>;
+  messages: {
+    getById(id: string): Promise<Message | undefined>;
+    getAll(): Promise<Message[]>;
+    add(message: Message): Promise<string>;
+    update(id: string, message: Message): Promise<string>;
+    remove(id: string): Promise<string>;
+  };
+  actions: {
+    actionName: {
+      execute(): Promise<void>;
+      lastRun: null;
+      setOptions(): Promise<void>;
+    };
+  };
+  memories: {
+    memoryName: {
+      get(): Promise<void>;
+      setOptions(): Promise<void>;
+    };
+  };
+  stores: {
+    storeName: {
+      get(): Promise<void>;
+      set(): Promise<void>;
+      setOptions(): Promise<void>;
+    };
+  };
 }

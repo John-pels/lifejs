@@ -1,4 +1,4 @@
 import z from "zod";
-import { sileroVADConfig } from "./providers/base";
+import { sileroVADConfig } from "./providers/silero";
 
-export const vadProviderConfig = z.discriminatedUnion("provider", [sileroVADConfig]);
+export const vadConfigSchema = z.discriminatedUnion("provider", [sileroVADConfig]);

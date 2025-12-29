@@ -1,13 +1,12 @@
 import type { AsyncQueue } from "@/shared/async-queue";
-import type { ttsProviders } from ".";
 
 export type TTSChunk =
-  | { type: "content"; voiceChunk: Int16Array; textChunk: string; durationMs: number }
+  | { type: "content"; voice: Int16Array; text: string; durationMs: number }
   | { type: "end" }
   | { type: "error"; error: string };
 
 export type TTSChunkInput =
-  | { type: "content"; voiceChunk: Int16Array }
+  | { type: "content"; voice: Int16Array }
   | { type: "end" }
   | { type: "error"; error: string };
 
@@ -19,5 +18,3 @@ export interface TTSJob {
   _abortController: AbortController;
   _receiveVoiceChunk: (chunk: TTSChunkInput) => Promise<void>;
 }
-
-export type TTSProvider = (typeof ttsProviders)[keyof typeof ttsProviders];

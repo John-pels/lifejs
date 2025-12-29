@@ -1,22 +1,5 @@
 import z from "zod";
-import { AsyncQueue } from "@/shared/async-queue";
-import { canon } from "@/shared/canon";
-import { deepClone } from "@/shared/deep-clone";
-import { lifeError } from "@/shared/error";
-import { newId } from "@/shared/id";
-import * as op from "@/shared/operation";
-import { RollingBuffer } from "@/shared/rolling-buffer";
-import type { Any, Todo } from "@/shared/types";
-import type { TelemetryClient } from "@/telemetry/clients/base";
-import { createTelemetryClient } from "@/telemetry/clients/node";
-import { TransportNodeClient } from "@/transport/client/node";
-import { configSchema } from "./config/schema/server";
-import { contextDefinition } from "./context";
-import { eventInputSchema, eventsDefinition } from "./events";
-import { handlersDefinition } from "./handlers";
 import type {
-  AgentDefinition,
-  Config,
   Context,
   ContextAccessor,
   ContextListener,
@@ -28,19 +11,23 @@ import type {
   EventsListener,
   EventsSelector,
   HandlerDefinition,
-} from "./types";
+} from "@/agent/types";
+import { AsyncQueue } from "@/shared/async-queue";
+import { canon } from "@/shared/canon";
+import { deepClone } from "@/shared/deep-clone";
+import { lifeError } from "@/shared/error";
+import { newId } from "@/shared/id";
+import * as op from "@/shared/operation";
+import { RollingBuffer } from "@/shared/rolling-buffer";
+import type { Any, Todo } from "@/shared/types";
+import type { AgentServer } from "../agent";
+import { contextDefinition } from "./context";
+import { eventInputSchema, eventsDefinition } from "./events";
+import { handlersDefinition } from "./handlers";
 
-export class AgentServer {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string;
-  readonly definition: AgentDefinition;
-  readonly #config: Config;
-  readonly #isRestart: boolean;
-  readonly #telemetry: TelemetryClient;
-  readonly #transport: TransportNodeClient;
-  readonly models = null;
-  readonly storage = null;
+export class AgentRuntime {
+  readonly isRestart: boolean;
+  readonly #agent: AgentServer;
   #context: Context;
   readonly #queue = new AsyncQueue<Event<"output">>();
   readonly #streamQueues: AsyncQueue<Event<"output">>[] = [];
@@ -50,31 +37,11 @@ export class AgentServer {
   readonly #eventsHistory = new RollingBuffer<EventsHistory>(1000);
   readonly #eventsHistoryListeners = new Map<string, EventsHistoryListener>();
 
-  constructor(params: {
-    id: string;
-    version: string;
-    definition: AgentDefinition;
-    isRestart: boolean;
-    config?: Config;
-    context?: Context;
-  }) {
-    this.id = params.id;
-    this.name = params.definition.name;
-    this.version = params.version;
-    this.definition = params.definition;
-    this.#isRestart = params.isRestart;
+  constructor(params: { agent: AgentServer; context?: Context; isRestart: boolean }) {
+    this.#agent = params.agent;
+    this.isRestart = params.isRestart;
 
-    // Validate and set config
-    const { error: errConfig, data: parsedConfig } = configSchema.safeParse(params.config ?? {});
-    if (errConfig)
-      throw lifeError({
-        code: "Validation",
-        message: "Invalid config provided.",
-        cause: errConfig,
-      });
-    this.#config = parsedConfig;
-
-    // Validate and setcontext
+    // Validate and set context
     const { error: errContext, data } = contextDefinition.safeParse(params.context ?? {});
     if (errContext)
       throw lifeError({
@@ -83,38 +50,12 @@ export class AgentServer {
         cause: errContext,
       });
     this.#context = data;
-
-    // Initialize telemetry
-    this.#telemetry = createTelemetryClient("server", {
-      agentId: this.id,
-      agentName: this.name,
-      agentVersion: this.version,
-      agentConfig: this.#config,
-      transportProviderName: this.#config.transport.provider,
-      // llmProviderName: this.#config.models.llm.provider,
-      // sttProviderName: this.#config.models.stt.provider,
-      // eouProviderName: this.#config.models.eou.provider,
-      // ttsProviderName: this.#config.models.tts.provider,
-      // vadProviderName: this.#config.models.vad.provider,
-    });
-
-    // Initialize transport
-    this.#transport = new TransportNodeClient({
-      config: this.#config.transport,
-      obfuscateErrors: true,
-      telemetry: this.#telemetry,
-    });
-
-    // Expose client accessor via RPC
-    this.#initClientAccessor();
   }
 
   async start() {
-    return await this.#telemetry.trace("agent.start()", async () => {
+    return await this.#agent.telemetry.trace("AgentRuntime.start()", async () => {
       // 1. Initialize 'stream()' handlers sub-queues
-      const streamHandlers = handlersDefinition.filter(
-        (h: HandlerDefinition) => h.mode === "stream",
-      );
+      const streamHandlers = handlersDefinition.filter((h) => h.mode === "stream");
       for (const handler of streamHandlers) {
         const queue = new AsyncQueue<Event>();
         this.#streamQueues.push(queue);
@@ -132,12 +73,12 @@ export class AgentServer {
             for (const handler of blockHandlers) {
               // Take a snapshot of the context data before executing the handler
               const [errOld, oldContext] = op.attempt(() => deepClone(this.#context));
-              if (errOld) this.#telemetry.log.error({ error: errOld });
+              if (errOld) this.#agent.telemetry.log.error({ error: errOld });
               // Execute the handler
               await this.#executeHandler(handler, event);
               // If the context has changed, record the change
               const [errEqual, equal] = canon.equal(this.#context, oldContext);
-              if (errEqual) this.#telemetry.log.error({ error: errEqual });
+              if (errEqual) this.#agent.telemetry.log.error({ error: errEqual });
               if (!equal) {
                 if (!event.contextChanges) event.contextChanges = [];
                 event.contextChanges.push({
@@ -158,8 +99,8 @@ export class AgentServer {
               }),
             );
           } catch (error) {
-            this.#telemetry.log.error({
-              message: `Unknown error while processing event '${this.name}'.`,
+            this.#agent.telemetry.log.error({
+              message: `Unknown error while processing event '${event.name}'.`,
               error,
             });
           }
@@ -170,8 +111,8 @@ export class AgentServer {
       const [errEvents, events] = this.getEventsAccessor({ type: "server" });
       if (errEvents) return op.failure(errEvents);
       const [errEmit, eventId] = events.emit({
-        name: "agent.start",
-        data: { isRestart: this.#isRestart },
+        name: "start",
+        data: { isRestart: this.isRestart },
       });
       if (errEmit) return op.failure(errEmit);
       const [errWait] = await events.wait(eventId);
@@ -182,11 +123,11 @@ export class AgentServer {
   }
 
   async stop() {
-    return await this.#telemetry.trace("agent.stop()", async () => {
+    return await this.#agent.telemetry.trace("AgentRuntime.stop()", async () => {
       // 1. Send the 'plugin.stop' event at the front of the queue
       const [errEvents, events] = this.getEventsAccessor({ type: "server" });
       if (errEvents) return op.failure(errEvents);
-      const [errEmit, eventId] = events.emit({ name: "agent.stop", urgent: true });
+      const [errEmit, eventId] = events.emit({ name: "stop", urgent: true });
       if (errEmit) return op.failure(errEmit);
       const [errWait] = await events.wait(eventId);
       if (errWait) return op.failure(errWait);
@@ -201,12 +142,6 @@ export class AgentServer {
       // 4. Return that the plugin was stopped successfully
       return op.success();
     });
-  }
-
-  getConfigAccessor() {
-    const [errClone, clonedConfig] = op.attempt(() => deepClone(this.#config));
-    if (errClone) return op.failure(errClone);
-    return op.success(clonedConfig);
   }
 
   getContextAccessor<Access extends "read" | "write" = "read">(
@@ -254,15 +189,15 @@ export class AgentServer {
             if (errEqual) return op.failure(errEqual);
             if (equal) await listener.callback(deepClone(this.#context), deepClone(oldContext));
           } catch (error) {
-            this.#telemetry.log.error({
-              message: `Error while notifying context listeners in agent '${this.id}'.`,
+            this.#agent.telemetry.log.error({
+              message: `Error while notifying context listeners in agent '${this.#agent.id}'.`,
               error,
             });
           }
         }),
         // Send new context value updates via RPC
-        this.#transport.call({
-          name: `agent.${this.id}.context.changed`,
+        this.#agent.transport.call({
+          name: `agent.${this.#agent.id}.context.changed`,
           schema: { input: z.object({ value: z.any(), timestamp: z.number() }) },
           input: { value: this.#context, timestamp: Date.now() },
         }),
@@ -424,66 +359,6 @@ export class AgentServer {
     } as EventsAccessor);
   }
 
-  continue() {
-    return void 0;
-  }
-
-  decide() {
-    return void 0;
-  }
-
-  interrupt() {
-    return void 0;
-  }
-
-  say() {
-    return void 0;
-  }
-
-  messages = {
-    create: () => void 0,
-    update: () => void 0,
-    get: () => void 0,
-    hide: () => void 0,
-  };
-
-  actions = {
-    actionName: {
-      execute: () => void 0,
-      lastRun: null,
-      setOptions: () => void 0,
-    },
-  };
-
-  memories = {
-    memoryName: {
-      get: () => void 0,
-      setOptions: () => void 0,
-    },
-  };
-
-  stores = {
-    storeName: {
-      get: () => void 0,
-      set: () => void 0,
-      setOptions: () => void 0,
-    },
-  };
-
-  #getHandlerState(handler: HandlerDefinition) {
-    // Return the last saved state
-    const savedState = this.#handlersStates.get(handler.name);
-    if (savedState) return savedState;
-
-    // If no state was set already, build and return the initial state
-    const [errConfig, config] = this.getConfigAccessor();
-    if (errConfig) return op.failure(errConfig);
-    const initialState =
-      typeof handler.state === "function" ? handler.state({ config }) : (handler.state ?? {});
-    this.#handlersStates.set(handler.name, initialState);
-    return initialState;
-  }
-
   async #executeHandler(handler: (typeof handlersDefinition)[number], event: Event) {
     // Run the handler onEvent()
     const result = await (async () => {
@@ -491,7 +366,7 @@ export class AgentServer {
       const [errClone, clonedEvent] = op.attempt(() => deepClone(event));
       if (errClone) return op.failure(errClone);
       // Get the config accessor
-      const [errConfig, config] = this.getConfigAccessor();
+      const [errConfig, config] = this.#agent.getConfig();
       if (errConfig) return op.failure(errConfig);
       // Get the context accessor
       const handlerAccess = handler.mode === "block" ? "write" : "read";
@@ -503,19 +378,20 @@ export class AgentServer {
       if (errEvents) return op.failure(errEvents);
       // Get the handler state
       const state = this.#getHandlerState(handler as HandlerDefinition);
-      return await this.#telemetry.trace(`agent.handler.${handler.name}`, async (span) =>
+      return await this.#agent.telemetry.trace(`agent.handler.${handler.name}`, async (span) =>
         op.attempt(
           async () =>
             await handler.onEvent({
               event: clonedEvent,
               state: state as Todo,
               telemetry: span,
+              definition: this.#agent.definition,
               config,
               events,
               context: context as Todo,
-              transport: this.#transport,
-              storage: this.storage,
-              models: this.models,
+              transport: this.#agent.transport,
+              storage: this.#agent.storage,
+              models: this.#agent.models,
             }),
         ),
       );
@@ -523,13 +399,13 @@ export class AgentServer {
 
     // Log the error if any, and emit a plugin.error event
     if (result[0]) {
-      this.#telemetry.log.error({
-        message: `Error while executing ${handler.mode} handler '${handler.name}' in agent '${this.name}'.`,
+      this.#agent.telemetry.log.error({
+        message: `Error while executing ${handler.mode} handler '${handler.name}' in agent '${this.#agent.name}'.`,
         error: result[0],
       });
       const [errEvents, events] = this.getEventsAccessor({ type: "server" });
       if (errEvents) return op.failure(errEvents);
-      const [errEmit] = events.emit({ name: "agent.error", data: { error: result[0], event } });
+      const [errEmit] = events.emit({ name: "error", data: { error: result[0], event } });
       if (errEmit) return op.failure(errEmit);
     }
 
@@ -562,7 +438,17 @@ export class AgentServer {
     );
   }
 
-  #initClientAccessor() {
-    return void 0;
+  #getHandlerState(handler: HandlerDefinition) {
+    // Return the last saved state
+    const savedState = this.#handlersStates.get(handler.name);
+    if (savedState) return savedState;
+
+    // If no state was set already, build and return the initial state
+    const [errConfig, config] = this.#agent.getConfig();
+    if (errConfig) return op.failure(errConfig);
+    const initialState =
+      typeof handler.state === "function" ? handler.state({ config }) : (handler.state ?? {});
+    this.#handlersStates.set(handler.name, initialState);
+    return initialState;
   }
 }

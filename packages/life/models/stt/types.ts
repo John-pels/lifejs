@@ -4,7 +4,7 @@ import type { sttProviders } from ".";
 export type STTProvider = (typeof sttProviders)[keyof typeof sttProviders];
 
 export type STTChunk =
-  | { type: "content"; textChunk: string }
+  | { type: "content"; text: string }
   | { type: "error"; error: string }
   | { type: "end" };
 
