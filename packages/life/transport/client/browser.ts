@@ -1,12 +1,12 @@
 import type { z } from "zod";
 import type { TelemetryClient } from "@/telemetry/clients/base";
-import { TransportClientBase } from "../base";
-import type { transportBrowserConfig } from "../config/browser";
-import { LiveKitBrowserClient } from "../providers/livekit/browser";
+import type { transportConfigSchema } from "../config";
+import { LiveKitBrowser } from "../providers/livekit/browser";
+import { TransportClientBase } from "./base";
 
 // Providers
 export const clientTransportProviders = {
-  livekit: LiveKitBrowserClient,
+  livekit: LiveKitBrowser,
 } as const;
 
 // Transport
@@ -16,7 +16,7 @@ export class TransportBrowserClient extends TransportClientBase {
     obfuscateErrors = false,
     telemetry = null,
   }: {
-    config: z.output<typeof transportBrowserConfig.schema>;
+    config: z.output<typeof transportConfigSchema>;
     obfuscateErrors?: boolean;
     telemetry?: TelemetryClient | null;
   }) {

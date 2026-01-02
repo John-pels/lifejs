@@ -4,13 +4,13 @@ ensureNode("TransportNodeClient");
 
 import type { z } from "zod";
 import type { TelemetryClient } from "@/telemetry/clients/base";
-import { TransportClientBase } from "../base";
-import type { transportNodeConfig } from "../config/node";
-import { LiveKitNodeClient } from "../providers/livekit/node";
+import type { transportConfigSchema } from "../config";
+import { LiveKitNode } from "../providers/livekit/nodejs";
+import { TransportClientBase } from "./base";
 
 // Providers
 export const nodeTransportProviders = {
-  livekit: LiveKitNodeClient,
+  livekit: LiveKitNode,
 } as const;
 
 // Transport
@@ -20,7 +20,7 @@ export class TransportNodeClient extends TransportClientBase {
     obfuscateErrors = false,
     telemetry = null,
   }: {
-    config: z.output<(typeof transportNodeConfig)["schema"]>;
+    config: z.output<typeof transportConfigSchema>;
     obfuscateErrors?: boolean;
     telemetry?: TelemetryClient | null;
   }) {

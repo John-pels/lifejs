@@ -26,6 +26,7 @@
     "react",
     "fullstack"
   ],
+
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -43,7 +44,68 @@
   "publishConfig": {
     "access": "public"
   },
-  "exports": {},
+  "exports": {
+    "./config": {
+      "import": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.mjs"
+      },
+      "require": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.js"
+      }
+    },
+    "./define": {
+      "import": {
+        "types": "./dist/exports/define.d.ts",
+        "default": "./dist/exports/define.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/define.d.ts",
+        "default": "./dist/exports/define.js"
+      }
+    },
+    "./nodejs": {
+      "import": {
+        "types": "./dist/exports/nodejs.d.ts",
+        "default": "./dist/exports/nodejs.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/nodejs.d.ts",
+        "default": "./dist/exports/nodejs.js"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/exports/browser.d.ts",
+        "default": "./dist/exports/browser.mjs"
+      },
+      "require": {
+        "types": "./dist/exports/browser.d.ts",
+        "default": "./dist/exports/browser.js"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/integrations/react/index.d.ts",
+        "default": "./dist/integrations/react/index.mjs"
+      },
+      "require": {
+        "types": "./dist/integrations/react/index.d.ts",
+        "default": "./dist/integrations/react/index.js"
+      }
+    },
+    "./nextjs": {
+      "import": {
+        "types": "./dist/integrations/nextjs/index.d.ts",
+        "default": "./dist/integrations/nextjs/index.mjs"
+      },
+      "require": {
+        "types": "./dist/integrations/nextjs/index.d.ts",
+        "default": "./dist/integrations/nextjs/index.js"
+      }
+    }
+  },
   "dependencies": {
     "@huggingface/hub": "^2.7.1",
     "@huggingface/transformers": "^3.8.1",
@@ -66,6 +128,7 @@
     "serialize-error": "^12.0.0",
     "superjson": "^2.2.6",
     "ua-parser-js": "2.0.6",
+    "yjs": "^13.6.28",
     "zod": "^4.2.1"
   },
   "devDependencies": {

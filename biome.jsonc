@@ -28,11 +28,13 @@
       "nursery": "off",
       "complexity": {
         "noVoid": "off",
-        "noExcessiveCognitiveComplexity": "warn"
+        "noExcessiveCognitiveComplexity": "warn",
+        "noForEach": "off"
       },
       "performance": {
         "noNamespaceImport": "off",
-        "useTopLevelRegex": "warn"
+        "useTopLevelRegex": "warn",
+        "noBarrelFile": "off"
       }
     }
   }

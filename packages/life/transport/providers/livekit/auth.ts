@@ -1,24 +1,31 @@
 import { AccessToken } from "livekit-server-sdk";
 import * as op from "@/shared/operation";
-import type { GetTokenFunction } from "@/transport/auth";
+import type { TransportGetJoinRoomArgsFunction } from "@/transport/types";
 
-export const getToken: GetTokenFunction<"livekit"> = async (config, roomName, participantId) => {
+export const getJoinRoomArgs: TransportGetJoinRoomArgsFunction = async (roomId, participantId) => {
   try {
     // Create a token with the room name and participant name
-    const token = new AccessToken(config.apiKey, config.apiSecret, {
-      identity: participantId,
-    });
+    const token = new AccessToken(
+      process.env.LIVEKIT_API_KEY ?? "devkey",
+      process.env.LIVEKIT_API_SECRET ?? "secret",
+      { identity: participantId },
+    );
 
+    // Grant permissions to the token
     token.addGrant({
       roomJoin: true,
-      room: roomName,
+      room: roomId,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
       roomCreate: true,
     });
 
-    return op.success(await token.toJwt());
+    // Get the token as a JWT
+    const tokenJwt = await token.toJwt();
+
+    // Return the token and room ID
+    return op.success([roomId, tokenJwt]);
   } catch (error) {
     return op.failure({ code: "Unknown", cause: error });
   }

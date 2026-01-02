@@ -85,6 +85,15 @@ export const lifeErrorCodes = {
     defaultMessage: "Internal error.",
     httpEquivalent: 500,
   },
+  /**
+   * Used when a method or feature is not implemented in a specific context.
+   * E.g., a method that exists on the interface but isn't available on this platform.
+   */
+  NotImplemented: {
+    retriable: false,
+    defaultMessage: "Operation not implemented.",
+    httpEquivalent: 501,
+  },
 } as const satisfies Record<string, LifeErrorCodeDefinition>;
 
 export type LifeErrorCode = keyof typeof lifeErrorCodes;
@@ -124,6 +133,7 @@ export class LifeErrorClass extends Error {
    * - Upstream
    * - Unknown
    * - Internal
+   * - NotImplemented
    */
   readonly code: LifeErrorCode;
   /**

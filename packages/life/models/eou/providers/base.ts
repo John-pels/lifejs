@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Message } from "@/agent/messages";
+import type { Message } from "@/shared/messages";
 import type { OperationResult } from "@/shared/operation";
 
 export abstract class EOUProviderBase<ConfigSchema extends z.ZodObject> {

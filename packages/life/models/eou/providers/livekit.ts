@@ -1,7 +1,7 @@
 import { InferenceSession, Tensor } from "onnxruntime-node";
 import { z } from "zod";
-import type { Message } from "@/agent/messages";
 import { lifeError } from "@/shared/error";
+import type { Message } from "@/shared/messages";
 import * as op from "@/shared/operation";
 import { RemoteFile } from "@/shared/remote-file";
 import { EOUProviderBase } from "./base";

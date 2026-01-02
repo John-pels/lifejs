@@ -11,10 +11,10 @@ import {
   type ToolSet,
 } from "ai";
 import type { z } from "zod";
-import type { Message } from "@/agent/messages";
 import { AsyncQueue } from "@/shared/async-queue";
 import { lifeError } from "@/shared/error";
 import { newId } from "@/shared/id";
+import type { Message } from "@/shared/messages";
 import * as op from "@/shared/operation";
 import { telemetry } from "@/telemetry/clients/node";
 import { llmConfigSchema } from "./config";

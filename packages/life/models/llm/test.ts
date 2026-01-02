@@ -4,7 +4,7 @@ import { openai } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { describe, expect, it } from "vitest";
 import z from "zod";
-import type { Message } from "@/agent/messages";
+import type { Message } from "@/shared/messages";
 import { LLMProvider } from "./provider";
 import type { LLMChunk, LLMTool } from "./types";
 
