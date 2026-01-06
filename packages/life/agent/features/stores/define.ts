@@ -1,34 +1,39 @@
-import z from "zod";
-import type { Dependencies } from "@/agent/core/types";
-import type { Override, Without } from "@/shared/types";
-import type { StoreDefinition, StoreOptions } from "./types";
+import type { FeatureDependencies } from "@/agent/core/types";
+import type { Override, WidenLiterals, Without } from "@/shared/types";
+import type { StoreDefinition } from "./types";
+import { SerializableValue } from "@/shared/canon";
+
 
 class StoreBuilder<
   StoreDef extends StoreDefinition,
   Excluded extends keyof StoreBuilder<StoreDef> = never,
 > {
   definition: StoreDef;
+
   constructor(definition: StoreDef) {
     this.definition = definition;
   }
-  dependencies<Deps extends Dependencies>(dependencies: Deps) {
-    const builder = new StoreBuilder({ ...this.definition, dependencies });
-    type NewDefinition = Override<(typeof builder)["definition"], "dependencies", Deps>;
-    const typed = builder as StoreBuilder<NewDefinition, Excluded | "dependencies">;
-    return typed as Without<typeof typed, Excluded | "dependencies">;
+
+  dependencies<Dependencies extends FeatureDependencies>(dependencies: Dependencies) {
+    type NewDefinition = Override<StoreDef, "dependencies", Dependencies>;
+    type NewExcluded = Excluded | "dependencies";
+    const builder = new StoreBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      dependencies,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
-  schema<Schema extends z.ZodObject>(schema: Schema) {
-    const builder = new StoreBuilder({ ...this.definition, schema });
-    type NewDefinition = Override<(typeof builder)["definition"], "schema", Schema>;
-    const typed = builder as StoreBuilder<NewDefinition, Excluded | "schema">;
-    return typed as Without<typeof typed, Excluded | "schema">;
-  }
-  options(options: StoreOptions) {
-    const builder = new StoreBuilder({ ...this.definition, options });
-    const typed = builder as StoreBuilder<(typeof builder)["definition"], Excluded | "options">;
-    return typed as Without<typeof typed, Excluded | "options">;
+
+  value<Value extends SerializableValue>(value: Value) {
+    type NewDefinition = Override<StoreDef, "value", WidenLiterals<Value>>;
+    type NewExcluded = Excluded | "value";
+    const builder = new StoreBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      value,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
 }
 
 export const defineStore = <Name extends string>(name: Name) =>
-  new StoreBuilder({ name, dependencies: [], schema: z.object({}), options: {} });
+  new StoreBuilder({ name, dependencies: [], value: undefined });

@@ -14,9 +14,9 @@ const taskSchema = z.object({
   status: z.enum(["todo", "doing", "done"]),
 });
 
-const tasksStore = defineStore("tasks").schema({
-  tasks: z.array(taskSchema),
-});
+type Tasks = z.infer<typeof taskSchema>[];
+
+const tasksStore = defineStore("tasks").value<Tasks>([])
 
 const currentTaskMemory = defineMemory("current-task")
   .dependencies([tasksStore])

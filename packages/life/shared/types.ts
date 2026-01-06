@@ -1,32 +1,33 @@
 /**
+ * Prettifies a type by merging union and intersection types, removing the `readonly` and `?` modifiers.
+ */
+export type Prettify<T> = { [K in keyof T]: T[K] } & {};
+
+// Helpers for cleaner 'any' type usage
+// biome-ignore lint/suspicious/noExplicitAny: on purpose
+export type Any = any;
+export type Todo = Any;
+
+/**
  * Avoids repeating the same type signature for functions that can return a promise or not.
  */
 export type MaybePromise<T> = T | Promise<T>;
 
-// export type ClassShape = new (
-//   // biome-ignore lint/suspicious/noExplicitAny: on purpose
-//   ...args: any[]
-// ) => any;
-
+/**
+ * Represents a class definition.
+ */
 export interface ClassShape {
   prototype: object;
-  // biome-ignore lint/suspicious/noExplicitAny: on purpose
-  new (...arguments_: any[]): any;
+  new (...args: Any[]): Any;
 }
 
-export type FunctionShape = (
-  // biome-ignore lint/suspicious/noExplicitAny: on purpose
-  ...args: any[]
-  // biome-ignore lint/suspicious/noExplicitAny: on purpose
-) => any;
+/**
+ * Represents a function definition.
+ */
+export type FunctionShape = (...args: Any[]) => Any;
 
-export type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
-// biome-ignore lint/suspicious/noExplicitAny: on purpose
-export type Any = any;
-// biome-ignore lint/suspicious/noExplicitAny: on purpose
-export type Todo = any;
-
+// Type checking helpers
 export type IsAny<T> = 0 extends 1 & T ? true : false;
 export type IsNever<T> = [T] extends [never] ? true : false;
 export type IsFunction<T> = T extends (...args: Any) => Any ? true : false;
@@ -88,5 +89,20 @@ export type Without<T extends object, K extends keyof T> = Prettify<{
   [I in keyof T as I extends K ? never : I]: T[I];
 }>;
 
-declare const __opaque: unique symbol;
+/**
+ * Force the TS compiler to not expand the type in the generated type definitions.
+ */
 export type Opaque<T> = T & { [__opaque]?: never };
+declare const __opaque: unique symbol;
+
+
+
+/**
+ * Widens primitive literal types to their base types.
+ */
+export type WidenLiterals<T> =
+  T extends string ? string :
+  T extends number ? number :
+  T extends boolean ? boolean :
+  T extends bigint ? bigint :
+  T;

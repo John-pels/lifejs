@@ -14,4 +14,4 @@ export const canon = {
   murmur3,
 };
 
-export type { SerializableValue, SerializeResult, serializableValueSchema } from "./serialize";
+export type { SerializableValue, SerializedValue as SerializeResult, serializableValueSchema } from "./serialize";

@@ -1,5 +1,5 @@
 import type { Message } from "@huggingface/transformers";
-import type { Dependencies, DependenciesAccessors } from "@/agent/core/types";
+import type { DependenciesAccessors, FeatureDependencies } from "@/agent/core/types";
 import type { CreateMessageInput } from "@/shared/messages";
 import type { MaybePromise } from "@/shared/types";
 
@@ -10,7 +10,7 @@ export interface MemoryOptions {
   disabled?: boolean;
 }
 
-export type MemoryOutput<Deps extends Dependencies = Dependencies> =
+export type MemoryOutput<Deps extends FeatureDependencies = FeatureDependencies> =
   | Message[]
   | CreateMessageInput[]
   | ((
@@ -19,7 +19,7 @@ export type MemoryOutput<Deps extends Dependencies = Dependencies> =
 
 export interface MemoryDefinition {
   name: string;
-  dependencies: Dependencies;
+  dependencies: FeatureDependencies;
   output: MemoryOutput;
   options: MemoryOptions;
 }

@@ -31,15 +31,15 @@ export interface ScopeDefinition<Schema extends z.ZodObject = z.ZodObject> {
 }
 
 // Dependencies
-type DependencyDefinition = MemoryDefinition | ActionDefinition | StoreDefinition;
+type FeatureDependencyDefinition = MemoryDefinition | ActionDefinition | StoreDefinition;
 
-export interface Dependency {
-  definition: DependencyDefinition;
+export interface FeatureDependency {
+  definition: FeatureDependencyDefinition;
 }
 
-export type Dependencies = Dependency[];
+export type FeatureDependencies = FeatureDependency[];
 
-export interface DependenciesAccessors<Deps extends Dependencies> {
+export interface DependenciesAccessors<Deps extends FeatureDependencies> {
   memories: {
     [Dep in Deps[number] as Dep["definition"] extends MemoryDefinition
       ? Dep["definition"]["name"]

@@ -89,6 +89,7 @@ export const serializableValueSchema: z.ZodType<SerializableValue> = z.lazy(() =
     z.record(z.string(), serializableValueSchema),
   ]),
 );
+
 export type SerializableValue =
   | SerializablePrimitives
   | SerializableValue[]
@@ -99,7 +100,7 @@ export type SerializableValue =
   | Map<SerializableValue, SerializableValue>
   | { [key: string]: SerializableValue };
 
-export type SerializeResult = SuperJSONResult;
+export type SerializedValue = SuperJSONResult;
 
 /**
  * canon.serialize
@@ -128,7 +129,7 @@ export type SerializeResult = SuperJSONResult;
  * const payload = JSON.stringify(encoded);
  * ```
  */
-export const serialize = (value: SerializableValue | unknown) =>
+export const serialize = (value: SerializableValue | unknown): op.OperationResult<SerializedValue> =>
   op.attempt(() => superjson.serialize(value));
 
 /**
@@ -138,7 +139,7 @@ export const serialize = (value: SerializableValue | unknown) =>
  * `canon.serialize`. All special types preserved during serialization are
  * restored (Date, Map, Set, BigInt, RegExp, etc.).
  *
- * @param value - The structured payload (usually parsed from JSON) to turn back into a live value.
+ * @param serializedValue - The structured payload (usually parsed from JSON) to turn back into a live value.
  * @returns The fully rehydrated value.
  *
  * @example
@@ -154,8 +155,8 @@ export const serialize = (value: SerializableValue | unknown) =>
  * ```
  */
 export const deserialize = (
-  value?: SerializeResult,
-): op.OperationResult<SerializableValue | undefined> => {
-  if (!value) return op.success(value);
-  return op.attempt(() => superjson.deserialize(value));
+  serializedValue?: SerializedValue,
+): op.OperationResult<SerializableValue> => {
+  if (!serializedValue) return op.success(undefined);
+  return op.attempt(() => superjson.deserialize(serializedValue));
 };

@@ -16,19 +16,6 @@ Packages:
 - `life/` - The main package containing the entire Life.js framework.
 - `releases/` - A package for managing releases of Life.js.
 
-Here is an overview of `life/` package sub-folders:
-- `agent/` — Provides agent definition (`defineAgent()`) and server.
-- `transport/` — Abstracts complex WebRTC/streaming logic behind a simple `Transport` class.
-- `models/` — Offer a unified API to interact with various LLM/TTS/STT/EOU/VAD providers.
-- `config/` — Contains the schema of agents configuration used by global config (`life.config.ts` file) and local configs (defineAgent().config(...))
-- `plugins/` — In Life.js everything is a plugin, even the generation. This contains all native plugins.
-- `client/` — Provide a client to connect and interact with a Life.js agent.
-- `react/` — Exposes React hooks and components built on top of `life/client`.
-- `shared/` — Shared utilities and helpers.
-- `cli/` — The `life` command-line interface used to run development server, build Life.js project, deploy, etc.
-- `storage/` (coming soon) — Offers a unified API for relational and vector database operations.
-- `compiler/` (coming soon) — Compiles a Life.js project into a ready-to-run `.life/` folder.
-
 #### Commands
 Here are the package manager commands to execute **at the root** of the monorepo to interact with the project.
 - `bun run dev` - Start development servers for all apps.
@@ -48,11 +35,7 @@ You mainly want to use those root commands instead of calling specific apps/pack
 - **Testing**: Vitest (ran with `bun run test`) which is automatically picking and running `*.test.ts` files in the project.
 
 ### Development Guidelines
-
-#### Thinking
 - Use thinking at every step, whenever possible reason about your changes and ideas ( think ).
-
-#### Code Style
 - TypeScript for all code, avoid @ts-ignore and `any` whenever possible
 - Make sure changes / additions are consistent with the existing code around it
 - Be surgical, minimal and precise in your changes
@@ -65,6 +48,7 @@ You mainly want to use those root commands instead of calling specific apps/pack
 - Named exports for components
 - Descriptive naming with auxiliary verbs (isLoading, hasError)
 - Event handlers prefixed with "handle" or "process"
+- In case you try something and it doesn't work, properly revert the changes before jumping to another idea.
 
 #### Test your changes
 Before concluding that a performed change is working, write a minimal temporary test file to test that your changes are working as expected.

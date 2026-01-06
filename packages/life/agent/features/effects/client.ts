@@ -9,8 +9,9 @@ export class EffectClient extends EventEmitter<typeof emitterDefinition> {
 
   constructor(agent: AgentClient, name: string) {
     super(emitterDefinition, { transport: agent.transport, prefix: `effects.${name}` });
-    this.name = name;
     this.#agent = agent;
+    this.name = name;
+    this.setRemoteEvents(["mounted", "unmounted", "mountError", "unmountError"]);
   }
 
   async hasMounted() {

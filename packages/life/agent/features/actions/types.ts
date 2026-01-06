@@ -1,5 +1,5 @@
 import type z from "zod";
-import type { Dependencies, DependenciesAccessors } from "@/agent/core/types";
+import type { DependenciesAccessors, FeatureDependencies } from "@/agent/core/types";
 
 // Actions
 export interface ActionOptions {
@@ -37,7 +37,7 @@ export type ActionExecuteAccessor<ActionDef extends ActionDefinition> = (
 
 export interface ActionDefinition {
   name: string;
-  dependencies: Dependencies;
+  dependencies: FeatureDependencies;
   description: string;
   inputSchema: z.ZodObject;
   outputSchema: z.ZodObject;

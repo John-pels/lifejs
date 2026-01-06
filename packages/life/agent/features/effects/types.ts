@@ -1,11 +1,7 @@
-import type { Dependencies, DependenciesAccessors } from "@/agent/core/types";
+import type { DependenciesAccessors, FeatureDependencies } from "@/agent/core/types";
 import type { MaybePromise } from "@/shared/types";
 
-export interface EffectOptions {
-  disabled?: boolean;
-}
-
-export type EffectOnMount<Deps extends Dependencies = Dependencies> = (
+export type EffectOnMount<Deps extends FeatureDependencies = FeatureDependencies> = (
   params: DependenciesAccessors<Deps>,
 ) => MaybePromise<void | (() => MaybePromise<void>)>;
 
@@ -17,7 +13,6 @@ export interface EffectsOptions {
 
 export interface EffectDefinition {
   name: string;
-  dependencies: Dependencies;
+  dependencies: FeatureDependencies;
   onMount: EffectOnMount;
-  options: EffectOptions;
 }

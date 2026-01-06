@@ -1,5 +1,5 @@
 import z from "zod";
-import type { Dependencies } from "@/agent/core/types";
+import type { FeatureDependencies } from "@/agent/core/types";
 import type { Override, Without } from "@/shared/types";
 import type { ActionDefinition, ActionExecute, ActionLabel, ActionOptions } from "./types";
 
@@ -8,46 +8,75 @@ class ActionBuilder<
   Excluded extends keyof ActionBuilder<ActionDef> = never,
 > {
   definition: ActionDef;
+
   constructor(definition: ActionDef) {
     this.definition = definition;
   }
-  dependencies<Deps extends Dependencies>(dependencies: Deps) {
-    const builder = new ActionBuilder({ ...this.definition, dependencies });
-    type NewDefinition = Override<(typeof builder)["definition"], "dependencies", Deps>;
-    const typed = builder as ActionBuilder<NewDefinition, Excluded | "dependencies">;
-    return typed as Without<typeof typed, Excluded | "dependencies">;
+
+  dependencies<Deps extends FeatureDependencies>(dependencies: Deps) {
+    type NewDefinition = Override<ActionDef, "dependencies", Deps>;
+    type NewExcluded = Excluded | "dependencies";
+    const builder = new ActionBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      dependencies,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   description(description: string) {
-    const builder = new ActionBuilder({ ...this.definition, description });
-    const typed = builder as ActionBuilder<ActionDef, Excluded | "description">;
-    return typed as Without<typeof typed, Excluded | "description">;
+    type NewExcluded = Excluded | "description";
+    const builder = new ActionBuilder<ActionDef, NewExcluded>({
+      ...this.definition,
+      description,
+    } as ActionDef);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   input<Schema extends z.ZodObject>(input: Schema) {
-    const builder = new ActionBuilder({ ...this.definition, inputSchema: input });
-    type NewDefinition = Override<(typeof builder)["definition"], "input", Schema>;
-    const typed = builder as ActionBuilder<NewDefinition, Excluded | "input">;
-    return typed as Without<typeof typed, Excluded | "input">;
+    type NewDefinition = Override<ActionDef, "inputSchema", Schema>;
+    type NewExcluded = Excluded | "input";
+    const builder = new ActionBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      inputSchema: input,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   output<Schema extends z.ZodObject>(output: Schema) {
-    const builder = new ActionBuilder({ ...this.definition, outputSchema: output });
-    type NewDefinition = Override<(typeof builder)["definition"], "output", Schema>;
-    const typed = builder as ActionBuilder<NewDefinition, Excluded | "output">;
-    return typed as Without<typeof typed, Excluded | "output">;
+    type NewDefinition = Override<ActionDef, "outputSchema", Schema>;
+    type NewExcluded = Excluded | "output";
+    const builder = new ActionBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      outputSchema: output,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   label(label: ActionLabel<ActionDef>) {
-    const builder = new ActionBuilder({ ...this.definition, label });
-    const typed = builder as ActionBuilder<ActionDef, Excluded | "label">;
-    return typed as Without<typeof typed, Excluded | "label">;
+    type NewExcluded = Excluded | "label";
+    const builder = new ActionBuilder<ActionDef, NewExcluded>({
+      ...this.definition,
+      label,
+    } as ActionDef);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   execute(execute: ActionExecute<ActionDef>) {
-    const builder = new ActionBuilder({ ...this.definition, execute });
-    const typed = builder as ActionBuilder<(typeof builder)["definition"], Excluded | "execute">;
-    return typed as Without<typeof typed, Excluded | "execute">;
+    type NewExcluded = Excluded | "execute";
+    const builder = new ActionBuilder<ActionDef, NewExcluded>({
+      ...this.definition,
+      execute,
+    } as ActionDef);
+    return builder as Without<typeof builder, NewExcluded>;
   }
+
   options(options: ActionOptions) {
-    const builder = new ActionBuilder({ ...this.definition, options });
-    const typed = builder as ActionBuilder<(typeof builder)["definition"], Excluded | "options">;
-    return typed as Without<typeof typed, Excluded | "options">;
+    type NewExcluded = Excluded | "options";
+    const builder = new ActionBuilder<ActionDef, NewExcluded>({
+      ...this.definition,
+      options,
+    } as ActionDef);
+    return builder as Without<typeof builder, NewExcluded>;
   }
 }
 
@@ -56,7 +85,7 @@ export const defineAction = <Name extends string>(name: Name) =>
     name,
     dependencies: [],
     description: "",
-    input: z.object({}),
+    inputSchema: z.object({}),
     outputSchema: z.object({}),
     execute: async () => ({ output: {} }),
     options: {},

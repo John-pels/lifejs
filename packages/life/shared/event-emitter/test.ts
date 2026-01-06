@@ -28,6 +28,11 @@ class TestEmitter extends EventEmitter<TestDefinition> {
   testEmit(...args: Parameters<typeof this.emit>) {
     return this.emit(...args);
   }
+
+  // Expose setRemoteEvents for testing
+  testSetRemoteEvents(...args: Parameters<typeof this.setRemoteEvents>) {
+    return this.setRemoteEvents(...args);
+  }
 }
 
 // Helper to wait for async RPC calls to complete
@@ -192,6 +197,7 @@ describe("EventEmitter", () => {
         const callbackB = vi.fn();
 
         emitterA.on("ping", callbackA);
+        emitterB.testSetRemoteEvents(["ping"]);
         emitterB.on("ping", callbackB);
 
         await waitForRPC();
@@ -221,6 +227,7 @@ describe("EventEmitter", () => {
         const callbackA = vi.fn();
         const callbackB = vi.fn();
 
+        emitterA.testSetRemoteEvents(["ping"]);
         emitterA.on("ping", callbackA);
         emitterB.on("ping", callbackB);
 
@@ -248,6 +255,7 @@ describe("EventEmitter", () => {
         const emitterB = new TestEmitter({ transport: clientB, prefix: "test" });
 
         const callbackB = vi.fn();
+        emitterB.testSetRemoteEvents(["notify"]);
         emitterB.on("notify", callbackB);
 
         await waitForRPC();
@@ -298,6 +306,7 @@ describe("EventEmitter", () => {
         const emitterB = new TestEmitter({ transport: clientB, prefix: "test" });
 
         const callbackB = vi.fn();
+        emitterB.testSetRemoteEvents(["ping", "pong", "notify"]);
         emitterB.on("*", callbackB);
 
         await waitForRPC();
@@ -319,6 +328,7 @@ describe("EventEmitter", () => {
         const emitterB = new TestEmitter({ transport: clientB, prefix: "test" });
 
         const callbackB = vi.fn();
+        emitterB.testSetRemoteEvents(["ping", "pong"]);
         emitterB.on(["ping", "pong"], callbackB);
 
         await waitForRPC();
@@ -342,6 +352,7 @@ describe("EventEmitter", () => {
         const emitterB = new TestEmitter({ transport: clientB, prefix: "test" });
 
         const callbackB = vi.fn();
+        emitterB.testSetRemoteEvents(["ping"]);
         emitterB.once("ping", callbackB);
 
         await waitForRPC();
@@ -366,6 +377,7 @@ describe("EventEmitter", () => {
         const emitterB = new TestEmitter({ transport: clientB, prefix: "test" });
 
         const callbackB = vi.fn();
+        emitterB.testSetRemoteEvents(["ping"]);
         const unsubscribe = emitterB.on("ping", callbackB);
 
         await waitForRPC();
@@ -396,6 +408,7 @@ describe("EventEmitter", () => {
         const callbackB2 = vi.fn();
         const callbackB3 = vi.fn();
 
+        emitterB.testSetRemoteEvents(["ping", "pong"]);
         emitterB.on("ping", callbackB1);
         emitterB.on("ping", callbackB2);
         emitterB.on("pong", callbackB3);
@@ -432,6 +445,8 @@ describe("EventEmitter", () => {
         const callbackB1 = vi.fn();
         const callbackB2 = vi.fn();
 
+        emitterB1.testSetRemoteEvents(["ping"]);
+        emitterB2.testSetRemoteEvents(["ping"]);
         emitterB1.on("ping", callbackB1);
         emitterB2.on("ping", callbackB2);
 

@@ -22,6 +22,7 @@ export abstract class EventEmitter<Definition extends EventEmitterDefinition> {
   readonly #transport?: TransportClient;
   readonly #prefix?: string;
   readonly #listeners = new Map<string, EventEmitterListener<Definition>>();
+  readonly #remoteEvents = new Set<string>();
 
   constructor(
     definition: Definition,
@@ -34,6 +35,14 @@ export abstract class EventEmitter<Definition extends EventEmitterDefinition> {
     this.#prefix = transportConfig?.prefix;
     this.#definition = definition;
     this.#initRPC();
+  }
+
+  /**
+   * Define which events should listened from remote clients.
+   * @param events - The events names to listen to remotely.
+   */
+  protected setRemoteEvents(events: Definition[number]["name"][]) {
+    for (const event of events) this.#remoteEvents.add(event);
   }
 
   protected emit(eventInput: EventEmitterEvent<Definition, "input">) {
@@ -84,30 +93,45 @@ export abstract class EventEmitter<Definition extends EventEmitterDefinition> {
     selector: Selector,
     callback: EventEmitterCallback<Definition, Selector>,
   ) {
-    const listenerId = newId("listener");
-    // Set a local listener function
-    this.#listeners.set(listenerId, {
-      location: "local",
-      selector,
-      callback: callback as EventEmitterCallback<Definition, "*">,
-    });
-    // Set a remote listener function
-    if (this.#transport) {
-      this.#transport.call({
-        name: `${this.#prefix}.on`,
-        schema: { input: z.object({ listenerId: z.string(), selector: selectorSchema }) },
-        input: { listenerId, selector: selector as never },
+    // Expand selector to individual event names
+    const eventNames = this.#expandSelector(selector);
+    const listenerIds: string[] = [];
+
+    for (const eventName of eventNames) {
+      const listenerId = newId("listener");
+      listenerIds.push(listenerId);
+
+      // Set a local listener function
+      this.#listeners.set(listenerId, {
+        location: "local",
+        selector: eventName as EventEmitterSelector<Definition>,
+        callback: callback as EventEmitterCallback<Definition, "*">,
       });
-    }
-    // Return an unsubscribe function
-    return () => {
-      this.#listeners.delete(listenerId);
-      if (this.#transport) {
+
+      // Register remotely if this event is in #remoteEvents
+      if (this.#remoteEvents.has(eventName) && this.#transport) {
         this.#transport.call({
-          name: `${this.#prefix}.off`,
-          schema: { input: z.object({ listenerId: z.string() }) },
-          input: { listenerId },
+          name: `${this.#prefix}.on`,
+          schema: { input: z.object({ listenerId: z.string(), selector: selectorSchema }) },
+          input: { listenerId, selector: eventName },
         });
+      }
+    }
+
+    // Return an unsubscribe function that cleans up all listeners
+    return () => {
+      for (const listenerId of listenerIds) {
+        const listener = this.#listeners.get(listenerId);
+        this.#listeners.delete(listenerId);
+
+        // Unregister remotely if needed
+        if (listener && this.#remoteEvents.has(listener.selector as string) && this.#transport) {
+          this.#transport.call({
+            name: `${this.#prefix}.off`,
+            schema: { input: z.object({ listenerId: z.string() }) },
+            input: { listenerId },
+          });
+        }
       }
     };
   }
@@ -162,5 +186,11 @@ export abstract class EventEmitter<Definition extends EventEmitterDefinition> {
     if (selector === "*") return true;
     if (Array.isArray(selector)) return selector.includes(event.name);
     return selector === event.name;
+  }
+
+  #expandSelector(selector: EventEmitterSelector<Definition>): string[] {
+    if (selector === "*") return this.#definition.map((e) => e.name);
+    if (Array.isArray(selector)) return selector as string[];
+    return [selector as string];
   }
 }

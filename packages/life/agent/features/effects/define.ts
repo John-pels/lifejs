@@ -1,38 +1,35 @@
-import type { Dependencies } from "@/agent/core/types";
+import type { FeatureDependencies } from "@/agent/core/types";
 import type { Override, Without } from "@/shared/types";
-import type { EffectDefinition, EffectOnMount, EffectOptions } from "./types";
+import type { EffectDefinition, EffectOnMount } from "./types";
 
 class EffectBuilder<
   EffectDef extends EffectDefinition,
   Excluded extends keyof EffectBuilder<EffectDef> = never,
 > {
   definition: EffectDef;
+
   constructor(definition: EffectDef) {
     this.definition = definition;
   }
 
-  dependencies<Deps extends Dependencies>(dependencies: Deps) {
-    const builder = new EffectBuilder({ ...this.definition, dependencies });
-    type NewDefinition = Override<(typeof builder)["definition"], "dependencies", Deps>;
-    const typed = builder as EffectBuilder<NewDefinition, Excluded | "dependencies">;
-    return typed as Without<typeof typed, Excluded | "dependencies">;
+  dependencies<Deps extends FeatureDependencies>(dependencies: Deps) {
+    type NewDefinition = Override<EffectDef, "dependencies", Deps>;
+    type NewExcluded = Excluded | "dependencies";
+    const builder = new EffectBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      dependencies,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
 
   onMount(onMount: EffectOnMount<EffectDef["dependencies"]>) {
-    const builder = new EffectBuilder({ ...this.definition, onMount });
-    type NewDefinition = Override<
-      (typeof builder)["definition"],
-      "onMount",
-      EffectOnMount<EffectDef["dependencies"]>
-    >;
-    const typed = builder as EffectBuilder<NewDefinition, Excluded | "onMount">;
-    return typed as Without<typeof typed, Excluded | "onMount">;
-  }
-
-  options(options: EffectOptions) {
-    const builder = new EffectBuilder({ ...this.definition, options });
-    const typed = builder as EffectBuilder<(typeof builder)["definition"], Excluded | "options">;
-    return typed as Without<typeof typed, Excluded | "options">;
+    type NewDefinition = Override<EffectDef, "onMount", EffectOnMount<EffectDef["dependencies"]>>;
+    type NewExcluded = Excluded | "onMount";
+    const builder = new EffectBuilder<NewDefinition, NewExcluded>({
+      ...this.definition,
+      onMount,
+    } as NewDefinition);
+    return builder as Without<typeof builder, NewExcluded>;
   }
 }
 
