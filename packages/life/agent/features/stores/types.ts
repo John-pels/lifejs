@@ -1,5 +1,4 @@
 import type { Draft } from "immer";
-import type { FeatureDependencies } from "@/agent/core/types";
 
 /** Root wrapper: Y.Map stores value under "value" key */
 export interface StoreRoot<T> {
@@ -9,7 +8,6 @@ export interface StoreRoot<T> {
 // Stores
 export interface StoreDefinition {
   name: string;
-  dependencies: FeatureDependencies;
   value: unknown;
 }
 

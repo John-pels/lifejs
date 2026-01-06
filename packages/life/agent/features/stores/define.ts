@@ -1,8 +1,6 @@
-import type { FeatureDependencies } from "@/agent/core/types";
+import type { SerializableValue } from "@/shared/canon";
 import type { Override, WidenLiterals, Without } from "@/shared/types";
 import type { StoreDefinition } from "./types";
-import { SerializableValue } from "@/shared/canon";
-
 
 class StoreBuilder<
   StoreDef extends StoreDefinition,
@@ -12,16 +10,6 @@ class StoreBuilder<
 
   constructor(definition: StoreDef) {
     this.definition = definition;
-  }
-
-  dependencies<Dependencies extends FeatureDependencies>(dependencies: Dependencies) {
-    type NewDefinition = Override<StoreDef, "dependencies", Dependencies>;
-    type NewExcluded = Excluded | "dependencies";
-    const builder = new StoreBuilder<NewDefinition, NewExcluded>({
-      ...this.definition,
-      dependencies,
-    } as NewDefinition);
-    return builder as Without<typeof builder, NewExcluded>;
   }
 
   value<Value extends SerializableValue>(value: Value) {
@@ -36,4 +24,4 @@ class StoreBuilder<
 }
 
 export const defineStore = <Name extends string>(name: Name) =>
-  new StoreBuilder({ name, dependencies: [], value: undefined });
+  new StoreBuilder({ name, value: undefined });
