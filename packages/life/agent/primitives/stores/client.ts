@@ -7,15 +7,17 @@ import type { TransportClient } from "@/transport/types";
 import { emitterDefinition } from "./emitter";
 import { bindYjs, type YjsBinder } from "./lib/yjs-binder";
 import type {
+  StoreAccessor,
   StoreDefinition,
   StoreObserveCallback,
   StoreObserveSelector,
   StoreSetter,
 } from "./types";
 
-export class StoreClient<Definition extends StoreDefinition = StoreDefinition> extends EventEmitter<
-  typeof emitterDefinition
-> {
+export class StoreClient<Definition extends StoreDefinition = StoreDefinition>
+  extends EventEmitter<typeof emitterDefinition>
+  implements StoreAccessor<Definition>
+{
   readonly #transport: TransportClient;
   readonly #telemetry: TelemetryClient;
   readonly #doc: Y.Doc;

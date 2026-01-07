@@ -85,8 +85,7 @@ export const updateMessageInputSchema = z.discriminatedUnion("role", [
 export type UpdateMessageInput = z.input<typeof updateMessageInputSchema>;
 
 /**
- * A helper class aimed at facilitating safe and efficient
- * manipulation of an array of messages.
+ * A helper class to facilitate safely manipulating an array of messages.
  * @param messages - Optionally, the messages to initialize the list with.
  */
 export class MessageList {

@@ -4,11 +4,12 @@ import type { LLMProvider } from "@/models/llm/provider";
 import type { STTProviderBase } from "@/models/stt/providers/base";
 import type { TTSProviderBase } from "@/models/tts/base";
 import type { VADProviderBase } from "@/models/vad/providers/base";
-import type { ActionDefinition } from "../features/actions/types";
-import type { MemoryDefinition } from "../features/memories/types";
-import type { StoreDefinition } from "../features/stores/types";
-import type { configSchema } from "./agent/config/schema/server";
-import type { statusSchema } from "./agent/server/runtime/context";
+import type { agentServerConfigSchema } from "../config/server";
+import type { ActionDefinition } from "../primitives/actions/types";
+import type { EffectDefinition } from "../primitives/effects/types";
+import type { MemoryDefinition } from "../primitives/memories/types";
+import type { StoreDefinition } from "../primitives/stores/types";
+import type { statusSchema } from "../runtime/context";
 
 // Status
 export type AgentStatus = z.infer<typeof statusSchema>;
@@ -30,48 +31,45 @@ export interface ScopeDefinition<Schema extends z.ZodObject = z.ZodObject> {
   }) => { allowed: true } | { allowed: false; reason?: string };
 }
 
-// Dependencies
-type FeatureDependencyDefinition = MemoryDefinition | ActionDefinition | StoreDefinition;
+// Memories
+export type MemoriesDefinition = MemoryDefinition[];
 
-export interface FeatureDependency {
-  definition: FeatureDependencyDefinition;
+export interface MemoriesOptions {
+  noDefaults?: boolean | string[];
 }
 
-export type FeatureDependencies = FeatureDependency[];
+// Effects
+export type EffectDefinitions = EffectDefinition[];
 
-export interface DependenciesAccessors<Deps extends FeatureDependencies> {
-  memories: {
-    [Dep in Deps[number] as Dep["definition"] extends MemoryDefinition
-      ? Dep["definition"]["name"]
-      : never]: MemoryAccessor;
-  };
-  actions: {
-    [Dep in Deps[number] as Dep["definition"] extends ActionDefinition
-      ? Dep["definition"]["name"]
-      : never]: ActionAccessor<
-      Dep["definition"] extends ActionDefinition ? Dep["definition"] : never
-    >;
-  };
-  stores: {
-    [Dep in Deps[number] as Dep["definition"] extends StoreDefinition
-      ? Dep["definition"]["name"]
-      : never]: StoreAccessor<
-      Dep["definition"] extends StoreDefinition ? Dep["definition"] : never
-    >;
-  };
+export interface EffectsOptions {
+  noDefaults?: boolean | string[];
+}
+
+// Actions
+export type ActionsDefinition = ActionDefinition[];
+
+export interface ActionsOptions {
+  noDefaults?: boolean | string[];
+}
+
+// Stores
+export type StoresDefinition = StoreDefinition[];
+
+export interface StoresOptions {
+  noDefaults?: boolean | string[];
 }
 
 // Agent
 export interface AgentDefinition {
   name: string;
   scope: ScopeDefinition;
-  memories: MemoryDefinitions;
+  memories: MemoriesDefinition;
   memoriesOptions?: MemoriesOptions;
-  actions: ActionDefinitions;
+  actions: ActionsDefinition;
   actionsOptions?: ActionsOptions;
   effects: EffectDefinitions;
   effectsOptions?: EffectsOptions;
-  stores: StoreDefinitions;
+  stores: StoresDefinition;
   storesOptions?: StoresOptions;
-  config: z.input<typeof configSchema>;
+  config: z.input<typeof agentServerConfigSchema>;
 }

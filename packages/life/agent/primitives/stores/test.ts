@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import type { TelemetryClient } from "@/telemetry/clients/base";
 import { MockTransportClient } from "@/transport/client/mock";
+import { defSymbol } from "../types";
 import { StoreClient } from "./client";
 import { defineStore } from "./define";
 import { bindYjs } from "./lib/yjs-binder";
@@ -47,12 +48,12 @@ async function waitForSync(ms = 50) {
 describe("defineStore", () => {
   it("should create a store definition with name", () => {
     const store = defineStore("counter");
-    expect(store.definition.name).toBe("counter");
+    expect(store[defSymbol].name).toBe("counter");
   });
 
   it("should set initial value", () => {
     const store = defineStore("counter").value(0);
-    expect(store.definition.value).toBe(0);
+    expect(store[defSymbol].value).toBe(0);
   });
 
   it("should widen literal types to base types", () => {
@@ -62,9 +63,9 @@ describe("defineStore", () => {
     const boolStore = defineStore("bool").value(true);
 
     // Runtime verification that values are preserved
-    expect(numStore.definition.value).toBe(0);
-    expect(strStore.definition.value).toBe("hello");
-    expect(boolStore.definition.value).toBe(true);
+    expect(numStore[defSymbol].value).toBe(0);
+    expect(strStore[defSymbol].value).toBe("hello");
+    expect(boolStore[defSymbol].value).toBe(true);
   });
 
   it("should support complex initial values", () => {
@@ -74,7 +75,7 @@ describe("defineStore", () => {
       tags: ["admin"],
     });
 
-    expect(store.definition.value).toEqual({
+    expect(store[defSymbol].value).toEqual({
       name: "Alice",
       age: 30,
       tags: ["admin"],
@@ -986,12 +987,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("counter").value(42).definition;
-    const store = new StoreServer({
+    const definition = defineStore("counter").value(42)[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     expect(await store.get()).toBe(42);
   });
@@ -1000,12 +1002,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
-    const store = new StoreServer({
+    const definition = defineStore("counter").value(0)[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     expect(await store.get()).toBe(0);
 
@@ -1020,12 +1023,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("user").value({ name: "Alice", score: 0 }).definition;
-    const store = new StoreServer({
+    const definition = defineStore("user").value({ name: "Alice", score: 0 })[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     store.set((draft) => {
       draft.score = 100;
@@ -1038,12 +1042,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("data").value({ x: 1, y: 2 }).definition;
-    const store = new StoreServer({
+    const definition = defineStore("data").value({ x: 1, y: 2 })[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     store.set(() => ({ x: 99, y: 99 }));
     expect(await store.get()).toEqual({ x: 99, y: 99 });
@@ -1053,15 +1058,16 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
-    const store = new StoreServer({
+    const definition = defineStore("counter").value(0)[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     const changes: { newValue: number; oldValue: number }[] = [];
-    store.on("change", (event) => {
+    server.on("change", (event) => {
       changes.push(event.data as { newValue: number; oldValue: number });
     });
 
@@ -1079,12 +1085,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("user").value({ name: "Alice", score: 0 }).definition;
-    const store = new StoreServer({
+    const definition = defineStore("user").value({ name: "Alice", score: 0 })[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     const scores: number[] = [];
     store.observe(
@@ -1109,12 +1116,13 @@ describe("StoreServer", () => {
     const { serverTransport } = createConnectedTransports();
     await serverTransport.joinRoom();
 
-    const definition = defineStore("test").value(0).definition;
-    const store = new StoreServer({
+    const definition = defineStore("test").value(0)[defSymbol];
+    const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const store = server.getAccessor();
 
     expect(store.ydoc()).toBeInstanceOf(Y.Doc);
   });
@@ -1130,7 +1138,7 @@ describe("StoreClient", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(42).definition;
+    const definition = defineStore("counter").value(42)[defSymbol];
 
     // Server must exist for client to sync from
     new StoreServer({
@@ -1154,7 +1162,7 @@ describe("StoreClient", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
+    const definition = defineStore("counter").value(0)[defSymbol];
 
     new StoreServer({
       transport: serverTransport,
@@ -1180,7 +1188,7 @@ describe("StoreClient", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
+    const definition = defineStore("counter").value(0)[defSymbol];
 
     new StoreServer({
       transport: serverTransport,
@@ -1221,13 +1229,14 @@ describe("server-client sync", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
+    const definition = defineStore("counter").value(0)[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient({
       transport: clientTransport,
@@ -1235,7 +1244,7 @@ describe("server-client sync", () => {
       name: "counter",
     });
     // Server updates
-    server.set(42);
+    serverStore.set(42);
     await waitForSync();
 
     // Client should receive the update
@@ -1247,13 +1256,14 @@ describe("server-client sync", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
+    const definition = defineStore("counter").value(0)[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient({
       transport: clientTransport,
@@ -1266,7 +1276,7 @@ describe("server-client sync", () => {
     await waitForSync();
 
     // Server should receive the update
-    expect(await server.get()).toBe(99);
+    expect(await serverStore.get()).toBe(99);
   });
 
   it("should sync complex object changes", async () => {
@@ -1285,13 +1295,14 @@ describe("server-client sync", () => {
       name: "Alice",
       score: 0,
       items: [],
-    }).definition;
+    })[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient<typeof definition>({
       transport: clientTransport,
@@ -1299,7 +1310,7 @@ describe("server-client sync", () => {
       name: "user",
     });
     // Server: Immer-style mutation
-    server.set((draft) => {
+    serverStore.set((draft) => {
       draft.score = 100;
       draft.items.push("sword");
     });
@@ -1318,7 +1329,7 @@ describe("server-client sync", () => {
     });
     await waitForSync();
 
-    expect(await server.get()).toEqual({
+    expect(await serverStore.get()).toEqual({
       name: "Alice the Great",
       score: 100,
       items: ["sword", "shield"],
@@ -1330,13 +1341,14 @@ describe("server-client sync", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("state").value({ a: 0, b: 0 }).definition;
+    const definition = defineStore("state").value({ a: 0, b: 0 })[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient<typeof definition>({
       transport: clientTransport,
@@ -1345,7 +1357,7 @@ describe("server-client sync", () => {
     });
 
     // Concurrent changes to different keys
-    server.set((draft) => {
+    serverStore.set((draft) => {
       draft.a = 1;
     });
     await client.set((draft) => {
@@ -1355,7 +1367,7 @@ describe("server-client sync", () => {
     await waitForSync();
 
     // Both should have merged state
-    expect(await server.get()).toEqual({ a: 1, b: 2 });
+    expect(await serverStore.get()).toEqual({ a: 1, b: 2 });
     expect(await client.get()).toEqual({ a: 1, b: 2 });
   });
 
@@ -1373,13 +1385,14 @@ describe("server-client sync", () => {
     const definition = defineStore("special").value<SpecialState>({
       date: null,
       tags: null,
-    }).definition;
+    })[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient<typeof definition>({
       transport: clientTransport,
@@ -1388,7 +1401,7 @@ describe("server-client sync", () => {
     });
     // Server sets special types
     const testDate = new Date("2024-06-15T12:00:00.000Z");
-    server.set({
+    serverStore.set({
       date: testDate,
       tags: new Set(["a", "b", "c"]),
     });
@@ -1406,13 +1419,14 @@ describe("server-client sync", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("counter").value(0).definition;
+    const definition = defineStore("counter").value(0)[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient({
       transport: clientTransport,
@@ -1425,8 +1439,8 @@ describe("server-client sync", () => {
       const data = event.data as { newValue: number };
       clientChanges.push(data.newValue);
     });
-    server.set(10);
-    server.set(20);
+    serverStore.set(10);
+    serverStore.set(20);
     await waitForSync();
 
     expect(clientChanges).toContain(20);
@@ -1437,13 +1451,14 @@ describe("server-client sync", () => {
     await serverTransport.joinRoom();
     await clientTransport.joinRoom();
 
-    const definition = defineStore("list").value<number[]>([]).definition;
+    const definition = defineStore("list").value<number[]>([])[defSymbol];
 
     const server = new StoreServer({
       transport: serverTransport,
       telemetry: createMockTelemetry(),
       definition,
     });
+    const serverStore = server.getAccessor();
 
     const client = new StoreClient<typeof definition>({
       transport: clientTransport,
@@ -1452,7 +1467,7 @@ describe("server-client sync", () => {
     });
 
     // Server pushes items
-    server.set((draft) => {
+    serverStore.set((draft) => {
       draft.push(1, 2, 3);
     });
     await waitForSync();
@@ -1465,6 +1480,6 @@ describe("server-client sync", () => {
     });
     await waitForSync();
 
-    expect(await server.get()).toEqual([1, 99, 3]);
+    expect(await serverStore.get()).toEqual([1, 99, 3]);
   });
 });

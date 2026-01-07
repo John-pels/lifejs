@@ -8,6 +8,7 @@ import type { TransportClient } from "@/transport/types";
 import { emitterDefinition } from "./emitter";
 import { bindYjs, type YjsBinder } from "./lib/yjs-binder";
 import type {
+  StoreAccessor,
   StoreDefinition,
   StoreObserveCallback,
   StoreObserveSelector,
@@ -62,11 +63,22 @@ export class StoreServer<Definition extends StoreDefinition = StoreDefinition> e
     this.#initRPC();
   }
 
-  async get(): Promise<Readonly<Definition["value"]>> {
+  getAccessor(): StoreAccessor<Definition> {
+    return {
+      get: () => this.#get(),
+      set: (setter) => this.#set(setter),
+      observe: (selector, callback) => this.#observe(selector, callback),
+      ydoc: () => this.#doc,
+      on: this.on,
+      once: this.once,
+    };
+  }
+
+  async #get(): Promise<Readonly<Definition["value"]>> {
     return await this.#binder.get().value;
   }
 
-  async set(setter: StoreSetter<Definition["value"]>): Promise<void> {
+  async #set(setter: StoreSetter<Definition["value"]>): Promise<void> {
     // Immer-style: user mutates draft.value or returns new value
     if (setter instanceof Function) {
       this.#binder.update((draft) => {
@@ -85,11 +97,11 @@ export class StoreServer<Definition extends StoreDefinition = StoreDefinition> e
     await void 0;
   }
 
-  observe(
+  #observe(
     selector: StoreObserveSelector<Definition["value"]>,
     callback: StoreObserveCallback<Definition["value"]>,
   ) {
-    let lastSelected = selector(this.get()) as SerializableValue;
+    let lastSelected = selector(this.#get()) as SerializableValue;
 
     return this.on("change", (event) => {
       const { newValue, oldValue } = event.data as {
@@ -105,10 +117,6 @@ export class StoreServer<Definition extends StoreDefinition = StoreDefinition> e
     });
   }
 
-  ydoc() {
-    return this.#doc;
-  }
-
   #broadcast(update: Uint8Array) {
     // Encode as base64 for transport
     const base64 = Buffer.from(update).toString("base64");
@@ -116,9 +124,11 @@ export class StoreServer<Definition extends StoreDefinition = StoreDefinition> e
   }
 
   #initRPC() {
+    const prefix = `stores.${this.#definition.name}`;
+
     // Receive updates from other participants
     this.#transport.receiveText(
-      `stores.${this.#definition.name}.update`,
+      `${prefix}.update`,
       (base64) => {
         const update = Buffer.from(base64, "base64");
         Y.applyUpdate(this.#doc, update);
@@ -130,7 +140,7 @@ export class StoreServer<Definition extends StoreDefinition = StoreDefinition> e
 
     // Handle sync requests from clients (for reconnection)
     this.#transport.register({
-      name: `stores.${this.#definition.name}.sync`,
+      name: `${prefix}.sync`,
       schema: {
         input: z.object({ stateVector: z.string() }),
         output: z.object({ update: z.string() }),

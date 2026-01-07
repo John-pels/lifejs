@@ -1,23 +1,33 @@
 import z from "zod";
-import type { FeatureDependencies } from "@/agent/core/types";
 import type { Override, Without } from "@/shared/types";
-import type { ActionDefinition, ActionExecute, ActionLabel, ActionOptions } from "./types";
+import {
+  defSymbol,
+  type PrimitivesDependencies,
+  type PrimitivesDependenciesToDefinitions,
+} from "../types";
+import type { ActionDefinition, ActionExecute, ActionOptions } from "./types";
 
-class ActionBuilder<
+export const _definition = Symbol("ACTION_DEFINITION");
+
+export class ActionBuilder<
   ActionDef extends ActionDefinition,
   Excluded extends keyof ActionBuilder<ActionDef> = never,
 > {
-  definition: ActionDef;
+  [defSymbol]: ActionDef;
 
   constructor(definition: ActionDef) {
-    this.definition = definition;
+    this[defSymbol] = definition;
   }
 
-  dependencies<Deps extends FeatureDependencies>(dependencies: Deps) {
-    type NewDefinition = Override<ActionDef, "dependencies", Deps>;
+  dependencies<Dependencies extends PrimitivesDependencies>(dependencies: Dependencies) {
+    type NewDefinition = Override<
+      ActionDef,
+      "dependencies",
+      PrimitivesDependenciesToDefinitions<Dependencies>
+    >;
     type NewExcluded = Excluded | "dependencies";
     const builder = new ActionBuilder<NewDefinition, NewExcluded>({
-      ...this.definition,
+      ...this[defSymbol],
       dependencies,
     } as NewDefinition);
     return builder as Without<typeof builder, NewExcluded>;
@@ -26,45 +36,36 @@ class ActionBuilder<
   description(description: string) {
     type NewExcluded = Excluded | "description";
     const builder = new ActionBuilder<ActionDef, NewExcluded>({
-      ...this.definition,
+      ...this[defSymbol],
       description,
     } as ActionDef);
     return builder as Without<typeof builder, NewExcluded>;
   }
 
   input<Schema extends z.ZodObject>(input: Schema) {
-    type NewDefinition = Override<ActionDef, "inputSchema", Schema>;
+    type NewDefinition = Override<ActionDef, "input", Schema>;
     type NewExcluded = Excluded | "input";
     const builder = new ActionBuilder<NewDefinition, NewExcluded>({
-      ...this.definition,
-      inputSchema: input,
+      ...this[defSymbol],
+      input,
     } as NewDefinition);
     return builder as Without<typeof builder, NewExcluded>;
   }
 
   output<Schema extends z.ZodObject>(output: Schema) {
-    type NewDefinition = Override<ActionDef, "outputSchema", Schema>;
+    type NewDefinition = Override<ActionDef, "output", Schema>;
     type NewExcluded = Excluded | "output";
     const builder = new ActionBuilder<NewDefinition, NewExcluded>({
-      ...this.definition,
-      outputSchema: output,
+      ...this[defSymbol],
+      output,
     } as NewDefinition);
-    return builder as Without<typeof builder, NewExcluded>;
-  }
-
-  label(label: ActionLabel<ActionDef>) {
-    type NewExcluded = Excluded | "label";
-    const builder = new ActionBuilder<ActionDef, NewExcluded>({
-      ...this.definition,
-      label,
-    } as ActionDef);
     return builder as Without<typeof builder, NewExcluded>;
   }
 
   execute(execute: ActionExecute<ActionDef>) {
     type NewExcluded = Excluded | "execute";
     const builder = new ActionBuilder<ActionDef, NewExcluded>({
-      ...this.definition,
+      ...this[defSymbol],
       execute,
     } as ActionDef);
     return builder as Without<typeof builder, NewExcluded>;
@@ -73,7 +74,7 @@ class ActionBuilder<
   options(options: ActionOptions) {
     type NewExcluded = Excluded | "options";
     const builder = new ActionBuilder<ActionDef, NewExcluded>({
-      ...this.definition,
+      ...this[defSymbol],
       options,
     } as ActionDef);
     return builder as Without<typeof builder, NewExcluded>;
@@ -85,9 +86,8 @@ export const defineAction = <Name extends string>(name: Name) =>
     name,
     dependencies: [],
     description: "",
-    inputSchema: z.object({}),
-    outputSchema: z.object({}),
+    input: z.object({}),
+    output: z.object({}),
     execute: async () => ({ output: {} }),
     options: {},
-    label: name,
   });
