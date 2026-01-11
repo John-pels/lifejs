@@ -95,14 +95,21 @@ export class DeepgramSTT extends STTProviderBase<typeof deepgramSTTConfig> {
         if (text) job.stream.push({ type: "content", text });
       });
 
-      // Handle job cancellation
-      job._abortController.signal.addEventListener("abort", () => {
-        socket.requestClose();
-        this.#jobsSockets.delete(job.id);
+      socket.on(LiveTranscriptionEvents.Error, (err) => {
+        if (!job._abortController.signal.aborted) {
+          job.stream.push({ type: "error", error: err.message || "Deepgram socket error" });
+        }
       });
 
       // Ensure the socket is kept alive until the job is cancelled
-      setInterval(() => socket.keepAlive(), 1000);
+      const keepAliveInterval = setInterval(() => socket.keepAlive(), 1000);
+
+      // Handle job cancellation
+      job._abortController.signal.addEventListener("abort", () => {
+        clearInterval(keepAliveInterval);
+        socket.requestClose();
+        this.#jobsSockets.delete(job.id);
+      });
 
       return job;
     });
@@ -110,6 +117,10 @@ export class DeepgramSTT extends STTProviderBase<typeof deepgramSTTConfig> {
 
   // biome-ignore lint/suspicious/useAwait: Need async to match STTBase abstract method
   protected async receiveVoice(job: STTJob, pcm: Int16Array) {
-    this.#jobsSockets.get(job.id)?.send(pcm.buffer);
+    try {
+      this.#jobsSockets.get(job.id)?.send(pcm.buffer);
+    } catch (_error) {
+      // Ignore send errors (e.g. closed socket)
+    }
   }
 }

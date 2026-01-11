@@ -106,6 +106,7 @@
     }
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.0",
     "@huggingface/hub": "^2.7.1",
     "@huggingface/transformers": "^3.8.1",
     "@inkjs/ui": "^2.0.0",
@@ -139,17 +140,37 @@
     "@vitest/browser-playwright": "^4.0.16",
     "vitest": "^4.0.16",
     "@cartesia/cartesia-js": "^2.2.9",
-    "@deepgram/sdk": "4.11.2"
+    "@deepgram/sdk": "4.11.2",
+    "@google-cloud/speech": "^6.7.0",
+    "assemblyai": "^4.8.0",
+    "elevenlabs": "^0.17.0",
+    "openai": "^4.73.0"
   },
   "peerDependencies": {
     "@cartesia/cartesia-js": "^2.2.5",
-    "@deepgram/sdk": "4.9.1"
+    "@deepgram/sdk": "4.9.1",
+    "@google-cloud/speech": "^6.7.0",
+    "assemblyai": "^4.8.0",
+    "elevenlabs": "^0.17.0",
+    "openai": "^4.73.0"
   },
   "peerDependenciesMeta": {
     "@cartesia/cartesia-js": {
       "optional": true
     },
     "@deepgram/sdk": {
+      "optional": true
+    },
+    "@google-cloud/speech": {
+      "optional": true
+    },
+    "assemblyai": {
+      "optional": true
+    },
+    "elevenlabs": {
+      "optional": true
+    },
+    "openai": {
       "optional": true
     }
   }
